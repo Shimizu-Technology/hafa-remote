@@ -479,6 +479,56 @@ struct RemoteSessionControllerTests {
         }
     }
 
+    @Test("Cancelling text delivery preserves the connected session")
+    func callerCancellationStopsTextWithoutLosingSession() async throws {
+        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let driver = SuspendedTextRemoteSessionDriver(tv: tv)
+        let session = RemoteSessionController(driver: driver)
+        await session.connect(to: tv.address.rawValue)
+        var starts = driver.textStarts.makeAsyncIterator()
+
+        let sending = Task {
+            try await session.sendText(RemoteTextInput("Håfa"))
+        }
+        _ = await starts.next()
+        sending.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            try await sending.value
+        }
+        #expect(await session.state == .connected(tv))
+        #expect(await driver.cancelledTextCount == 1)
+    }
+
+    @Test("An unavailable text destination goes offline and reconnects on schedule")
+    func unavailableTextSendSchedulesReconnect() async throws {
+        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [
+                .success(tv: tv, announcesPairing: false),
+                .success(tv: tv, announcesPairing: false),
+            ],
+            textSendError: .unavailable
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(reconnectDelays: [.seconds(5)])
+        )
+        await session.connect(to: tv.address.rawValue)
+
+        await #expect(throws: SamsungConnectionError.unavailable) {
+            try await session.sendText(RemoteTextInput("Håfa"))
+        }
+        #expect(await session.state == .offline)
+
+        await resume(clock: clock, duration: .seconds(5))
+        await waitUntil { await session.state == .connected(tv) }
+        #expect(await driver.connectCallCount == 2)
+        #expect(await session.state == .connected(tv))
+    }
+
     @Test("Denied pairing is distinct from an offline TV")
     func deniedPairingHasDedicatedState() async {
         let driver = MockRemoteSessionDriver(outcomes: [.failure(.denied)])
@@ -932,14 +982,19 @@ private enum MockConnectionOutcome: Sendable {
 
 private actor MockRemoteSessionDriver: RemoteSessionDriving {
     private var outcomes: [MockConnectionOutcome]
+    private let textSendError: SamsungConnectionError?
     private(set) var connectCallCount = 0
     private(set) var activeConnectionCount = 0
     private(set) var maximumActiveConnectionCount = 0
     private(set) var forgottenAddresses: [String] = []
     private(set) var sentTextCharacterCounts: [Int] = []
 
-    init(outcomes: [MockConnectionOutcome]) {
+    init(
+        outcomes: [MockConnectionOutcome],
+        textSendError: SamsungConnectionError? = nil
+    ) {
         self.outcomes = outcomes
+        self.textSendError = textSendError
     }
 
     func connect(
@@ -973,6 +1028,9 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
     func send(_ command: RemoteCommand) async throws {}
 
     func sendText(_ input: RemoteTextInput) async throws {
+        if let textSendError {
+            throw textSendError
+        }
         sentTextCharacterCounts.append(input.value.count)
     }
 
@@ -1220,6 +1278,53 @@ private actor ControlledPairingRemovalDriver: RemoteSessionDriving {
     func completeForget() {
         forgetContinuation?.resume()
         forgetContinuation = nil
+    }
+}
+
+private actor SuspendedTextRemoteSessionDriver: RemoteSessionDriving {
+    nonisolated let textStarts: AsyncStream<Void>
+    private let textStartsContinuation: AsyncStream<Void>.Continuation
+    private let tv: PairedSamsungTV
+    private var textContinuation: CheckedContinuation<Void, Error>?
+    private(set) var cancelledTextCount = 0
+
+    init(tv: PairedSamsungTV) {
+        self.tv = tv
+        (textStarts, textStartsContinuation) = AsyncStream.makeStream()
+    }
+
+    func connect(
+        addressText: String,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> PairedSamsungTV {
+        tv
+    }
+
+    func send(_ command: RemoteCommand) async throws {}
+
+    func sendText(_ input: RemoteTextInput) async throws {
+        textStartsContinuation.yield()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                textContinuation = continuation
+            }
+        } onCancel: { [weak self] in
+            Task {
+                await self?.cancelText()
+            }
+        }
+    }
+
+    func forget(addressText: String) async throws {}
+
+    func disconnect() {}
+
+    private func cancelText() {
+        guard let textContinuation else { return }
+        self.textContinuation = nil
+        cancelledTextCount += 1
+        textContinuation.resume(throwing: CancellationError())
+        textStartsContinuation.finish()
     }
 }
 

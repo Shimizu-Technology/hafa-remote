@@ -415,11 +415,14 @@ private struct SamsungTextInputSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Text to send", text: $text, axis: .vertical)
-                        .lineLimit(2...5)
+                    TextField("Text to send", text: $text)
                         .focused($isTextFieldFocused)
                         .textInputAutocapitalization(.sentences)
                         .autocorrectionDisabled(false)
+                        .submitLabel(.send)
+                        .onSubmit {
+                            sendText()
+                        }
                         .onChange(of: text) { _, newValue in
                             if newValue.count > RemoteTextInput.maximumCharacterCount {
                                 text = String(newValue.prefix(RemoteTextInput.maximumCharacterCount))
@@ -493,14 +496,18 @@ private struct SamsungTextInputSheet: View {
             defer { isSending = false }
             do {
                 try await send(input)
-                resultMessage =
+                let message =
                     "Sent to the TV. If nothing appeared, that TV screen does not accept remote text."
+                resultMessage = message
                 UINotificationFeedbackGenerator().notificationOccurred(.success)
+                UIAccessibility.post(notification: .announcement, argument: message)
             } catch is CancellationError {
                 return
             } catch {
-                resultMessage = "Text was not sent. Check the TV connection and try again."
+                let message = "Text was not sent. Check the TV connection and try again."
+                resultMessage = message
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
+                UIAccessibility.post(notification: .announcement, argument: message)
             }
         }
     }
