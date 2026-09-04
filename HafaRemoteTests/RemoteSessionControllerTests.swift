@@ -46,6 +46,24 @@ struct RemoteSessionControllerTests {
         #expect(store.lastConnectedTV == nil)
     }
 
+    @MainActor
+    @Test("Setup cancellation can close the socket without forgetting the last TV")
+    func storeCanRetainLastTVWhileDisconnecting() async throws {
+        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false)]
+        )
+        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+        await store.connect(to: tv.address.rawValue)
+        await waitUntil { @MainActor in store.state == .connected(tv) }
+
+        await store.disconnect(clearRememberedTV: false)
+
+        #expect(store.state == .idle)
+        #expect(store.lastConnectedTV == tv)
+        #expect(!store.canSendCommands)
+    }
+
     @Test("Forgetting pairing clears the session before removing its credential")
     func forgetPairingClearsSession() async throws {
         let driver = MockRemoteSessionDriver(outcomes: [.failure(.denied)])

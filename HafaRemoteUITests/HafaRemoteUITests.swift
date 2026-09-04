@@ -96,6 +96,24 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertFalse(keyboard.isEnabled)
     }
 
+    /// Offline state disables commands while keeping recovery actions obvious and functional.
+    @MainActor
+    func testOfflineRemoteOffersRecoveryWithoutSendingCommands() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append("-ui-testing-remote-offline")
+        app.launch()
+
+        let select = app.buttons["remote-select"]
+        XCTAssertTrue(select.waitForExistence(timeout: 5))
+        XCTAssertFalse(select.isEnabled)
+        XCTAssertFalse(app.buttons["remote-powerOff"].isEnabled)
+
+        let retry = app.buttons["retryConnectionButton"]
+        XCTAssertTrue(retry.exists)
+        retry.tap()
+        XCTAssertEqual(app.staticTexts["lastRemoteCommand"].label, "retry")
+    }
+
     @MainActor
     private func launchRemoteHarness() -> XCUIApplication {
         let app = XCUIApplication()

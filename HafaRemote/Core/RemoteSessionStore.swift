@@ -55,9 +55,11 @@ final class RemoteSessionStore {
         try await controller.send(command)
     }
 
-    func disconnect() async {
+    func disconnect(clearRememberedTV: Bool = true) async {
         await controller.disconnect()
-        lastConnectedTV = nil
+        if clearRememberedTV {
+            lastConnectedTV = nil
+        }
     }
 
     func forgetPairing(for addressText: String) async throws {
