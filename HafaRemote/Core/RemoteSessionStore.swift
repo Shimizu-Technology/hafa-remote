@@ -8,6 +8,7 @@ final class RemoteSessionStore {
     private(set) var state: RemoteSessionState = .idle
     private(set) var lastConnectedTV: PairedSamsungTV?
     private var acceptsConnectedTVUpdates = true
+    private var projectionRevision = 0
 
     private let controller: RemoteSessionController
     private let stateSubscription = RemoteSessionStateSubscription()
@@ -22,11 +23,13 @@ final class RemoteSessionStore {
                 let states = await controller.states()
                 for await state in states {
                     guard !Task.isCancelled else { return }
+                    let revision = self?.projectionRevision
                     await beforeProjectingState(state)
-                    guard !Task.isCancelled else { return }
-                    self?.state = state
-                    if case .connected(let tv) = state, self?.acceptsConnectedTVUpdates == true {
-                        self?.lastConnectedTV = tv
+                    guard !Task.isCancelled, let self else { return }
+                    guard revision == self.projectionRevision else { continue }
+                    self.state = state
+                    if case .connected(let tv) = state, self.acceptsConnectedTVUpdates {
+                        self.lastConnectedTV = tv
                     }
                 }
             }
@@ -52,6 +55,7 @@ final class RemoteSessionStore {
     }
 
     func connect(to addressText: String) async {
+        projectionRevision &+= 1
         acceptsConnectedTVUpdates = true
         await controller.connect(to: addressText)
     }
@@ -61,6 +65,7 @@ final class RemoteSessionStore {
     }
 
     func disconnect(clearRememberedTV: Bool = true) async {
+        projectionRevision &+= 1
         acceptsConnectedTVUpdates = false
         if clearRememberedTV {
             lastConnectedTV = nil
@@ -69,6 +74,7 @@ final class RemoteSessionStore {
     }
 
     func forgetPairing(for addressText: String) async throws {
+        projectionRevision &+= 1
         acceptsConnectedTVUpdates = false
         lastConnectedTV = nil
         try await controller.forgetPairing(for: addressText)
