@@ -10,6 +10,7 @@ final class HafaRemoteUITests: XCTestCase {
     @MainActor
     func testEmptyStateOpensTVSetup() throws {
         let app = makeApplication()
+        app.launchArguments.append("-ui-testing-discovery-result")
         app.launch()
 
         XCTAssertTrue(app.navigationBars["Hafa Remote"].waitForExistence(timeout: 5))
@@ -20,11 +21,82 @@ final class HafaRemoteUITests: XCTestCase {
         addButton.tap()
 
         XCTAssertTrue(app.navigationBars["Add Samsung TV"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.textFields["tvIPAddressField"].waitForExistence(timeout: 2))
+        XCTAssertFalse(app.textFields["tvIPAddressField"].exists)
+
+        let discoveredTV = app.buttons["discoveredTVButton"]
+        XCTAssertTrue(discoveredTV.waitForExistence(timeout: 2))
+        XCTAssertTrue(discoveredTV.isHittable)
+        XCTAssertTrue(discoveredTV.label.contains("Living Room TV"))
+
+        let manualSetup = app.buttons["manualSetupButton"]
+        XCTAssertTrue(manualSetup.waitForExistence(timeout: 2))
+        manualSetup.tap()
+        let addressField = app.textFields["tvIPAddressField"]
+        for _ in 0..<3 where !addressField.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(addressField.waitForExistence(timeout: 2))
 
         let connectButton = app.buttons["connectToTVButton"]
         XCTAssertTrue(connectButton.waitForExistence(timeout: 2))
         XCTAssertFalse(connectButton.isEnabled)
+    }
+
+    /// No-result discovery remains understandable and preserves a manual recovery path.
+    @MainActor
+    func testDiscoveryNoResultsOffersRetryAndManualFallback() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-discovery-empty")
+        app.launch()
+
+        app.buttons["addSamsungTVButton"].tap()
+
+        XCTAssertTrue(app.staticTexts["No Samsung TVs found"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["scanAgainButton"].isHittable)
+
+        let manualSetup = app.buttons["manualSetupButton"]
+        XCTAssertTrue(manualSetup.waitForExistence(timeout: 2))
+        manualSetup.tap()
+        let addressField = app.textFields["tvIPAddressField"]
+        for _ in 0..<3 where !addressField.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(addressField.waitForExistence(timeout: 2))
+    }
+
+    /// Runs only on a connected iPhone as the repeatable household-hardware discovery check.
+    @MainActor
+    func testHardwareDiscoveryFindsSamsungTV() throws {
+        #if targetEnvironment(simulator)
+            throw XCTSkip("Requires an iPhone and a powered-on Samsung TV on the same Wi-Fi network.")
+        #else
+            let app = XCUIApplication()
+            let permissionMonitor = addUIInterruptionMonitor(
+                withDescription: "Local Network permission"
+            ) { alert in
+                let allowButton = alert.buttons["Allow"]
+                guard allowButton.exists else { return false }
+                allowButton.tap()
+                return true
+            }
+            defer { removeUIInterruptionMonitor(permissionMonitor) }
+
+            app.launch()
+
+            let addButton = app.buttons["addSamsungTVButton"]
+            XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+            addButton.tap()
+
+            // XCTest invokes interruption monitors on the next interaction if iOS presents a prompt.
+            app.tap()
+
+            let discoveredTV = app.buttons["discoveredTVButton"]
+            XCTAssertTrue(
+                discoveredTV.waitForExistence(timeout: 15),
+                "Expected a verified Samsung TV advertised over the local network."
+            )
+            XCTAssertTrue(discoveredTV.isHittable)
+        #endif
     }
 
     /// Verifies that every MVP control remains discoverable and dispatches through the shared action.

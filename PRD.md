@@ -109,8 +109,8 @@ The main session state machine must represent at least:
 ### First launch and pairing
 
 1. Hafa Remote explains that the iPhone and TV must be on the same non-guest Wi-Fi network.
-2. The user taps **Find TVs**; this user action triggers the iOS local-network permission request.
-3. The app searches for candidate Samsung devices and shows model/name information when available.
+2. The user taps **Add Samsung TV**; the setup sheet immediately searches and this user action triggers the iOS local-network permission request.
+3. The app shows verified Samsung devices with their reported name and model when available.
 4. The user chooses a TV.
 5. The app establishes a secure local connection and asks the user to approve Hafa Remote on the television.
 6. The TV returns or recognizes a pairing token; Hafa Remote stores it in Keychain.

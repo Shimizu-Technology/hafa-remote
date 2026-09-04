@@ -1,5 +1,7 @@
 Hafa Remote is a straightforward iPhone remote for compatible Samsung smart TVs on the same Wi-Fi network.
 
+Open Add Samsung TV and Hafa Remote finds nearby compatible TVs automatically—no network address to type.
+
 Everyday controls are close at hand:
 • D-pad and select
 • Volume and mute

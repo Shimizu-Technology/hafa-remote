@@ -18,11 +18,34 @@ fingerprints, Wi-Fi names, or typed private content.
 
 ## HR-002 pairing proof
 
+Repeat the automated discovery check with the iPhone and TV awake on the same Wi-Fi:
+
+```bash
+xcodebuild test \
+  -project HafaRemote.xcodeproj \
+  -scheme HafaRemote \
+  -destination 'platform=iOS,id=<IPHONE_UDID>' \
+  -only-testing:HafaRemoteUITests/HafaRemoteUITests/testHardwareDiscoveryFindsSamsungTV
+```
+
+The test grants the expected Local Network prompt and fails unless a verified Samsung TV row
+appears within 15 seconds. It is skipped on simulators so CI remains deterministic.
+
+- [ ] Add Samsung TV found the Q70AA without entering an address.
+- [ ] The discovered row showed a useful TV name and model.
 - [ ] First launch reached the TV approval prompt.
 - [ ] Choosing Allow completed secure pairing.
 - [ ] Select changed the focused TV item.
 - [ ] Force-quit and relaunch reconnected without another approval prompt.
 - Connection time:
+- Notes:
+
+## HR-007 discovery recovery
+
+- [ ] Scan Again finds the Q70AA after a no-result search.
+- [ ] Turning the TV off removes it from a fresh search without showing a stale result.
+- [ ] Manual address entry is hidden under TV not showing up?.
+- [ ] Discovery requires no multicast entitlement and performs no subnet scan.
 - Notes:
 
 ## HR-004 control soak

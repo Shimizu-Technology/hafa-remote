@@ -17,6 +17,11 @@ struct HafaRemoteTests {
             bundle.object(forInfoDictionaryKey: "NSLocalNetworkUsageDescription") as? String
         )
         #expect(localNetworkCopy.contains("Samsung TVs"))
+
+        let bonjourServices = try #require(
+            bundle.object(forInfoDictionaryKey: "NSBonjourServices") as? [String]
+        )
+        #expect(bonjourServices == ["_samsungmsf._tcp"])
     }
 
     @MainActor

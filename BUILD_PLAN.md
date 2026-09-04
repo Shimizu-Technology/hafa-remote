@@ -3,8 +3,8 @@
 
 **Version:** 0.1  
 **Last updated:** September 4, 2026  
-**Current status:** HR-001 implemented and awaiting review
-**Current execution frontier:** HR-001 review, followed by HR-002
+**Current status:** HR-001 is merged; HR-002 through HR-007 and HR-015 are implemented in a reviewed PR stack
+**Current execution frontier:** Q70AA hardware acceptance, automatic-discovery validation, ordered merge, and internal TestFlight
 
 ## Delivery targets
 
@@ -127,12 +127,12 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** HR-006 go decision; Apple multicast-entitlement path understood
 
-- [ ] Identify which Samsung discovery mechanism works across target TVs without subnet scanning.
-- [ ] Request Apple's multicast entitlement if SSDP/broadcast is required.
-- [ ] Trigger discovery only after explanatory UI and a user action.
-- [ ] Deduplicate responses using reported device identity, not IP address alone.
-- [ ] Retain manual IP pairing under troubleshooting.
-- [ ] Handle local-network denial, guest Wi-Fi, client isolation, no results, duplicate names, and non-Samsung devices.
+- [x] Identify which Samsung discovery mechanism works across target TVs without subnet scanning.
+- [x] Confirm that Bonjour discovery does not require Apple's restricted multicast entitlement; retain that gate for future Wake-on-LAN only.
+- [x] Trigger discovery after the explanatory empty state and the user's Add Samsung TV action.
+- [x] Deduplicate responses using reported device identity, not IP address alone.
+- [x] Retain manual IP pairing under troubleshooting.
+- [x] Handle local-network denial, guest Wi-Fi, client isolation, no results, duplicate names, and non-Samsung devices.
 
 **Acceptance evidence:** A new installation finds and pairs the Q70AA without entering an IP; denied permission and no-result paths are understandable.
 
@@ -314,7 +314,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 | Samsung changes or withholds the local protocol | HR-002 and multi-model beta | Isolate driver, document evidence, avoid universal claims | Stop public release if behavior is not defensible |
 | Samsung does not authorize third-party distribution | HR-012 | Seek partner guidance or qualified legal review before external distribution | Keep the app personal/internal; do not submit publicly |
 | Self-signed device TLS encourages insecure handling | HR-002 security review | Per-device, user-initiated trust; no global bypass | P0 blocker |
-| iOS multicast entitlement is denied or delayed | HR-007 | Apply early; keep manual-IP recovery | Discovery may block public-quality release |
+| A target TV does not advertise Samsung Bonjour | HR-007 and hardware matrix | Keep manual-IP recovery and test discovery on every supported model | Exclude models that cannot meet zero-entry setup quality |
 | Wake-on-LAN varies by TV/router/settings | HR-006 and HR-014 | Capability gate and honest messaging | Never market guaranteed power-on |
 | Background suspension causes stale sessions | HR-005 | Foreground reconnect; no background-mode abuse | P1 blocker if recovery is unreliable |
 | DHCP changes break saved TVs | HR-008 | Stable device identity and rediscovery | P1 blocker for household use |
@@ -324,4 +324,4 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Immediate next action
 
-Start **HR-001** in a new repository/worktree. Do not begin visual polish or automatic discovery until **HR-002** proves secure pairing, token persistence, and one command on the Q70AA.
+Finish the Q70AA automatic-discovery and secure-pairing acceptance journey, then merge the reviewed PR stack in order and upload a fresh build from `main` to internal TestFlight.
