@@ -176,6 +176,8 @@ if [[ "$(plutil -extract manageAppVersionAndBuildNumber raw -expect bool "$expor
 fi
 
 METADATA_PATH="$metadata_path" ruby <<'RUBY'
+require "uri"
+
 path = ENV.fetch("METADATA_PATH")
 limits = {
   "name.txt" => 30,
@@ -195,7 +197,14 @@ end
 
 %w[support_url.txt marketing_url.txt privacy_url.txt privacy_choices_url.txt].each do |filename|
   value = File.read(File.join(path, filename), encoding: "UTF-8").strip
-  abort "#{filename} must use HTTPS" unless value.start_with?("https://")
+  begin
+    uri = URI.parse(value)
+  rescue URI::InvalidURIError
+    abort "#{filename} must be a valid HTTPS URL with a host"
+  end
+  unless uri.is_a?(URI::HTTPS) && uri.host && !uri.host.empty?
+    abort "#{filename} must be a valid HTTPS URL with a host"
+  end
 end
 RUBY
 
