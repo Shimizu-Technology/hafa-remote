@@ -53,7 +53,7 @@ simulator on the same LAN or a connected iPhone.
 - [ ] Turning the TV off removes it from a fresh search without showing a stale result.
 - [x] Manual address entry is hidden under TV not showing up?.
 - [x] Discovery requires no multicast entitlement and performs no subnet scan.
-- Notes: The hardware-backed UI test discovered and verified the powered-on Q70AA in under seven
+- Notes: The hardware-backed UI test discovered and verified the powered-on Q70AA in 7.188
   seconds from the simulator on the same LAN. No household network identifier was recorded.
 
 ## HR-004 control soak
