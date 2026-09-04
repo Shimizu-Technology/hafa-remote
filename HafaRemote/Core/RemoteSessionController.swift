@@ -75,7 +75,7 @@ actor RemoteSessionController {
     private var connectionID: UUID?
     private var connectionTask: Task<PairedSamsungTV, Error>?
     private var pairingRemovalID: UUID?
-    private var pairingRemovalTask: Task<Void, Error>?
+    private var pairingRemovalWaiters: [CheckedContinuation<Void, Never>] = []
     private var reconnectTask: Task<Void, Never>?
     private var commandTasks: [UUID: Task<Void, Error>] = [:]
     private var stateContinuations: [UUID: AsyncStream<RemoteSessionState>.Continuation] = [:]
@@ -189,6 +189,12 @@ actor RemoteSessionController {
     func forgetPairing(for addressText: String) async throws {
         await waitForPairingRemoval()
         try Task.checkCancellation()
+        let removalID = UUID()
+        pairingRemovalID = removalID
+        defer {
+            finishPairingRemoval(id: removalID)
+        }
+
         generation = UUID()
         let removalGeneration = generation
         targetAddressText = nil
@@ -196,21 +202,15 @@ actor RemoteSessionController {
         transition(to: .idle)
         await cancelInFlightWork()
         await disconnectDriverWithinLimit()
-        let removalID = UUID()
+        try Task.checkCancellation()
         let driver = driver
         let task = Task {
             try await driver.forget(addressText: addressText)
         }
-        pairingRemovalID = removalID
-        pairingRemovalTask = task
         let result = await withTaskCancellationHandler {
             await task.result
         } onCancel: {
             task.cancel()
-        }
-        if pairingRemovalID == removalID {
-            pairingRemovalID = nil
-            pairingRemovalTask = nil
         }
         do {
             try result.get()
@@ -230,8 +230,21 @@ actor RemoteSessionController {
     }
 
     private func waitForPairingRemoval() async {
-        guard let pairingRemovalTask else { return }
-        _ = await pairingRemovalTask.result
+        while pairingRemovalID != nil {
+            await withCheckedContinuation { continuation in
+                pairingRemovalWaiters.append(continuation)
+            }
+        }
+    }
+
+    private func finishPairingRemoval(id: UUID) {
+        guard pairingRemovalID == id else { return }
+        pairingRemovalID = nil
+        let waiters = pairingRemovalWaiters
+        pairingRemovalWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
     }
 
     func applicationDidEnterBackground() async {

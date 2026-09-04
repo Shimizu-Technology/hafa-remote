@@ -104,14 +104,84 @@ struct RemoteSessionControllerTests {
         let reconnecting = Task {
             await session.connect(to: tv.address.rawValue)
         }
-        await Task.yield()
 
-        #expect(await driver.connectCallCount == 1)
         await driver.completeForget()
         try await forgetting.value
         await reconnecting.value
         #expect(await driver.connectCallCount == 2)
+        #expect(await driver.callLog == ["connect", "forget-start", "forget-finish", "connect"])
         #expect(await session.state == .connected(tv))
+    }
+
+    @Test("Pairing removal excludes connections throughout teardown")
+    func pairingRemovalExcludesConnectionsDuringTeardown() async throws {
+        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let driver = ControlledPairingRemovalDriver(tv: tv)
+        let session = RemoteSessionController(driver: driver)
+        await session.connect(to: tv.address.rawValue)
+        var disconnectStarts = driver.disconnectStarts.makeAsyncIterator()
+        var forgetStarts = driver.forgetStarts.makeAsyncIterator()
+
+        let firstRemoval = Task {
+            try await session.forgetPairing(for: tv.address.rawValue)
+        }
+        _ = await disconnectStarts.next()
+        let reconnecting = Task {
+            await session.connect(to: tv.address.rawValue)
+        }
+
+        await driver.completeDisconnect()
+        _ = await forgetStarts.next()
+        #expect(
+            await driver.callLog == [
+                "connect", "disconnect-start", "disconnect-finish", "forget-start",
+            ]
+        )
+        await driver.completeForget()
+        try await firstRemoval.value
+        await reconnecting.value
+
+        #expect(
+            await driver.callLog == [
+                "connect", "disconnect-start", "disconnect-finish", "forget-start", "forget-finish",
+                "connect",
+            ]
+        )
+    }
+
+    @Test("Repeated pairing removal waits for the first teardown and deletion")
+    func repeatedPairingRemovalIsSerialized() async throws {
+        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let driver = ControlledPairingRemovalDriver(tv: tv)
+        let session = RemoteSessionController(driver: driver)
+        await session.connect(to: tv.address.rawValue)
+        var disconnectStarts = driver.disconnectStarts.makeAsyncIterator()
+        var forgetStarts = driver.forgetStarts.makeAsyncIterator()
+
+        let firstRemoval = Task {
+            try await session.forgetPairing(for: tv.address.rawValue)
+        }
+        _ = await disconnectStarts.next()
+        let secondRemoval = Task {
+            try await session.forgetPairing(for: tv.address.rawValue)
+        }
+
+        await driver.completeDisconnect()
+        _ = await forgetStarts.next()
+        #expect(await driver.callLog.filter { $0 == "forget-start" }.count == 1)
+        await driver.completeForget()
+        try await firstRemoval.value
+
+        _ = await forgetStarts.next()
+        await driver.completeForget()
+        try await secondRemoval.value
+
+        #expect(
+            await driver.callLog == [
+                "connect", "disconnect-start", "disconnect-finish",
+                "forget-start", "forget-finish", "forget-start", "forget-finish",
+            ]
+        )
     }
 
     @Test("Cancelling pairing removal releases a waiting connection without stale failure")
@@ -615,6 +685,7 @@ private actor SuspendedForgetRemoteSessionDriver: RemoteSessionDriving {
     private var forgetContinuation: CheckedContinuation<Void, Error>?
     private(set) var connectCallCount = 0
     private(set) var cancelledForgetCount = 0
+    private(set) var callLog: [String] = []
 
     init(tv: PairedSamsungTV) {
         self.tv = tv
@@ -628,12 +699,14 @@ private actor SuspendedForgetRemoteSessionDriver: RemoteSessionDriving {
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV {
         connectCallCount += 1
+        callLog.append("connect")
         return tv
     }
 
     func send(_ command: RemoteCommand) async throws {}
 
     func forget(addressText: String) async throws {
+        callLog.append("forget-start")
         forgetStartsContinuation.yield()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -644,6 +717,7 @@ private actor SuspendedForgetRemoteSessionDriver: RemoteSessionDriving {
                 await self?.cancelForget()
             }
         }
+        callLog.append("forget-finish")
     }
 
     func disconnect() {}
@@ -666,6 +740,69 @@ private actor SuspendedForgetRemoteSessionDriver: RemoteSessionDriving {
         cancelledForgetCount += 1
         forgetContinuation.resume(throwing: CancellationError())
         forgetStartsContinuation.finish()
+    }
+}
+
+private actor ControlledPairingRemovalDriver: RemoteSessionDriving {
+    nonisolated let disconnectStarts: AsyncStream<Void>
+    nonisolated let forgetStarts: AsyncStream<Void>
+    private let disconnectStartsContinuation: AsyncStream<Void>.Continuation
+    private let forgetStartsContinuation: AsyncStream<Void>.Continuation
+    private let tv: PairedSamsungTV
+    private var disconnectContinuation: CheckedContinuation<Void, Never>?
+    private var forgetContinuation: CheckedContinuation<Void, Never>?
+    private var shouldSuspendDisconnect = true
+    private var hasConnected = false
+    private(set) var callLog: [String] = []
+
+    init(tv: PairedSamsungTV) {
+        self.tv = tv
+        (disconnectStarts, disconnectStartsContinuation) = AsyncStream.makeStream()
+        (forgetStarts, forgetStartsContinuation) = AsyncStream.makeStream()
+    }
+
+    func connect(
+        addressText: String,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> PairedSamsungTV {
+        callLog.append("connect")
+        hasConnected = true
+        return tv
+    }
+
+    func send(_ command: RemoteCommand) async throws {}
+
+    func forget(addressText: String) async throws {
+        callLog.append("forget-start")
+        forgetStartsContinuation.yield()
+        await withCheckedContinuation { continuation in
+            forgetContinuation = continuation
+        }
+        callLog.append("forget-finish")
+    }
+
+    func disconnect() async {
+        guard hasConnected else { return }
+        hasConnected = false
+        callLog.append("disconnect-start")
+        if shouldSuspendDisconnect {
+            shouldSuspendDisconnect = false
+            disconnectStartsContinuation.yield()
+            await withCheckedContinuation { continuation in
+                disconnectContinuation = continuation
+            }
+        }
+        callLog.append("disconnect-finish")
+    }
+
+    func completeDisconnect() {
+        disconnectContinuation?.resume()
+        disconnectContinuation = nil
+    }
+
+    func completeForget() {
+        forgetContinuation?.resume()
+        forgetContinuation = nil
     }
 }
 
