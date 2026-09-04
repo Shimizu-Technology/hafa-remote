@@ -19,6 +19,7 @@ final class SamsungSetupViewModel {
     private let coordinator: any SamsungPairingCoordinating
     private var pairingTask: Task<PairedSamsungTV, Error>?
     private var activePairingID: UUID?
+    private var activeConnectionID: UUID?
 
     init(coordinator: (any SamsungPairingCoordinating)? = nil) {
         self.coordinator =
@@ -46,6 +47,7 @@ final class SamsungSetupViewModel {
     func connect() async {
         guard !isBusy else { return }
         status = .checking
+        activeConnectionID = nil
         let pairingID = UUID()
         activePairingID = pairingID
         let address = address
@@ -62,6 +64,7 @@ final class SamsungSetupViewModel {
             guard activePairingID == pairingID else { return }
             pairingTask = nil
             activePairingID = nil
+            activeConnectionID = UUID()
             status = .connected(tv)
         } catch is CancellationError {
             guard activePairingID == pairingID else { return }
@@ -80,6 +83,7 @@ final class SamsungSetupViewModel {
     }
 
     func sendSelect() async {
+        guard let connectionID = activeConnectionID else { return }
         let tv: PairedSamsungTV
         switch status {
         case .connected(let connectedTV), .commandSent(let connectedTV):
@@ -89,12 +93,15 @@ final class SamsungSetupViewModel {
         }
         do {
             try await coordinator.sendSelect()
+            guard activeConnectionID == connectionID else { return }
             status = .commandSent(tv)
             try? await Task.sleep(for: .seconds(1))
-            if status == .commandSent(tv) {
+            if activeConnectionID == connectionID, status == .commandSent(tv) {
                 status = .connected(tv)
             }
         } catch {
+            guard activeConnectionID == connectionID else { return }
+            activeConnectionID = nil
             status = .failed(message: Self.safeMessage(for: error), canForgetPairing: false)
         }
     }
@@ -111,6 +118,7 @@ final class SamsungSetupViewModel {
     }
 
     func disconnect() async {
+        activeConnectionID = nil
         activePairingID = nil
         let task = pairingTask
         pairingTask = nil

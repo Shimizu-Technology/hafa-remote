@@ -213,6 +213,7 @@ actor SamsungCommandSerializer {
     func perform(_ operation: @Sendable () async throws -> Void) async throws {
         try await acquire()
         defer { release() }
+        try Task.checkCancellation()
         try await operation()
     }
 
