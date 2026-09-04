@@ -9,6 +9,7 @@ enum RemoteSessionState: Equatable, Sendable {
     case reconnecting(attempt: Int)
     case offline
     case denied
+    case savedPairingRejected
     case certificateChanged
     case unsupported
     case failed(RemoteSessionFailure)

@@ -290,8 +290,10 @@ actor RemoteSessionController {
         } else if error as? SamsungConnectionError == .pairingTimedOut {
             transition(to: .failed(.timedOut(.connect)))
             scheduleReconnect(generation: requestedGeneration)
-        } else if Self.isDeniedError(error) {
+        } else if error as? SamsungConnectionError == .denied {
             transition(to: .denied)
+        } else if error as? SamsungPairingCoordinatorError == .savedPairingRejected {
+            transition(to: .savedPairingRejected)
         } else if error as? SamsungPairingCoordinatorError == .certificateChanged {
             transition(to: .certificateChanged)
         } else if Self.isUnsupportedError(error) {
@@ -380,11 +382,6 @@ actor RemoteSessionController {
 
     private func removeStateContinuation(_ id: UUID) {
         stateContinuations[id] = nil
-    }
-
-    private static func isDeniedError(_ error: Error) -> Bool {
-        error as? SamsungConnectionError == .denied
-            || error as? SamsungPairingCoordinatorError == .savedPairingRejected
     }
 
     private static func isUnsupportedError(_ error: Error) -> Bool {

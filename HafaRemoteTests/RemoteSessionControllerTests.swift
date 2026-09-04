@@ -54,6 +54,16 @@ struct RemoteSessionControllerTests {
         #expect(await session.state == .denied)
     }
 
+    @Test("A rejected saved pairing retains its distinct recovery state")
+    func rejectedSavedPairingHasDedicatedState() async {
+        let driver = MockRemoteSessionDriver(outcomes: [.failure(.savedPairingRejected)])
+        let session = RemoteSessionController(driver: driver)
+
+        await session.connect(to: "192.168.10.20")
+
+        #expect(await session.state == .savedPairingRejected)
+    }
+
     @Test("A changed TV certificate requires deliberate pairing repair")
     func changedCertificateHasDedicatedState() async {
         let driver = MockRemoteSessionDriver(outcomes: [.failure(.certificateChanged)])
@@ -309,6 +319,7 @@ struct RemoteSessionControllerTests {
 private enum MockConnectionFailure: Sendable {
     case offline
     case denied
+    case savedPairingRejected
     case certificateChanged
     case unsupported
 }
@@ -347,6 +358,8 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
             throw SamsungConnectionError.unavailable
         case .failure(.denied):
             throw SamsungConnectionError.denied
+        case .failure(.savedPairingRejected):
+            throw SamsungPairingCoordinatorError.savedPairingRejected
         case .failure(.certificateChanged):
             throw SamsungPairingCoordinatorError.certificateChanged
         case .failure(.unsupported):
