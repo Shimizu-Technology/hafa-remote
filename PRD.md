@@ -244,7 +244,7 @@ The UI must never send Samsung key strings directly. Only `SamsungLocalDriver` m
 
 - Use user-initiated local-network access with `NSLocalNetworkUsageDescription`.
 - Declare only Bonjour service types actually used.
-- If SSDP discovery or Wake-on-LAN requires multicast/broadcast access, request Apple's multicast entitlement early and keep manual IP pairing available for development.
+- Bonjour discovery uses only Samsung's declared `_samsungmsf._tcp` service. If future Wake-on-LAN requires broadcast access, request Apple's multicast entitlement before adding it; keep manual address pairing as a troubleshooting fallback.
 - Use a narrow local-network transport policy; do not enable arbitrary network loads globally.
 - Restrict connections to local/link-local targets and reject redirects or unexpected internet hosts.
 - Isolate Samsung's device-certificate handling. Trust must be tied to an explicit pairing action and saved device; do not install a global accept-all TLS policy.
@@ -413,7 +413,7 @@ These do not block the protocol spike:
 - Final App Store subtitle and keywords
 - Whether a later one-time Supporter purchase is worth adding
 - The exact Samsung model/firmware compatibility claims, which must come from testing
-- Whether Apple grants the multicast entitlement needed for automatic discovery and Wake-on-LAN
+- Whether Apple grants the multicast entitlement needed for future Wake-on-LAN
 - Whether Samsung will authorize public use of its local-control protocol; this is the largest release blocker
 
 ## Reference material
