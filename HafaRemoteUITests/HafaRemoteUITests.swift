@@ -85,8 +85,19 @@ final class HafaRemoteUITests: XCTestCase {
         app.launch()
 
         let addButton = app.buttons["addSamsungTVButton"]
-        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
-        addButton.tap()
+        if addButton.waitForExistence(timeout: 5) {
+            addButton.tap()
+        } else {
+            let existingConnection = app.staticTexts["remoteConnectionStatus"]
+            XCTAssertTrue(
+                existingConnection.waitForExistence(timeout: 10),
+                "Expected either first-run setup or an already paired Q70AA."
+            )
+            XCTAssertEqual(existingConnection.label, "Connected")
+            let changeTV = app.buttons["changeTVButton"]
+            XCTAssertTrue(changeTV.waitForExistence(timeout: 5))
+            changeTV.tap()
+        }
 
         // XCTest invokes interruption monitors on the next interaction if iOS presents a prompt.
         app.navigationBars["Add Samsung TV"].tap()
