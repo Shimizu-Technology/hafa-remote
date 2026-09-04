@@ -1,10 +1,23 @@
 import Foundation
 
+struct SamsungConnectionAttemptID: Hashable, Sendable {
+    private let rawValue = UUID()
+}
+
 protocol SamsungTransporting: TVDriver {
     func connect(
         to address: PrivateIPv4Address,
-        using credential: SamsungPairingCredential?
+        using credential: SamsungPairingCredential?,
+        attemptID: SamsungConnectionAttemptID
     ) async throws -> SamsungPairingCredential
+
+    func disconnect(attemptID: SamsungConnectionAttemptID) async
+}
+
+extension SamsungTransporting {
+    func disconnect(attemptID: SamsungConnectionAttemptID) async {
+        await disconnect()
+    }
 }
 
 /// Owns the single secure Samsung WebSocket and its serialized command stream.
@@ -13,87 +26,80 @@ actor SamsungCommandTransport: SamsungTransporting {
     private var webSocket: URLSessionWebSocketTask?
     private var attempts = SamsungConnectionAttemptTracker()
     private let commandSerializer = SamsungCommandSerializer()
+    private let pairingTimeout: Duration
+
+    init(pairingTimeout: Duration = .seconds(45)) {
+        self.pairingTimeout = pairingTimeout
+    }
 
     func connect(
         to address: PrivateIPv4Address,
-        using credential: SamsungPairingCredential?
+        using credential: SamsungPairingCredential?,
+        attemptID: SamsungConnectionAttemptID
     ) async throws -> SamsungPairingCredential {
         try Task.checkCancellation()
         disconnectCurrentSocket()
-        let attemptID = attempts.begin()
+        attempts.begin(attemptID)
 
-        let trustMode: SamsungTrustMode
-        if let credential {
-            trustMode = .reconnect(expectedFingerprint: credential.certificateSHA256)
-        } else {
-            trustMode = .firstPairingRequiringOnTVApproval
-        }
-        let delegate = SamsungTrustDelegate(
-            address: address,
-            mode: trustMode
-        )
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 20
-        configuration.timeoutIntervalForResource = 30
-        configuration.waitsForConnectivity = false
-
-        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
-        let endpoint = try SamsungWebSocketURLBuilder.url(address: address, token: credential?.token)
-        let webSocket = session.webSocketTask(with: endpoint)
-        self.session = session
-        self.webSocket = webSocket
-        try Task.checkCancellation()
-        webSocket.resume()
+        var attemptSession: URLSession?
+        var attemptSocket: URLSessionWebSocketTask?
+        var attemptDelegate: SamsungTrustDelegate?
 
         do {
-            for _ in 0..<10 {
-                let message = try await webSocket.receive()
-                switch try SamsungProtocolCodec.event(from: message) {
-                case .connected(let receivedToken):
-                    guard attempts.isCurrent(attemptID) else {
-                        throw SamsungConnectionError.unavailable
-                    }
-                    guard let fingerprint = delegate.candidateFingerprint else {
-                        throw SamsungConnectionError.missingCertificate
-                    }
-                    let token: String
-                    switch trustMode {
-                    case .firstPairingRequiringOnTVApproval:
-                        // The returned token proves the user completed Samsung's
-                        // physical Allow prompt before the candidate pin is saved.
-                        guard let receivedToken else {
-                            throw SamsungConnectionError.missingPairingToken
-                        }
-                        token = receivedToken
-                    case .reconnect:
-                        guard let reconnectToken = receivedToken ?? credential?.token else {
-                            throw SamsungConnectionError.missingPairingToken
-                        }
-                        token = reconnectToken
-                    }
-                    guard !token.isEmpty else {
-                        throw SamsungConnectionError.missingPairingToken
-                    }
-                    return try SamsungPairingCredential(
-                        token: token,
-                        certificateSHA256: fingerprint
-                    )
-                case .unauthorized:
-                    throw SamsungConnectionError.denied
-                case .ignored:
-                    continue
-                }
+            let trustMode: SamsungTrustMode
+            if let credential {
+                trustMode = .reconnect(expectedFingerprint: credential.certificateSHA256)
+            } else {
+                trustMode = .firstPairingRequiringOnTVApproval
             }
-            throw SamsungConnectionError.invalidResponse
+            let delegate = SamsungTrustDelegate(address: address, mode: trustMode)
+            attemptDelegate = delegate
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.waitsForConnectivity = false
+            let endpoint = try SamsungWebSocketURLBuilder.url(
+                address: address,
+                token: credential?.token
+            )
+
+            // The explicit pairing timeout below must not shorten the lifetime
+            // of the established remote-control socket.
+            try Task.checkCancellation()
+            let createdSession = URLSession(
+                configuration: configuration,
+                delegate: delegate,
+                delegateQueue: nil
+            )
+            let createdSocket = createdSession.webSocketTask(with: endpoint)
+            attemptSession = createdSession
+            attemptSocket = createdSocket
+            session = createdSession
+            webSocket = createdSocket
+            createdSocket.resume()
+
+            let token = try await waitForPairingToken(
+                on: createdSocket,
+                trustMode: trustMode,
+                existingCredential: credential
+            )
+            guard attempts.isCurrent(attemptID) else {
+                throw SamsungConnectionError.unavailable
+            }
+            guard let fingerprint = delegate.candidateFingerprint else {
+                throw SamsungConnectionError.missingCertificate
+            }
+            return try SamsungPairingCredential(
+                token: token,
+                certificateSHA256: fingerprint
+            )
         } catch {
-            let trustFailure = delegate.failure
+            let trustFailure = attemptDelegate?.failure
             if attempts.finishIfCurrent(attemptID) {
                 disconnectCurrentSocket()
             } else {
                 // This suspended attempt was replaced. Close only its captured
                 // resources so it cannot tear down the newer active socket.
-                webSocket.cancel(with: .goingAway, reason: nil)
-                session.invalidateAndCancel()
+                attemptSocket?.cancel(with: .goingAway, reason: nil)
+                attemptSession?.invalidateAndCancel()
             }
             if Task.isCancelled || error is CancellationError {
                 throw CancellationError()
@@ -131,6 +137,61 @@ actor SamsungCommandTransport: SamsungTransporting {
         disconnectCurrentSocket()
     }
 
+    func disconnect(attemptID: SamsungConnectionAttemptID) {
+        guard attempts.isCurrent(attemptID) else { return }
+        disconnectCurrentSocket()
+    }
+
+    private func waitForPairingToken(
+        on webSocket: URLSessionWebSocketTask,
+        trustMode: SamsungTrustMode,
+        existingCredential: SamsungPairingCredential?
+    ) async throws -> String {
+        let timeout = pairingTimeout
+        return try await withThrowingTaskGroup(of: String.self) { group in
+            group.addTask {
+                for _ in 0..<10 {
+                    let message = try await webSocket.receive()
+                    switch try SamsungProtocolCodec.event(from: message) {
+                    case .connected(let receivedToken):
+                        switch trustMode {
+                        case .firstPairingRequiringOnTVApproval:
+                            // The returned token proves the user completed Samsung's
+                            // physical Allow prompt before the candidate pin is saved.
+                            guard let receivedToken, !receivedToken.isEmpty else {
+                                throw SamsungConnectionError.missingPairingToken
+                            }
+                            return receivedToken
+                        case .reconnect:
+                            guard let token = receivedToken ?? existingCredential?.token,
+                                !token.isEmpty
+                            else {
+                                throw SamsungConnectionError.missingPairingToken
+                            }
+                            return token
+                        }
+                    case .unauthorized:
+                        throw SamsungConnectionError.denied
+                    case .ignored:
+                        continue
+                    }
+                }
+                throw SamsungConnectionError.invalidResponse
+            }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                webSocket.cancel(with: .goingAway, reason: nil)
+                throw SamsungConnectionError.pairingTimedOut
+            }
+
+            guard let token = try await group.next() else {
+                throw SamsungConnectionError.invalidResponse
+            }
+            group.cancelAll()
+            return token
+        }
+    }
+
     private func disconnectCurrentSocket() {
         attempts.invalidate()
         webSocket?.cancel(with: .goingAway, reason: nil)
@@ -143,52 +204,71 @@ actor SamsungCommandTransport: SamsungTransporting {
 /// Provides a FIFO, cancellation-aware boundary around WebSocket writes.
 actor SamsungCommandSerializer {
     private var isExecuting = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private struct Waiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Bool, Never>
+    }
+    private var waiters: [Waiter] = []
 
     func perform(_ operation: @Sendable () async throws -> Void) async throws {
-        await acquire()
+        try await acquire()
         defer { release() }
-        try Task.checkCancellation()
         try await operation()
     }
 
-    private func acquire() async {
+    private func acquire() async throws {
+        try Task.checkCancellation()
         if !isExecuting {
             isExecuting = true
             return
         }
 
-        await withCheckedContinuation { continuation in
-            waiters.append(continuation)
+        let waiterID = UUID()
+        let acquired = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume(returning: false)
+                } else {
+                    waiters.append(Waiter(id: waiterID, continuation: continuation))
+                }
+            }
+        } onCancel: {
+            Task {
+                await self.cancelWaiter(waiterID)
+            }
         }
+        guard acquired else { throw CancellationError() }
+        try Task.checkCancellation()
     }
 
     private func release() {
         if waiters.isEmpty {
             isExecuting = false
         } else {
-            waiters.removeFirst().resume()
+            waiters.removeFirst().continuation.resume(returning: true)
         }
+    }
+
+    private func cancelWaiter(_ waiterID: UUID) {
+        guard let index = waiters.firstIndex(where: { $0.id == waiterID }) else { return }
+        waiters.remove(at: index).continuation.resume(returning: false)
     }
 }
 
 /// Makes actor reentrancy explicit: cleanup from a suspended attempt can only
 /// invalidate the generation that created it.
 struct SamsungConnectionAttemptTracker: Sendable {
-    private var nextID: UInt64 = 0
-    private var activeID: UInt64?
+    private var activeID: SamsungConnectionAttemptID?
 
-    mutating func begin() -> UInt64 {
-        nextID &+= 1
-        activeID = nextID
-        return nextID
+    mutating func begin(_ attemptID: SamsungConnectionAttemptID) {
+        activeID = attemptID
     }
 
-    func isCurrent(_ attemptID: UInt64) -> Bool {
+    func isCurrent(_ attemptID: SamsungConnectionAttemptID) -> Bool {
         activeID == attemptID
     }
 
-    mutating func finishIfCurrent(_ attemptID: UInt64) -> Bool {
+    mutating func finishIfCurrent(_ attemptID: SamsungConnectionAttemptID) -> Bool {
         guard isCurrent(attemptID) else { return false }
         activeID = nil
         return true
@@ -202,6 +282,7 @@ struct SamsungConnectionAttemptTracker: Sendable {
 enum SamsungConnectionError: LocalizedError, Equatable, Sendable {
     case invalidEndpoint
     case unavailable
+    case pairingTimedOut
     case denied
     case invalidResponse
     case missingCertificate
@@ -215,6 +296,8 @@ enum SamsungConnectionError: LocalizedError, Equatable, Sendable {
             "Hafa Remote could not create a secure connection for that address."
         case .unavailable:
             "The secure TV connection could not be completed. Check that the TV is on and on the same Wi-Fi network."
+        case .pairingTimedOut:
+            "TV approval took too long. Try again and choose Allow on the TV."
         case .denied:
             "The TV did not approve Hafa Remote. Try again and choose Allow on the TV."
         case .invalidResponse:

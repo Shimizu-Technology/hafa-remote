@@ -17,6 +17,8 @@ final class SamsungSetupViewModel {
     private(set) var status: Status = .idle
 
     private let coordinator: any SamsungPairingCoordinating
+    private var pairingTask: Task<PairedSamsungTV, Error>?
+    private var activePairingID: UUID?
 
     init(coordinator: (any SamsungPairingCoordinating)? = nil) {
         self.coordinator =
@@ -44,14 +46,32 @@ final class SamsungSetupViewModel {
     func connect() async {
         guard !isBusy else { return }
         status = .checking
+        let pairingID = UUID()
+        activePairingID = pairingID
+        let address = address
+        let task = Task { [coordinator, weak self] in
+            try await coordinator.pair(addressText: address) {
+                guard self?.activePairingID == pairingID else { return }
+                self?.status = .waitingForApproval
+            }
+        }
+        pairingTask = task
 
         do {
-            status = .connected(
-                try await coordinator.pair(addressText: address) { [weak self] in
-                    self?.status = .waitingForApproval
-                }
-            )
+            let tv = try await task.value
+            guard activePairingID == pairingID else { return }
+            pairingTask = nil
+            activePairingID = nil
+            status = .connected(tv)
+        } catch is CancellationError {
+            guard activePairingID == pairingID else { return }
+            pairingTask = nil
+            activePairingID = nil
+            status = .idle
         } catch {
+            guard activePairingID == pairingID else { return }
+            pairingTask = nil
+            activePairingID = nil
             status = .failed(
                 message: Self.safeMessage(for: error),
                 canForgetPairing: (error as? SamsungPairingCoordinatorError)?.canForgetPairing == true
@@ -91,7 +111,15 @@ final class SamsungSetupViewModel {
     }
 
     func disconnect() async {
+        activePairingID = nil
+        let task = pairingTask
+        pairingTask = nil
+        task?.cancel()
+        if let task {
+            _ = await task.result
+        }
         await coordinator.disconnect()
+        status = .idle
     }
 
     private static func safeMessage(for error: Error) -> String {

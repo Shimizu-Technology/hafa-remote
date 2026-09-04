@@ -168,6 +168,42 @@ struct SamsungPairingCoordinatorTests {
         #expect(await store.saveCount == 0)
     }
 
+    @Test("Cancellation during save rolls back before an immediate retry")
+    func cancellationDuringSaveRollsBackAndAllowsRetry() async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let issuedCredential = try SamsungPairingCredential(
+            token: "synthetic-token",
+            certificateSHA256: Data(repeating: 10, count: 32)
+        )
+        let store = SuspendedSaveCredentialStore()
+        let transport = AttemptAwareSamsungTransport(issuedCredential: issuedCredential)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: transport
+        )
+
+        let firstPairing = Task {
+            try await coordinator.pair(addressText: address.rawValue)
+        }
+        var saveStarts = store.firstSaveStarted.makeAsyncIterator()
+        _ = await saveStarts.next()
+        firstPairing.cancel()
+        await store.releaseFirstSave()
+
+        await #expect(throws: CancellationError.self) {
+            try await firstPairing.value
+        }
+        #expect(await store.credential(for: address) == nil)
+        #expect(!(await transport.hasActiveConnection))
+
+        _ = try await coordinator.pair(addressText: address.rawValue)
+        #expect(await store.credential(for: address) == issuedCredential)
+        #expect(await transport.hasActiveConnection)
+
+        await coordinator.disconnect()
+    }
+
     @Test("A failed reconnect keeps the saved credential until a retry succeeds")
     func retryPreservesCredentialUntilSuccess() async throws {
         let address = try PrivateIPv4Address("192.168.10.20")
@@ -240,6 +276,41 @@ struct SamsungPairingCoordinatorTests {
     }
 }
 
+struct SamsungSetupViewModelTests {
+    @Test("Disconnect cancels in-flight pairing and restores idle state")
+    @MainActor
+    func disconnectCancelsPairing() async {
+        let coordinator = SetupCoordinatorStub(suspendsPairing: true)
+        let model = SamsungSetupViewModel(coordinator: coordinator)
+        model.address = "192.168.10.20"
+
+        let connection = Task { await model.connect() }
+        var starts = coordinator.pairingStarted.makeAsyncIterator()
+        _ = await starts.next()
+        await model.disconnect()
+        await connection.value
+
+        #expect(model.status == .idle)
+        #expect(!model.isControllable)
+        #expect(await coordinator.disconnectCount == 1)
+    }
+
+    @Test("Disconnect clears a completed connection")
+    @MainActor
+    func disconnectClearsConnectedState() async {
+        let coordinator = SetupCoordinatorStub(suspendsPairing: false)
+        let model = SamsungSetupViewModel(coordinator: coordinator)
+        model.address = "192.168.10.20"
+
+        await model.connect()
+        #expect(model.isControllable)
+
+        await model.disconnect()
+        #expect(model.status == .idle)
+        #expect(!model.isControllable)
+    }
+}
+
 private struct StubSamsungDeviceInfoProvider: SamsungDeviceInfoProviding {
     func fetchDeviceInfo(at address: PrivateIPv4Address) async throws -> SamsungDeviceInfo {
         SamsungDeviceInfo(
@@ -282,7 +353,8 @@ private actor StubSamsungTransport: SamsungTransporting {
 
     func connect(
         to address: PrivateIPv4Address,
-        using credential: SamsungPairingCredential?
+        using credential: SamsungPairingCredential?,
+        attemptID: SamsungConnectionAttemptID
     ) throws -> SamsungPairingCredential {
         presentedCredential = credential
         if let connectError {
@@ -312,7 +384,8 @@ private actor SuspendedSamsungTransport: SamsungTransporting {
 
     func connect(
         to address: PrivateIPv4Address,
-        using credential: SamsungPairingCredential?
+        using credential: SamsungPairingCredential?,
+        attemptID: SamsungConnectionAttemptID
     ) async throws -> SamsungPairingCredential {
         connectStartedContinuation.yield()
         return try await withCheckedThrowingContinuation { continuation in
@@ -345,7 +418,8 @@ private actor SequencedSamsungTransport: SamsungTransporting {
 
     func connect(
         to address: PrivateIPv4Address,
-        using credential: SamsungPairingCredential?
+        using credential: SamsungPairingCredential?,
+        attemptID: SamsungConnectionAttemptID
     ) throws -> SamsungPairingCredential {
         presentedCredentials.append(credential)
         if !connectionErrors.isEmpty {
@@ -402,13 +476,125 @@ private actor ObservableSamsungTransport: SamsungTransporting {
 
     func connect(
         to address: PrivateIPv4Address,
-        using credential: SamsungPairingCredential?
+        using credential: SamsungPairingCredential?,
+        attemptID: SamsungConnectionAttemptID
     ) -> SamsungPairingCredential {
         connectCount += 1
         return issuedCredential
     }
 
     func send(_ command: RemoteCommand) {}
+
+    func disconnect() {
+        disconnectCount += 1
+    }
+}
+
+private actor SuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
+    nonisolated let firstSaveStarted: AsyncStream<Void>
+    private let firstSaveStartedContinuation: AsyncStream<Void>.Continuation
+    private var firstSaveContinuation: CheckedContinuation<Void, Never>?
+    private var values: [PrivateIPv4Address: SamsungPairingCredential] = [:]
+    private var saveCallCount = 0
+
+    init() {
+        let (stream, continuation) = AsyncStream<Void>.makeStream()
+        firstSaveStarted = stream
+        firstSaveStartedContinuation = continuation
+    }
+
+    func credential(for address: PrivateIPv4Address) -> SamsungPairingCredential? {
+        values[address]
+    }
+
+    func save(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) async {
+        saveCallCount += 1
+        values[address] = credential
+        guard saveCallCount == 1 else { return }
+
+        firstSaveStartedContinuation.yield()
+        await withCheckedContinuation { continuation in
+            firstSaveContinuation = continuation
+        }
+    }
+
+    func removeCredential(for address: PrivateIPv4Address) {
+        values[address] = nil
+    }
+
+    func releaseFirstSave() {
+        firstSaveContinuation?.resume()
+        firstSaveContinuation = nil
+        firstSaveStartedContinuation.finish()
+    }
+}
+
+private actor AttemptAwareSamsungTransport: SamsungTransporting {
+    private let issuedCredential: SamsungPairingCredential
+    private var activeAttemptID: SamsungConnectionAttemptID?
+
+    var hasActiveConnection: Bool {
+        activeAttemptID != nil
+    }
+
+    init(issuedCredential: SamsungPairingCredential) {
+        self.issuedCredential = issuedCredential
+    }
+
+    func connect(
+        to address: PrivateIPv4Address,
+        using credential: SamsungPairingCredential?,
+        attemptID: SamsungConnectionAttemptID
+    ) -> SamsungPairingCredential {
+        activeAttemptID = attemptID
+        return issuedCredential
+    }
+
+    func send(_ command: RemoteCommand) {}
+
+    func disconnect(attemptID: SamsungConnectionAttemptID) {
+        guard activeAttemptID == attemptID else { return }
+        activeAttemptID = nil
+    }
+
+    func disconnect() {
+        activeAttemptID = nil
+    }
+}
+
+private actor SetupCoordinatorStub: SamsungPairingCoordinating {
+    nonisolated let pairingStarted: AsyncStream<Void>
+    private let pairingStartedContinuation: AsyncStream<Void>.Continuation
+    private let suspendsPairing: Bool
+    private(set) var disconnectCount = 0
+
+    init(suspendsPairing: Bool) {
+        self.suspendsPairing = suspendsPairing
+        let (stream, continuation) = AsyncStream<Void>.makeStream()
+        pairingStarted = stream
+        pairingStartedContinuation = continuation
+    }
+
+    func pair(
+        addressText: String,
+        onWaitingForApproval: @escaping @Sendable @MainActor () -> Void
+    ) async throws -> PairedSamsungTV {
+        await onWaitingForApproval()
+        pairingStartedContinuation.yield()
+        if suspendsPairing {
+            try await Task.sleep(for: .seconds(60))
+        }
+        pairingStartedContinuation.finish()
+        return PairedSamsungTV(
+            address: try PrivateIPv4Address("192.168.10.20"),
+            modelName: "TEST_MODEL_2021",
+            firmwareVersion: "1001.2"
+        )
+    }
+
+    func sendSelect() {}
+
+    func forget(addressText: String) {}
 
     func disconnect() {
         disconnectCount += 1

@@ -79,6 +79,20 @@ struct SamsungProtocolCodecTests {
         #expect(query["token"] == "synthetic-token")
     }
 
+    @Test("First-pairing endpoint omits the token")
+    func buildsFirstPairingEndpoint() throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let url = try SamsungWebSocketURLBuilder.url(address: address, token: nil)
+        let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let query = Dictionary(
+            uniqueKeysWithValues: components.queryItems?.compactMap { item in
+                item.value.map { (item.name, $0) }
+            } ?? [])
+
+        #expect(query["name"] == Data("Hafa Remote".utf8).base64EncodedString())
+        #expect(query["token"] == nil)
+    }
+
     @Test("Device parser retains only the reviewed capability fields")
     func parsesSafeDeviceInfo() throws {
         let response = Data(
@@ -88,9 +102,14 @@ struct SamsungProtocolCodecTests {
 
         let info = try SamsungDeviceInfoParser.parse(response)
 
-        #expect(info.modelName == "TEST_MODEL_2021")
-        #expect(info.firmwareVersion == "1001.2")
-        #expect(info.supportsTokenAuthentication)
+        #expect(
+            info
+                == SamsungDeviceInfo(
+                    modelName: "TEST_MODEL_2021",
+                    firmwareVersion: "1001.2",
+                    supportsTokenAuthentication: true
+                )
+        )
     }
 
     @Test("Pairing credentials reject control characters and malformed pins")
@@ -127,8 +146,10 @@ struct SamsungConnectionAttemptTrackerTests {
     @Test("A superseded attempt cannot invalidate the current connection")
     func cleanupIsAttemptScoped() {
         var tracker = SamsungConnectionAttemptTracker()
-        let first = tracker.begin()
-        let second = tracker.begin()
+        let first = SamsungConnectionAttemptID()
+        let second = SamsungConnectionAttemptID()
+        tracker.begin(first)
+        tracker.begin(second)
 
         let supersededCleanupClosedConnection = tracker.finishIfCurrent(first)
         #expect(!supersededCleanupClosedConnection)
@@ -175,6 +196,50 @@ struct SamsungCommandSerializerTests {
         try await first.value
         try await second.value
         #expect(await recorder.values == ["first-start", "first-end", "second"])
+        firstStartedContinuation.finish()
+        releaseFirstContinuation.finish()
+        secondAttemptedContinuation.finish()
+    }
+
+    @Test("A cancelled queued command is removed before execution")
+    func removesCancelledWaiter() async throws {
+        let serializer = SamsungCommandSerializer()
+        let recorder = CommandOrderRecorder()
+        let (firstStarted, firstStartedContinuation) = AsyncStream<Void>.makeStream()
+        let (releaseFirst, releaseFirstContinuation) = AsyncStream<Void>.makeStream()
+        let (secondAttempted, secondAttemptedContinuation) = AsyncStream<Void>.makeStream()
+
+        let first = Task {
+            try await serializer.perform {
+                await recorder.append("first-start")
+                firstStartedContinuation.yield()
+                var releases = releaseFirst.makeAsyncIterator()
+                _ = await releases.next()
+                await recorder.append("first-end")
+            }
+        }
+        var starts = firstStarted.makeAsyncIterator()
+        _ = await starts.next()
+
+        let cancelled = Task {
+            secondAttemptedContinuation.yield()
+            try await serializer.perform {
+                await recorder.append("cancelled-command")
+            }
+        }
+        var attempts = secondAttempted.makeAsyncIterator()
+        _ = await attempts.next()
+        await Task.yield()
+        cancelled.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            try await cancelled.value
+        }
+        #expect(await recorder.values == ["first-start"])
+        releaseFirstContinuation.yield()
+        try await first.value
+        #expect(await recorder.values == ["first-start", "first-end"])
+
         firstStartedContinuation.finish()
         releaseFirstContinuation.finish()
         secondAttemptedContinuation.finish()

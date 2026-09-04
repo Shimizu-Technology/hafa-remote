@@ -12,14 +12,21 @@ struct PrivateIPv4AddressTests {
     }
 
     @Test(
-        "Rejects public, malformed, and ambiguous addresses",
-        arguments: [
-            "8.8.8.8", "172.15.255.255", "172.32.0.1", "192.168.1", "192.168.001.25",
-            "192.168.1.256", "",
-        ]
+        "Rejects malformed and ambiguous addresses",
+        arguments: ["192.168.1", "192.168.001.25", "192.168.1.256", ""]
     )
-    func rejectsUnsafeAddress(_ value: String) {
-        #expect(throws: (any Error).self) {
+    func rejectsMalformedAddress(_ value: String) {
+        #expect(throws: PrivateIPv4AddressError.invalid) {
+            try PrivateIPv4Address(value)
+        }
+    }
+
+    @Test(
+        "Rejects addresses outside private and link-local ranges",
+        arguments: ["8.8.8.8", "172.15.255.255", "172.32.0.1"]
+    )
+    func rejectsPublicAddress(_ value: String) {
+        #expect(throws: PrivateIPv4AddressError.notPrivate) {
             try PrivateIPv4Address(value)
         }
     }
