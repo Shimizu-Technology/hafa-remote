@@ -2,8 +2,11 @@
 language: en-US
 reviews:
   profile: assertive
+  request_changes_workflow: true
   high_level_summary: true
   review_status: true
+  commit_status: true
+  fail_commit_status: true
   auto_review:
     enabled: true
     drafts: false
@@ -22,5 +25,9 @@ reviews:
         targets, VoiceOver, Dynamic Type, dark mode, and reduced-motion support.
     - path: "HafaRemoteTests/**"
       instructions: >-
-        Require deterministic coverage of command encoding, session transitions,
-        token persistence boundaries, redaction, cancellation, and recovery.
+        For protocol and session changes, require deterministic coverage of
+        command encoding, state transitions, token persistence boundaries,
+        redaction, cancellation, and recovery. Keep findings within the modules
+        and acceptance criteria introduced by the current ticket.
+chat:
+  auto_reply: true

@@ -388,7 +388,7 @@ The public-release decision is based on the device matrix and TestFlight crash d
 - **Working subtitle:** Simple Remote for Samsung TVs
 - **Promise:** Fast local control without an account, ads, or a weekly subscription
 - **Tone:** Calm, trustworthy, direct, and local—not a loud “universal remote” clone
-- **Recommended bundle ID:** `com.ShimizuTechnology.HafaRemote`
+- **Bundle ID:** `com.shimizutechnology.hafaremote`
 - **Category:** Utilities
 - **Age rating:** Expected 4+, subject to final App Store questionnaire
 

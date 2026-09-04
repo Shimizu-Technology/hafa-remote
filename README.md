@@ -4,7 +4,7 @@ Hafa Remote is a native iPhone remote for compatible Samsung Tizen TVs on the sa
 
 ## Status
 
-Planning is complete. The first implementation milestone is a manual-IP proof against Leon's Samsung Q70AA before automatic discovery, Wake-on-LAN, or public distribution work begins.
+The native SwiftUI foundation is in place. The next implementation milestone is a manual-IP proof against Leon's Samsung Q70AA before automatic discovery, Wake-on-LAN, or public distribution work begins.
 
 ## Documents
 
@@ -22,7 +22,7 @@ Planning is complete. The first implementation milestone is a manual-IP proof ag
 
 ## Verification
 
-Once the Xcode project exists, the canonical verification command will be:
+The canonical verification command is:
 
 ```bash
 ./scripts/gate.sh
