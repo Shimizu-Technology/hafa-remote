@@ -68,39 +68,39 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(addressField.waitForExistence(timeout: 2))
     }
 
-    /// Runs only on a connected iPhone as the repeatable household-hardware discovery check.
+    /// Runs separately from the deterministic gate against the powered-on household TV.
     @MainActor
     func testHardwareDiscoveryFindsSamsungTV() throws {
-        #if targetEnvironment(simulator)
-            throw XCTSkip("Requires an iPhone and a powered-on Samsung TV on the same Wi-Fi network.")
-        #else
-            let app = XCUIApplication()
-            let permissionMonitor = addUIInterruptionMonitor(
-                withDescription: "Local Network permission"
-            ) { alert in
-                let allowButton = alert.buttons["Allow"]
-                guard allowButton.exists else { return false }
-                allowButton.tap()
-                return true
-            }
-            defer { removeUIInterruptionMonitor(permissionMonitor) }
+        let app = XCUIApplication()
+        let permissionMonitor = addUIInterruptionMonitor(
+            withDescription: "Local Network permission"
+        ) { alert in
+            let allowButton = alert.buttons["Allow"]
+            guard allowButton.exists else { return false }
+            allowButton.tap()
+            return true
+        }
+        defer { removeUIInterruptionMonitor(permissionMonitor) }
 
-            app.launch()
+        app.launch()
 
-            let addButton = app.buttons["addSamsungTVButton"]
-            XCTAssertTrue(addButton.waitForExistence(timeout: 5))
-            addButton.tap()
+        let addButton = app.buttons["addSamsungTVButton"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+        addButton.tap()
 
-            // XCTest invokes interruption monitors on the next interaction if iOS presents a prompt.
-            app.navigationBars["Add Samsung TV"].tap()
+        // XCTest invokes interruption monitors on the next interaction if iOS presents a prompt.
+        app.navigationBars["Add Samsung TV"].tap()
 
-            let discoveredTV = app.buttons["discoveredTVButton"]
-            XCTAssertTrue(
-                discoveredTV.waitForExistence(timeout: 15),
-                "Expected a verified Samsung TV advertised over the local network."
-            )
-            XCTAssertTrue(discoveredTV.isHittable)
-        #endif
+        let discoveredTV = app.buttons["discoveredTVButton"]
+        XCTAssertTrue(
+            discoveredTV.waitForExistence(timeout: 15),
+            "Expected a verified Samsung TV advertised over the local network."
+        )
+        XCTAssertTrue(discoveredTV.isHittable)
+        XCTAssertTrue(
+            discoveredTV.label.localizedCaseInsensitiveContains("Q70AA"),
+            "Expected the household Q70AA model to be recognizable in the discovery row."
+        )
     }
 
     /// Verifies that every MVP control remains discoverable and dispatches through the shared action.

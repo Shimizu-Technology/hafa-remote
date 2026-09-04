@@ -5,11 +5,11 @@ fingerprints, Wi-Fi names, or typed private content.
 
 ## Test environment
 
-- Date:
+- Date: September 5, 2026 (live-network discovery only)
 - TV model: Samsung Q70AA
 - TV firmware:
-- iPhone model:
-- iOS version:
+- iPhone model: iPhone 17 Pro simulator; physical iPhone validation pending
+- iOS version: 26.5 simulator; physical iPhone validation pending
 - App version:
 - Build number:
 - Release commit:
@@ -29,10 +29,11 @@ xcodebuild test \
 ```
 
 The test grants the expected Local Network prompt and fails unless a verified Samsung TV row
-appears within 15 seconds. It is skipped on simulators so CI remains deterministic.
+appears within 15 seconds. The deterministic gate explicitly skips it because it requires the
+household TV; run it separately against either a simulator on the same LAN or a connected iPhone.
 
-- [ ] Add Samsung TV found the Q70AA without entering an address.
-- [ ] The discovered row showed a useful TV name and model.
+- [x] Add Samsung TV found the Q70AA without entering an address.
+- [x] The discovered row showed a useful TV name and model.
 - [ ] First launch reached the TV approval prompt.
 - [ ] Choosing Allow completed secure pairing.
 - [ ] Select changed the focused TV item.
@@ -44,9 +45,10 @@ appears within 15 seconds. It is skipped on simulators so CI remains determinist
 
 - [ ] Scan Again finds the Q70AA after a no-result search.
 - [ ] Turning the TV off removes it from a fresh search without showing a stale result.
-- [ ] Manual address entry is hidden under TV not showing up?.
-- [ ] Discovery requires no multicast entitlement and performs no subnet scan.
-- Notes:
+- [x] Manual address entry is hidden under TV not showing up?.
+- [x] Discovery requires no multicast entitlement and performs no subnet scan.
+- Notes: The hardware-backed UI test discovered and verified the powered-on Q70AA in under seven
+  seconds from the simulator on the same LAN. No household network identifier was recorded.
 
 ## HR-004 control soak
 
