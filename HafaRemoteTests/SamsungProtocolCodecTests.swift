@@ -4,24 +4,47 @@ import Testing
 @testable import HafaRemote
 
 struct SamsungProtocolCodecTests {
-    @Test("Select maps only to Samsung's reviewed enter key")
-    func encodesSelect() throws {
-        let message = try SamsungProtocolCodec.remoteMessage(for: .select)
-        guard case .string(let text) = message else {
-            Issue.record("Expected a text WebSocket message")
-            return
+    @Test("Every semantic control maps to exactly one reviewed Samsung key")
+    func encodesReviewedCommandAllowlist() throws {
+        let mappings: [(RemoteCommand, String)] = [
+            (.powerOff, "KEY_POWER"),
+            (.up, "KEY_UP"),
+            (.down, "KEY_DOWN"),
+            (.left, "KEY_LEFT"),
+            (.right, "KEY_RIGHT"),
+            (.select, "KEY_ENTER"),
+            (.home, "KEY_HOME"),
+            (.back, "KEY_RETURN"),
+            (.play, "KEY_PLAY"),
+            (.pause, "KEY_PAUSE"),
+            (.rewind, "KEY_REWIND"),
+            (.fastForward, "KEY_FF"),
+            (.volumeUp, "KEY_VOLUP"),
+            (.volumeDown, "KEY_VOLDOWN"),
+            (.mute, "KEY_MUTE"),
+        ]
+
+        #expect(mappings.map(\.0) == RemoteCommand.allCases)
+        #expect(Set(mappings.map(\.1)).count == mappings.count)
+
+        for (command, expectedKey) in mappings {
+            let message = try SamsungProtocolCodec.remoteMessage(for: command)
+            guard case .string(let text) = message else {
+                Issue.record("Expected a text WebSocket message")
+                continue
+            }
+
+            let object = try #require(
+                JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
+            )
+            let params = try #require(object["params"] as? [String: String])
+
+            #expect(object["method"] as? String == "ms.remote.control")
+            #expect(params["Cmd"] == "Click")
+            #expect(params["DataOfCmd"] == expectedKey)
+            #expect(params["Option"] == "false")
+            #expect(params["TypeOfRemote"] == "SendRemoteKey")
         }
-
-        let object = try #require(
-            JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
-        )
-        let params = try #require(object["params"] as? [String: String])
-
-        #expect(object["method"] as? String == "ms.remote.control")
-        #expect(params["Cmd"] == "Click")
-        #expect(params["DataOfCmd"] == "KEY_ENTER")
-        #expect(params["Option"] == "false")
-        #expect(params["TypeOfRemote"] == "SendRemoteKey")
     }
 
     @Test("Connect event returns only the pairing token")

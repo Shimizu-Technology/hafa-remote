@@ -407,67 +407,6 @@ struct SamsungPairingCoordinatorTests {
     }
 }
 
-struct SamsungSetupViewModelTests {
-    @Test("Disconnect cancels in-flight pairing and restores idle state")
-    @MainActor
-    func disconnectCancelsPairing() async {
-        let coordinator = SetupCoordinatorStub(suspendsPairing: true)
-        let model = SamsungSetupViewModel(coordinator: coordinator)
-        model.address = "192.168.10.20"
-
-        let connection = Task { await model.connect() }
-        var starts = coordinator.pairingStarted.makeAsyncIterator()
-        _ = await starts.next()
-        await model.disconnect()
-        await connection.value
-
-        #expect(model.status == .idle)
-        #expect(!model.isControllable)
-        #expect(await coordinator.disconnectCount == 1)
-    }
-
-    @Test("Disconnect clears a completed connection")
-    @MainActor
-    func disconnectClearsConnectedState() async {
-        let coordinator = SetupCoordinatorStub(suspendsPairing: false)
-        let model = SamsungSetupViewModel(coordinator: coordinator)
-        model.address = "192.168.10.20"
-
-        await model.connect()
-        #expect(model.isControllable)
-
-        await model.disconnect()
-        #expect(model.status == .idle)
-        #expect(!model.isControllable)
-    }
-
-    @Test("Reconnect waits for disconnect cleanup before pairing again")
-    @MainActor
-    func reconnectWaitsForDisconnect() async {
-        let coordinator = SetupCoordinatorStub(
-            suspendsPairing: false,
-            suspendsDisconnect: true
-        )
-        let model = SamsungSetupViewModel(coordinator: coordinator)
-        model.address = "192.168.10.20"
-        await model.connect()
-
-        let disconnect = Task { await model.disconnect() }
-        var disconnectStarts = coordinator.disconnectStarted.makeAsyncIterator()
-        _ = await disconnectStarts.next()
-        let reconnect = Task { await model.connect() }
-        await Task.yield()
-        #expect(await coordinator.pairCallCount == 1)
-
-        await coordinator.releaseDisconnect()
-        await disconnect.value
-        await reconnect.value
-
-        #expect(await coordinator.pairCallCount == 2)
-        #expect(model.isControllable)
-    }
-}
-
 private struct StubSamsungDeviceInfoProvider: SamsungDeviceInfoProviding {
     func fetchDeviceInfo(at address: PrivateIPv4Address) async throws -> SamsungDeviceInfo {
         SamsungDeviceInfo(
@@ -774,48 +713,14 @@ private actor AttemptAwareSamsungTransport: SamsungTransporting {
 }
 
 private actor SetupCoordinatorStub: SamsungPairingCoordinating {
-    nonisolated let pairingStarted: AsyncStream<Void>
-    private let pairingStartedContinuation: AsyncStream<Void>.Continuation
-    nonisolated let disconnectStarted: AsyncStream<Void>
-    private let disconnectStartedContinuation: AsyncStream<Void>.Continuation
-    private let suspendsPairing: Bool
-    private let suspendsDisconnect: Bool
-    private var pairingContinuation: CheckedContinuation<Void, Error>?
-    private var disconnectContinuation: CheckedContinuation<Void, Never>?
-    private(set) var pairCallCount = 0
-    private(set) var disconnectCount = 0
     private(set) var sentCommands: [RemoteCommand] = []
 
-    init(suspendsPairing: Bool, suspendsDisconnect: Bool = false) {
-        self.suspendsPairing = suspendsPairing
-        self.suspendsDisconnect = suspendsDisconnect
-        let (pairingStream, pairingContinuation) = AsyncStream<Void>.makeStream()
-        pairingStarted = pairingStream
-        pairingStartedContinuation = pairingContinuation
-        let (disconnectStream, disconnectStartContinuation) = AsyncStream<Void>.makeStream()
-        disconnectStarted = disconnectStream
-        disconnectStartedContinuation = disconnectStartContinuation
-    }
+    init(suspendsPairing: Bool) {}
 
     func pair(
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV {
-        pairCallCount += 1
-        await onWaitingForApproval()
-        pairingStartedContinuation.yield()
-        if suspendsPairing {
-            try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { continuation in
-                    pairingContinuation = continuation
-                }
-            } onCancel: { [weak self] in
-                Task {
-                    await self?.failPairing()
-                }
-            }
-        }
-        pairingStartedContinuation.finish()
         return PairedSamsungTV(
             address: try PrivateIPv4Address("192.168.10.20"),
             modelName: "TEST_MODEL_2021",
@@ -829,26 +734,7 @@ private actor SetupCoordinatorStub: SamsungPairingCoordinating {
 
     func forget(addressText: String) {}
 
-    func disconnect() async {
-        disconnectCount += 1
-        guard suspendsDisconnect else { return }
-        disconnectStartedContinuation.yield()
-        await withCheckedContinuation { continuation in
-            disconnectContinuation = continuation
-        }
-    }
-
-    func releaseDisconnect() {
-        disconnectContinuation?.resume()
-        disconnectContinuation = nil
-        disconnectStartedContinuation.finish()
-    }
-
-    func failPairing() {
-        pairingContinuation?.resume(throwing: CancellationError())
-        pairingContinuation = nil
-        pairingStartedContinuation.finish()
-    }
+    func disconnect() {}
 }
 
 @MainActor

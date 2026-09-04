@@ -5,6 +5,7 @@ protocol RemoteSessionDriving: TVDriver {
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV
+    func forget(addressText: String) async throws
 }
 
 extension SamsungPairingCoordinator: RemoteSessionDriving {
@@ -179,6 +180,23 @@ actor RemoteSessionController {
         await cancelInFlightWork()
         transition(to: .idle)
         await disconnectDriverWithinLimit()
+    }
+
+    func forgetPairing(for addressText: String) async throws {
+        generation = UUID()
+        targetAddressText = nil
+        reconnectAttempt = 0
+        transition(to: .idle)
+        await cancelInFlightWork()
+        await disconnectDriverWithinLimit()
+        do {
+            try await driver.forget(addressText: addressText)
+        } catch {
+            if !(error is CancellationError) {
+                transition(to: .failed(.unexpected))
+            }
+            throw error
+        }
     }
 
     func applicationDidEnterBackground() async {

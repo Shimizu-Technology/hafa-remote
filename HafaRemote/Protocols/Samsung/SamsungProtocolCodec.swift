@@ -5,8 +5,38 @@ enum SamsungProtocolCodec {
     static func remoteMessage(for command: RemoteCommand) throws -> URLSessionWebSocketTask.Message {
         let key: String
         switch command {
+        case .powerOff:
+            // Newer Tizen TVs use KEY_POWER for power-off while the secure
+            // session proves the television is currently awake.
+            key = "KEY_POWER"
+        case .up:
+            key = "KEY_UP"
+        case .down:
+            key = "KEY_DOWN"
+        case .left:
+            key = "KEY_LEFT"
+        case .right:
+            key = "KEY_RIGHT"
         case .select:
             key = "KEY_ENTER"
+        case .home:
+            key = "KEY_HOME"
+        case .back:
+            key = "KEY_RETURN"
+        case .play:
+            key = "KEY_PLAY"
+        case .pause:
+            key = "KEY_PAUSE"
+        case .rewind:
+            key = "KEY_REWIND"
+        case .fastForward:
+            key = "KEY_FF"
+        case .volumeUp:
+            key = "KEY_VOLUP"
+        case .volumeDown:
+            key = "KEY_VOLDOWN"
+        case .mute:
+            key = "KEY_MUTE"
         }
 
         let request = SamsungRemoteControlRequest(
