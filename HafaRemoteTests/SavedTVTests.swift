@@ -30,6 +30,8 @@ struct SavedTVTests {
         #expect(fetched.first?.modelName == "Q70AA")
         #expect(fetched.first?.firmwareVersion == "2210")
         #expect(fetched.first?.validatedAddress == (try PrivateIPv4Address("192.168.10.20")))
+        #expect(fetched.first?.lastSeenAt == Date(timeIntervalSince1970: 100))
+        #expect(fetched.first?.lastUsedAt == Date(timeIntervalSince1970: 200))
         #expect(fetched.first?.description == "SavedTV(redacted)")
     }
 

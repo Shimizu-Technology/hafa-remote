@@ -190,6 +190,7 @@ struct RemoteControlView: View {
                 Button("TV Setup", systemImage: "tv.badge.wifi") {
                     showTVSetup()
                 }
+                .frame(minHeight: 46)
                 .accessibilityIdentifier("remoteTVSetupButton")
 
                 Spacer()
@@ -198,6 +199,7 @@ struct RemoteControlView: View {
                     guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
                     openURL(url)
                 }
+                .frame(minHeight: 46)
                 .accessibilityIdentifier("openIOSSettingsButton")
             }
             .buttonStyle(.bordered)

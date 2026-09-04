@@ -50,13 +50,22 @@ struct RemoteSessionControllerTests {
     @Test("An immediate disconnect rejects a queued connected projection")
     func immediateDisconnectDoesNotRestoreRememberedTV() async throws {
         let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let projectionGate = ControlledStateProjectionGate()
         let driver = MockRemoteSessionDriver(
             outcomes: [.success(tv: tv, announcesPairing: false)]
         )
-        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+        let store = RemoteSessionStore(
+            controller: RemoteSessionController(driver: driver),
+            beforeProjectingState: { state in
+                await projectionGate.waitBeforeProjection(of: state)
+            }
+        )
+        var connectedProjections = projectionGate.connectedProjections.makeAsyncIterator()
 
         await store.connect(to: tv.address.rawValue)
-        await store.disconnect()
+        _ = await connectedProjections.next()
+        await store.disconnect(clearRememberedTV: false)
+        await projectionGate.releaseConnectedProjection()
         await waitUntil { @MainActor in store.state == .idle }
 
         #expect(store.lastConnectedTV == nil)
@@ -1268,6 +1277,30 @@ private actor SuspendedDisconnectRemoteSessionDriver: RemoteSessionDriving {
         guard let continuation = disconnectContinuations.removeValue(forKey: id) else { return }
         cancelledDisconnectCount += 1
         continuation.resume()
+    }
+}
+
+private actor ControlledStateProjectionGate {
+    nonisolated let connectedProjections: AsyncStream<Void>
+    private let connectedProjectionsContinuation: AsyncStream<Void>.Continuation
+    private var connectedProjectionContinuation: CheckedContinuation<Void, Never>?
+
+    init() {
+        (connectedProjections, connectedProjectionsContinuation) = AsyncStream.makeStream()
+    }
+
+    func waitBeforeProjection(of state: RemoteSessionState) async {
+        guard case .connected = state else { return }
+        connectedProjectionsContinuation.yield()
+        await withCheckedContinuation { continuation in
+            connectedProjectionContinuation = continuation
+        }
+    }
+
+    func releaseConnectedProjection() {
+        connectedProjectionContinuation?.resume()
+        connectedProjectionContinuation = nil
+        connectedProjectionsContinuation.finish()
     }
 }
 

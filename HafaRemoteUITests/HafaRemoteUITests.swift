@@ -118,6 +118,11 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(retry.exists)
         retry.tap()
         XCTAssertEqual(app.staticTexts["lastRemoteCommand"].label, "retry")
+
+        let tvSetup = app.buttons["remoteTVSetupButton"]
+        XCTAssertTrue(tvSetup.isHittable)
+        tvSetup.tap()
+        XCTAssertEqual(app.staticTexts["lastRemoteCommand"].label, "setup")
     }
 
     @MainActor

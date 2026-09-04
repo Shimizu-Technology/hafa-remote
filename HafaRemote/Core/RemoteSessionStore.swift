@@ -12,12 +12,17 @@ final class RemoteSessionStore {
     private let controller: RemoteSessionController
     private let stateSubscription = RemoteSessionStateSubscription()
 
-    init(controller: RemoteSessionController) {
+    init(
+        controller: RemoteSessionController,
+        beforeProjectingState: @escaping @Sendable (RemoteSessionState) async -> Void = { _ in }
+    ) {
         self.controller = controller
         stateSubscription.install(
             Task { [weak self, controller] in
                 let states = await controller.states()
                 for await state in states {
+                    guard !Task.isCancelled else { return }
+                    await beforeProjectingState(state)
                     guard !Task.isCancelled else { return }
                     self?.state = state
                     if case .connected(let tv) = state, self?.acceptsConnectedTVUpdates == true {
@@ -56,8 +61,8 @@ final class RemoteSessionStore {
     }
 
     func disconnect(clearRememberedTV: Bool = true) async {
+        acceptsConnectedTVUpdates = false
         if clearRememberedTV {
-            acceptsConnectedTVUpdates = false
             lastConnectedTV = nil
         }
         await controller.disconnect()
