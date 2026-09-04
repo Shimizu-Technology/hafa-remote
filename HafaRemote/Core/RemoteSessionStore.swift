@@ -7,6 +7,7 @@ import Observation
 final class RemoteSessionStore {
     private(set) var state: RemoteSessionState = .idle
     private(set) var lastConnectedTV: PairedSamsungTV?
+    private var acceptsConnectedTVUpdates = true
 
     private let controller: RemoteSessionController
     private let stateSubscription = RemoteSessionStateSubscription()
@@ -19,10 +20,8 @@ final class RemoteSessionStore {
                 for await state in states {
                     guard !Task.isCancelled else { return }
                     self?.state = state
-                    if case .connected(let tv) = state {
+                    if case .connected(let tv) = state, self?.acceptsConnectedTVUpdates == true {
                         self?.lastConnectedTV = tv
-                    } else if case .idle = state {
-                        self?.lastConnectedTV = nil
                     }
                 }
             }
@@ -48,6 +47,7 @@ final class RemoteSessionStore {
     }
 
     func connect(to addressText: String) async {
+        acceptsConnectedTVUpdates = true
         await controller.connect(to: addressText)
     }
 
@@ -56,15 +56,17 @@ final class RemoteSessionStore {
     }
 
     func disconnect(clearRememberedTV: Bool = true) async {
-        await controller.disconnect()
         if clearRememberedTV {
+            acceptsConnectedTVUpdates = false
             lastConnectedTV = nil
         }
+        await controller.disconnect()
     }
 
     func forgetPairing(for addressText: String) async throws {
-        try await controller.forgetPairing(for: addressText)
+        acceptsConnectedTVUpdates = false
         lastConnectedTV = nil
+        try await controller.forgetPairing(for: addressText)
     }
 
     func applicationDidEnterBackground() async {

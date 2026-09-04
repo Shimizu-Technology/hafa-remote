@@ -22,7 +22,8 @@ struct SavedTVTests {
         context.insert(saved)
         try context.save()
 
-        let fetched = try context.fetch(FetchDescriptor<SavedTV>())
+        let restoredContext = ModelContext(container)
+        let fetched = try restoredContext.fetch(FetchDescriptor<SavedTV>())
 
         #expect(fetched.count == 1)
         #expect(fetched.first?.displayName == "Living Room")

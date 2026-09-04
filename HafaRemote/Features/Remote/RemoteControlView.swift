@@ -41,6 +41,13 @@ struct RemoteControlView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .preferredColorScheme(.dark)
+        .onChange(of: isConnected) { wasConnected, isConnected in
+            guard wasConnected, !isConnected else { return }
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: "The TV connection is offline. Recovery controls are now available."
+            )
+        }
         .confirmationDialog(
             "Turn off \(tvName)?",
             isPresented: $isConfirmingPowerOff,
