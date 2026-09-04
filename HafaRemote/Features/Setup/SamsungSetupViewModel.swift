@@ -20,6 +20,8 @@ final class SamsungSetupViewModel {
     private var pairingTask: Task<PairedSamsungTV, Error>?
     private var activePairingID: UUID?
     private var activeConnectionID: UUID?
+    private var activeCommandID: UUID?
+    private var disconnectTask: Task<Void, Never>?
 
     init(coordinator: (any SamsungPairingCoordinating)? = nil) {
         self.coordinator =
@@ -32,7 +34,7 @@ final class SamsungSetupViewModel {
     }
 
     var isBusy: Bool {
-        status == .checking || status == .waitingForApproval
+        status == .checking || status == .waitingForApproval || disconnectTask != nil
     }
 
     var isControllable: Bool {
@@ -45,9 +47,13 @@ final class SamsungSetupViewModel {
     }
 
     func connect() async {
+        if let disconnectTask {
+            await disconnectTask.value
+        }
         guard !isBusy else { return }
         status = .checking
         activeConnectionID = nil
+        activeCommandID = nil
         let pairingID = UUID()
         activePairingID = pairingID
         let address = address
@@ -84,6 +90,8 @@ final class SamsungSetupViewModel {
 
     func sendSelect() async {
         guard let connectionID = activeConnectionID else { return }
+        let commandID = UUID()
+        activeCommandID = commandID
         let tv: PairedSamsungTV
         switch status {
         case .connected(let connectedTV), .commandSent(let connectedTV):
@@ -93,15 +101,20 @@ final class SamsungSetupViewModel {
         }
         do {
             try await coordinator.sendSelect()
-            guard activeConnectionID == connectionID else { return }
+            guard activeConnectionID == connectionID, activeCommandID == commandID else { return }
             status = .commandSent(tv)
             try? await Task.sleep(for: .seconds(1))
-            if activeConnectionID == connectionID, status == .commandSent(tv) {
+            if activeConnectionID == connectionID,
+                activeCommandID == commandID,
+                status == .commandSent(tv)
+            {
+                activeCommandID = nil
                 status = .connected(tv)
             }
         } catch {
-            guard activeConnectionID == connectionID else { return }
+            guard activeConnectionID == connectionID, activeCommandID == commandID else { return }
             activeConnectionID = nil
+            activeCommandID = nil
             status = .failed(message: Self.safeMessage(for: error), canForgetPairing: false)
         }
     }
@@ -118,16 +131,30 @@ final class SamsungSetupViewModel {
     }
 
     func disconnect() async {
-        activeConnectionID = nil
-        activePairingID = nil
-        let task = pairingTask
-        pairingTask = nil
-        task?.cancel()
-        if let task {
-            _ = await task.result
+        if let disconnectTask {
+            await disconnectTask.value
+            return
         }
-        await coordinator.disconnect()
+
+        activeConnectionID = nil
+        activeCommandID = nil
+        activePairingID = nil
         status = .idle
+        let activePairingTask = pairingTask
+        pairingTask = nil
+        activePairingTask?.cancel()
+
+        let coordinator = coordinator
+        let task = Task { [weak self] in
+            if let activePairingTask {
+                _ = await activePairingTask.result
+            }
+            await coordinator.disconnect()
+            guard let self, self.activePairingID == nil else { return }
+            self.disconnectTask = nil
+        }
+        disconnectTask = task
+        await task.value
     }
 
     private static func safeMessage(for error: Error) -> String {
