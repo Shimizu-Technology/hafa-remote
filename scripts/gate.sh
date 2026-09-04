@@ -20,9 +20,11 @@ if [[ "$(uname -s)" != "Darwin" ]] || ! command -v xcodebuild >/dev/null 2>&1; t
 fi
 
 created_simulator_id=""
+created_work_dir=0
 work_dir="${HAFA_GATE_WORK_DIR:-}"
 if [[ -z "$work_dir" ]]; then
   work_dir="$(mktemp -d "${TMPDIR:-/tmp}/hafa-remote-gate.XXXXXX")"
+  created_work_dir=1
 else
   mkdir -p "$work_dir"
 fi
@@ -31,7 +33,7 @@ cleanup() {
     xcrun simctl shutdown "$created_simulator_id" >/dev/null 2>&1 || true
     xcrun simctl delete "$created_simulator_id" >/dev/null 2>&1 || true
   fi
-  if [[ "${HAFA_PRESERVE_GATE_ARTIFACTS:-0}" != "1" ]]; then
+  if [[ "$created_work_dir" == "1" && "${HAFA_PRESERVE_GATE_ARTIFACTS:-0}" != "1" ]]; then
     rm -rf -- "$work_dir"
   fi
 }

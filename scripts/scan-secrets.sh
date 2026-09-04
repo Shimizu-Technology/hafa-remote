@@ -60,9 +60,11 @@ prepare_gitleaks() {
 
 scanner_dir=""
 snapshot_dir=""
+index_snapshot_dir=""
 cleanup() {
   [[ -z "$scanner_dir" ]] || rm -rf -- "$scanner_dir"
   [[ -z "$snapshot_dir" ]] || rm -rf -- "$snapshot_dir"
+  [[ -z "$index_snapshot_dir" ]] || rm -rf -- "$index_snapshot_dir"
 }
 trap cleanup EXIT
 
@@ -76,6 +78,15 @@ echo "Scanning committed history for credentials"
   --redact=100 \
   --no-banner \
   --log-opts="${GITLEAKS_LOG_OPTS:---all}"
+
+echo "Scanning the staged index for credentials"
+index_snapshot_dir="$(mktemp -d "${TMPDIR:-/tmp}/hafa-remote-index.XXXXXX")"
+git checkout-index --all --prefix="$index_snapshot_dir/"
+"$gitleaks_binary" dir \
+  --config .gitleaks.toml \
+  --redact=100 \
+  --no-banner \
+  "$index_snapshot_dir"
 
 echo "Scanning the current working tree for credentials"
 snapshot_dir="$(mktemp -d "${TMPDIR:-/tmp}/hafa-remote-worktree.XXXXXX")"
