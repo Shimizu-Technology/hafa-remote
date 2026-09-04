@@ -36,7 +36,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 - [x] Create a private `hafa-remote` GitHub repository under Shimizu Technology.
 - [x] Create the SwiftUI iPhone app, unit-test target, and UI-test target in the existing Shimizu Apple developer team.
-- [x] Set product name to **Hafa Remote**, bundle ID to `com.shimizutechnology.hafaremote`, Swift 6 language mode, and minimum iOS 18.0.
+- [x] Set product name to **Hafa Remote**, bundle ID to `com.shimizutechnology.hafaremote`, Swift 6 language mode, and minimum iOS 18.4.
 - [x] Add `AGENTS.md`, `README.md`, `PRD.md`, `BUILD_PLAN.md`, `.gitignore`, and `scripts/gate.sh`.
 - [x] Make the gate compile the app for an explicit simulator destination, run unit/UI tests that do not require hardware, and reject committed secrets/debug leftovers.
 - [x] Add CI that runs the same gate or equivalent build/test steps on pull requests.

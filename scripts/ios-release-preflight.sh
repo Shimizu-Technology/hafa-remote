@@ -49,7 +49,7 @@ assert_setting PRODUCT_MODULE_NAME HafaRemote
 assert_setting DEVELOPMENT_TEAM 4T358A5S74
 assert_setting MARKETING_VERSION 1.0
 assert_setting CURRENT_PROJECT_VERSION 1
-assert_setting IPHONEOS_DEPLOYMENT_TARGET 18.0
+assert_setting IPHONEOS_DEPLOYMENT_TARGET 18.4
 assert_setting TARGETED_DEVICE_FAMILY 1
 assert_setting CODE_SIGN_STYLE Automatic
 
@@ -58,6 +58,13 @@ if [[ "$local_network_copy" != *"Samsung TVs"* ]]; then
   echo "Local-network permission copy must tell people it controls Samsung TVs." >&2
   exit 1
 fi
+
+if [[ "$(plutil -extract NSAppTransportSecurity.NSAllowsLocalNetworking raw -expect bool "$info_plist")" != "true" ]]; then
+  echo "Local-only HTTP capability lookup must be declared explicitly." >&2
+  exit 1
+fi
+
+./scripts/validate-no-arbitrary-loads.sh "$info_plist"
 
 if [[ "$(plutil -extract ITSAppUsesNonExemptEncryption raw "$info_plist")" != "false" ]]; then
   echo "Export-compliance declaration must remain false for this app's standard TLS use." >&2

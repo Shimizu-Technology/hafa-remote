@@ -7,15 +7,29 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		11DFB409FF879A160B1AB3C4 /* PrivateIPv4Address.swift in Sources */ = {isa = PBXBuildFile; fileRef = D90C5FC34ABBF76738E4A178 /* PrivateIPv4Address.swift */; };
+		2D3D3C2CF9409A3568772E68 /* SamsungSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10AAEEB17C3074710C8B3AD8 /* SamsungSetupView.swift */; };
+		3802FE2339022BC3629CF923 /* SamsungPairingCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8FBB69EF7BB0B53E30FF7A1 /* SamsungPairingCredential.swift */; };
+		3A58178774479925FA7D5AF6 /* SamsungCommandTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9660B0481989B57E29327545 /* SamsungCommandTransport.swift */; };
+		493B87F071515609FB01C5D6 /* SamsungProtocolCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D1230B04BD184CAC360802 /* SamsungProtocolCodecTests.swift */; };
 		506ABD859CC36FF3F83677FC /* HafaRemoteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF2140DF03D411A6556C98D5 /* HafaRemoteUITests.swift */; };
+		5C0C08C13F47A1E0A1C4EF91 /* SamsungTrustDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05F87DEC2C03FC39EAECAB38 /* SamsungTrustDelegate.swift */; };
+		65327337DFAF7AE7486FCF1C /* PrivateIPv4AddressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4CE3DE630561FAEADF1D468 /* PrivateIPv4AddressTests.swift */; };
+		66EA7DA266631F013C97D50E /* SamsungProtocolCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD21C56485650437D59630CC /* SamsungProtocolCodec.swift */; };
 		6B5E4B64AE4B8C217F1BBE92 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9C450D22C7D445E62710FF5D /* Foundation.framework */; };
 		6C519C628890A5AF91F135B9 /* HafaTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 621127FDEF5F6BE4013D7C65 /* HafaTheme.swift */; };
 		76ECF14B14B88E8DEC927833 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 314331F56B7422E857B20532 /* Assets.xcassets */; };
 		850DB50EE3A8CCE0C6AAF339 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 25EE7FE3555C6B4938A553CE /* PrivacyInfo.xcprivacy */; };
+		854D9E6D373AC5EC05814B57 /* SamsungDeviceInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FD1515BC189F740FA4DE7A3 /* SamsungDeviceInfo.swift */; };
+		8F86632B2E9ADC46C98BFB1C /* TVDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44405F91DE5FC74EFF634D3 /* TVDriver.swift */; };
 		9CABF29420764B69CE52ED09 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9C450D22C7D445E62710FF5D /* Foundation.framework */; };
 		AF670AF8B9F1EB53EEAF349B /* HafaRemoteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F11E2A820EC89F7AD933554 /* HafaRemoteApp.swift */; };
+		C7EAE220E972FBE92AD2F6E5 /* SamsungPairingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11CFB329B0E5168B6E0EC74E /* SamsungPairingCoordinatorTests.swift */; };
+		CBD8CDA113D850514C799BCD /* RemoteCommand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A781F30B9F124284352D849 /* RemoteCommand.swift */; };
+		D39084F5026A79477345A47B /* SamsungPairingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76591F3ADBB7B6D47D2D03E /* SamsungPairingCoordinator.swift */; };
 		D4C49D71FFB313E977E0A762 /* HafaRemoteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 470B5BF9F811323D35B6050E /* HafaRemoteTests.swift */; };
 		DB5A9E7AF0102E13F6C22521 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9C450D22C7D445E62710FF5D /* Foundation.framework */; };
+		E7C238A6D81C5F7C768D81C0 /* SamsungSetupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB92C658DE21FF12B96B6505 /* SamsungSetupViewModel.swift */; };
 		F338C28FB5D32B11FAA6CD02 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D907E6B71E286A4EA2A187FA /* HomeView.swift */; };
 /* End PBXBuildFile section */
 
@@ -37,7 +51,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		05F87DEC2C03FC39EAECAB38 /* SamsungTrustDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungTrustDelegate.swift; sourceTree = "<group>"; };
+		10AAEEB17C3074710C8B3AD8 /* SamsungSetupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungSetupView.swift; sourceTree = "<group>"; };
+		11CFB329B0E5168B6E0EC74E /* SamsungPairingCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungPairingCoordinatorTests.swift; sourceTree = "<group>"; };
 		25EE7FE3555C6B4938A553CE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		2A781F30B9F124284352D849 /* RemoteCommand.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteCommand.swift; sourceTree = "<group>"; };
 		2A939B24A7E535AB6DA1B6D7 /* HafaRemoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HafaRemoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		314331F56B7422E857B20532 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		38FA330C10AE07AC9E352C62 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -46,10 +64,20 @@
 		5F11E2A820EC89F7AD933554 /* HafaRemoteApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HafaRemoteApp.swift; path = App/HafaRemoteApp.swift; sourceTree = "<group>"; };
 		6027352C8DF125BE3FD89916 /* HafaRemote.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HafaRemote.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		621127FDEF5F6BE4013D7C65 /* HafaTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HafaTheme.swift; path = DesignSystem/HafaTheme.swift; sourceTree = "<group>"; };
+		79D1230B04BD184CAC360802 /* SamsungProtocolCodecTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungProtocolCodecTests.swift; sourceTree = "<group>"; };
+		7FD1515BC189F740FA4DE7A3 /* SamsungDeviceInfo.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDeviceInfo.swift; sourceTree = "<group>"; };
+		9660B0481989B57E29327545 /* SamsungCommandTransport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungCommandTransport.swift; sourceTree = "<group>"; };
 		9C450D22C7D445E62710FF5D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		BF2140DF03D411A6556C98D5 /* HafaRemoteUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HafaRemoteUITests.swift; sourceTree = "<group>"; };
+		C44405F91DE5FC74EFF634D3 /* TVDriver.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TVDriver.swift; sourceTree = "<group>"; };
+		C4CE3DE630561FAEADF1D468 /* PrivateIPv4AddressTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PrivateIPv4AddressTests.swift; sourceTree = "<group>"; };
+		D76591F3ADBB7B6D47D2D03E /* SamsungPairingCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungPairingCoordinator.swift; sourceTree = "<group>"; };
+		D8FBB69EF7BB0B53E30FF7A1 /* SamsungPairingCredential.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungPairingCredential.swift; sourceTree = "<group>"; };
 		D907E6B71E286A4EA2A187FA /* HomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeView.swift; path = Features/Home/HomeView.swift; sourceTree = "<group>"; };
+		D90C5FC34ABBF76738E4A178 /* PrivateIPv4Address.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PrivateIPv4Address.swift; sourceTree = "<group>"; };
+		EB92C658DE21FF12B96B6505 /* SamsungSetupViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungSetupViewModel.swift; sourceTree = "<group>"; };
 		EE6807FBFFE03076A21CC1B1 /* HafaRemote.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = HafaRemote.entitlements; sourceTree = "<group>"; };
+		FD21C56485650437D59630CC /* SamsungProtocolCodec.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungProtocolCodec.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -80,6 +108,30 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		088025519B8EA59CEFAD391A /* Samsung */ = {
+			isa = PBXGroup;
+			children = (
+				D90C5FC34ABBF76738E4A178 /* PrivateIPv4Address.swift */,
+				D8FBB69EF7BB0B53E30FF7A1 /* SamsungPairingCredential.swift */,
+				7FD1515BC189F740FA4DE7A3 /* SamsungDeviceInfo.swift */,
+				FD21C56485650437D59630CC /* SamsungProtocolCodec.swift */,
+				05F87DEC2C03FC39EAECAB38 /* SamsungTrustDelegate.swift */,
+				9660B0481989B57E29327545 /* SamsungCommandTransport.swift */,
+				D76591F3ADBB7B6D47D2D03E /* SamsungPairingCoordinator.swift */,
+			);
+			name = Samsung;
+			path = Samsung;
+			sourceTree = "<group>";
+		};
+		1D8A2D5DD3F082200B99E872 /* Protocols */ = {
+			isa = PBXGroup;
+			children = (
+				088025519B8EA59CEFAD391A /* Samsung */,
+			);
+			name = Protocols;
+			path = Protocols;
+			sourceTree = "<group>";
+		};
 		2CF6AD0EE094B893960FF0D4 /* HafaRemoteUITests */ = {
 			isa = PBXGroup;
 			children = (
@@ -87,6 +139,15 @@
 			);
 			name = HafaRemoteUITests;
 			path = HafaRemoteUITests;
+			sourceTree = "<group>";
+		};
+		337F0DA81AA0B7019F92F00A /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				D104483FD9922EAAB53F615C /* Setup */,
+			);
+			name = Features;
+			path = Features;
 			sourceTree = "<group>";
 		};
 		62C96688E60E0F3A754B9426 = {
@@ -104,6 +165,9 @@
 			isa = PBXGroup;
 			children = (
 				470B5BF9F811323D35B6050E /* HafaRemoteTests.swift */,
+				C4CE3DE630561FAEADF1D468 /* PrivateIPv4AddressTests.swift */,
+				79D1230B04BD184CAC360802 /* SamsungProtocolCodecTests.swift */,
+				11CFB329B0E5168B6E0EC74E /* SamsungPairingCoordinatorTests.swift */,
 			);
 			name = HafaRemoteTests;
 			path = HafaRemoteTests;
@@ -139,6 +203,26 @@
 			name = iOS;
 			sourceTree = "<group>";
 		};
+		C70489893683D638CC55FDDF /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				2A781F30B9F124284352D849 /* RemoteCommand.swift */,
+				C44405F91DE5FC74EFF634D3 /* TVDriver.swift */,
+			);
+			name = Core;
+			path = Core;
+			sourceTree = "<group>";
+		};
+		D104483FD9922EAAB53F615C /* Setup */ = {
+			isa = PBXGroup;
+			children = (
+				EB92C658DE21FF12B96B6505 /* SamsungSetupViewModel.swift */,
+				10AAEEB17C3074710C8B3AD8 /* SamsungSetupView.swift */,
+			);
+			name = Setup;
+			path = Setup;
+			sourceTree = "<group>";
+		};
 		E0279846EC80226126686A3D /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -154,6 +238,9 @@
 				621127FDEF5F6BE4013D7C65 /* HafaTheme.swift */,
 				D907E6B71E286A4EA2A187FA /* HomeView.swift */,
 				8C278492A67B0829A5B2722B /* Resources */,
+				C70489893683D638CC55FDDF /* Core */,
+				1D8A2D5DD3F082200B99E872 /* Protocols */,
+				337F0DA81AA0B7019F92F00A /* Features */,
 			);
 			name = HafaRemote;
 			path = HafaRemote;
@@ -295,6 +382,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				D4C49D71FFB313E977E0A762 /* HafaRemoteTests.swift in Sources */,
+				65327337DFAF7AE7486FCF1C /* PrivateIPv4AddressTests.swift in Sources */,
+				493B87F071515609FB01C5D6 /* SamsungProtocolCodecTests.swift in Sources */,
+				C7EAE220E972FBE92AD2F6E5 /* SamsungPairingCoordinatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -313,6 +403,17 @@
 				AF670AF8B9F1EB53EEAF349B /* HafaRemoteApp.swift in Sources */,
 				6C519C628890A5AF91F135B9 /* HafaTheme.swift in Sources */,
 				F338C28FB5D32B11FAA6CD02 /* HomeView.swift in Sources */,
+				CBD8CDA113D850514C799BCD /* RemoteCommand.swift in Sources */,
+				8F86632B2E9ADC46C98BFB1C /* TVDriver.swift in Sources */,
+				11DFB409FF879A160B1AB3C4 /* PrivateIPv4Address.swift in Sources */,
+				3802FE2339022BC3629CF923 /* SamsungPairingCredential.swift in Sources */,
+				854D9E6D373AC5EC05814B57 /* SamsungDeviceInfo.swift in Sources */,
+				66EA7DA266631F013C97D50E /* SamsungProtocolCodec.swift in Sources */,
+				5C0C08C13F47A1E0A1C4EF91 /* SamsungTrustDelegate.swift in Sources */,
+				3A58178774479925FA7D5AF6 /* SamsungCommandTransport.swift in Sources */,
+				D39084F5026A79477345A47B /* SamsungPairingCoordinator.swift in Sources */,
+				E7C238A6D81C5F7C768D81C0 /* SamsungSetupViewModel.swift in Sources */,
+				2D3D3C2CF9409A3568772E68 /* SamsungSetupView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -347,7 +448,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HafaRemote/Resources/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote;
@@ -358,7 +459,6 @@
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -374,7 +474,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 4T358A5S74;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -392,7 +492,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 4T358A5S74;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -416,7 +516,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HafaRemote/Resources/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote;
@@ -427,7 +527,6 @@
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -479,7 +578,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -497,7 +596,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 4T358A5S74;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -514,7 +613,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 4T358A5S74;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -575,7 +674,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

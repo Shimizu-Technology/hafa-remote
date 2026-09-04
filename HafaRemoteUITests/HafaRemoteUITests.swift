@@ -19,7 +19,11 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(addButton.isHittable)
         addButton.tap()
 
-        XCTAssertTrue(app.navigationBars["Add a TV"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.staticTexts["TV setup is next"].exists)
+        XCTAssertTrue(app.navigationBars["Add Samsung TV"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.textFields["tvIPAddressField"].waitForExistence(timeout: 2))
+
+        let connectButton = app.buttons["connectToTVButton"]
+        XCTAssertTrue(connectButton.waitForExistence(timeout: 2))
+        XCTAssertFalse(connectButton.isEnabled)
     }
 }

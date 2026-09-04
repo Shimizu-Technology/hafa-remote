@@ -55,32 +55,7 @@ struct HomeView: View {
             .navigationTitle("Hafa Remote")
             .toolbarColorScheme(.dark, for: .navigationBar)
             .sheet(isPresented: $isShowingSetup) {
-                SetupPlaceholderView()
-            }
-        }
-        .preferredColorScheme(.dark)
-    }
-}
-
-/// A temporary boundary that keeps the foundation flow honest until secure pairing lands.
-private struct SetupPlaceholderView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            ContentUnavailableView(
-                "TV setup is next",
-                systemImage: "wifi",
-                description: Text("The next build adds secure Samsung TV pairing on your local network.")
-            )
-            .navigationTitle("Add a TV")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
+                SamsungSetupView()
             }
         }
         .preferredColorScheme(.dark)

@@ -12,6 +12,7 @@ echo "Checking Swift formatting"
 xcrun swift-format lint --strict --recursive HafaRemote HafaRemoteTests HafaRemoteUITests
 
 echo "Checking release configuration"
+./scripts/test-ios-release-preflight.sh
 ./scripts/ios-release-preflight.sh
 
 if [[ "$(uname -s)" != "Darwin" ]] || ! command -v xcodebuild >/dev/null 2>&1; then
