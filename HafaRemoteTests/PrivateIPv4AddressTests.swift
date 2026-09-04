@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import HafaRemote
@@ -29,5 +30,21 @@ struct PrivateIPv4AddressTests {
         #expect(throws: PrivateIPv4AddressError.notPrivate) {
             try PrivateIPv4Address(value)
         }
+    }
+
+    @Test("Decoded addresses pass through private-network validation")
+    func validatesDecodedAddress() {
+        let publicAddress = Data(#"{"rawValue":"8.8.8.8"}"#.utf8)
+        #expect(throws: PrivateIPv4AddressError.notPrivate) {
+            try JSONDecoder().decode(PrivateIPv4Address.self, from: publicAddress)
+        }
+    }
+
+    @Test("String descriptions never expose the address")
+    func redactsDescription() throws {
+        let addressText = "192.168.10.20"
+        let address = try PrivateIPv4Address(addressText)
+
+        #expect(!String(describing: address).contains(addressText))
     }
 }

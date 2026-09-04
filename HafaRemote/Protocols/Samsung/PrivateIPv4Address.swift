@@ -1,7 +1,7 @@
 import Foundation
 
 /// A canonical IPv4 address that is valid only on a private or link-local network.
-struct PrivateIPv4Address: Codable, Equatable, Hashable, Sendable {
+struct PrivateIPv4Address: Codable, CustomStringConvertible, Equatable, Hashable, Sendable {
     let rawValue: String
 
     init(_ candidate: String) throws {
@@ -26,6 +26,19 @@ struct PrivateIPv4Address: Codable, Equatable, Hashable, Sendable {
         }
 
         rawValue = octets.map(String.init).joined(separator: ".")
+    }
+
+    var description: String {
+        "PrivateIPv4Address(redacted)"
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case rawValue
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(container.decode(String.self, forKey: .rawValue))
     }
 
     private static func isPrivate(_ octets: [UInt8]) -> Bool {

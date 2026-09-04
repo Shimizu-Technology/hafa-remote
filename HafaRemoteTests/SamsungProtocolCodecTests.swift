@@ -140,6 +140,20 @@ struct SamsungProtocolCodecTests {
             try JSONDecoder().decode(SamsungPairingCredential.self, from: malformed)
         }
     }
+
+    @Test("String descriptions never expose pairing material")
+    func redactsCredentialDescription() throws {
+        let token = "synthetic-secret-token"
+        let fingerprint = Data(repeating: 12, count: 32)
+        let credential = try SamsungPairingCredential(
+            token: token,
+            certificateSHA256: fingerprint
+        )
+        let description = String(describing: credential)
+
+        #expect(!description.contains(token))
+        #expect(!description.contains(fingerprint.base64EncodedString()))
+    }
 }
 
 struct SamsungConnectionAttemptTrackerTests {

@@ -33,6 +33,10 @@ final class SamsungSetupViewModel {
             )
     }
 
+    isolated deinit {
+        pairingTask?.cancel()
+    }
+
     var isBusy: Bool {
         status == .checking || status == .waitingForApproval || disconnectTask != nil
     }
@@ -158,11 +162,19 @@ final class SamsungSetupViewModel {
     }
 
     private static func safeMessage(for error: Error) -> String {
-        if let localizedError = error as? LocalizedError,
-            let description = localizedError.errorDescription
-        {
-            return description
-        }
-        return "Hafa Remote could not complete that request. Try again."
+        let description: String? =
+            switch error {
+            case let error as SamsungConnectionError:
+                error.errorDescription
+            case let error as SamsungDeviceInfoError:
+                error.errorDescription
+            case let error as SamsungPairingCoordinatorError:
+                error.errorDescription
+            case let error as PrivateIPv4AddressError:
+                error.errorDescription
+            default:
+                nil
+            }
+        return description ?? "Hafa Remote could not complete that request. Try again."
     }
 }

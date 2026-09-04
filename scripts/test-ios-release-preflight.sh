@@ -7,6 +7,7 @@ validator="$repo_root/scripts/validate-no-arbitrary-loads.sh"
 fixtures="$repo_root/scripts/fixtures"
 
 "$validator" "$fixtures/Info-arbitrary-loads-false.plist"
+"$validator" "$fixtures/Info-local-networking-true.plist"
 
 if "$validator" "$fixtures/Info-arbitrary-loads-true.plist" >/dev/null 2>&1; then
   echo "Expected true NSAllowsArbitraryLoads fixture to fail." >&2
@@ -21,7 +22,8 @@ fi
 for prohibited_fixture in \
   Info-arbitrary-web-content.plist \
   Info-arbitrary-media.plist \
-  Info-insecure-exception-domain.plist; do
+  Info-insecure-exception-domain.plist \
+  Info-local-networking-string.plist; do
   if "$validator" "$fixtures/$prohibited_fixture" >/dev/null 2>&1; then
     echo "Expected $prohibited_fixture to fail." >&2
     exit 1

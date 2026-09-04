@@ -24,6 +24,13 @@ for key in \
   fi
 done
 
+local_networking_key="NSAppTransportSecurity.NSAllowsLocalNetworking"
+if ! plutil -extract "$local_networking_key" raw -expect bool "$plist" >/dev/null 2>&1 \
+  && plutil -extract "$local_networking_key" raw "$plist" >/dev/null 2>&1; then
+  echo "$local_networking_key must be a boolean when declared." >&2
+  exit 1
+fi
+
 if plutil -extract NSAppTransportSecurity.NSExceptionDomains raw "$plist" >/dev/null 2>&1; then
   echo "ATS exception domains are not allowed." >&2
   exit 1

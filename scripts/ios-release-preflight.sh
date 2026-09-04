@@ -59,7 +59,7 @@ if [[ "$local_network_copy" != *"Samsung TVs"* ]]; then
   exit 1
 fi
 
-if [[ "$(plutil -extract NSAppTransportSecurity.NSAllowsLocalNetworking raw "$info_plist")" != "true" ]]; then
+if [[ "$(plutil -extract NSAppTransportSecurity.NSAllowsLocalNetworking raw -expect bool "$info_plist")" != "true" ]]; then
   echo "Local-only HTTP capability lookup must be declared explicitly." >&2
   exit 1
 fi

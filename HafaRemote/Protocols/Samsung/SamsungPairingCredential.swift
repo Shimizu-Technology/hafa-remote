@@ -3,7 +3,7 @@ import Foundation
 import Security
 
 /// The minimum credential needed to reconnect to one approved television safely.
-struct SamsungPairingCredential: Codable, Equatable, Sendable {
+struct SamsungPairingCredential: Codable, CustomStringConvertible, Equatable, Sendable {
     let token: String
     let certificateSHA256: Data
 
@@ -20,6 +20,10 @@ struct SamsungPairingCredential: Codable, Equatable, Sendable {
 
         self.token = token
         self.certificateSHA256 = certificateSHA256
+    }
+
+    var description: String {
+        "SamsungPairingCredential(redacted)"
     }
 
     private enum CodingKeys: String, CodingKey {

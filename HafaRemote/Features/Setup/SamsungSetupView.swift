@@ -6,7 +6,7 @@ struct SamsungSetupView: View {
     @State private var model: SamsungSetupViewModel
 
     init(model: SamsungSetupViewModel = SamsungSetupViewModel()) {
-        _model = State(initialValue: model)
+        _model = State(wrappedValue: model)
     }
 
     var body: some View {

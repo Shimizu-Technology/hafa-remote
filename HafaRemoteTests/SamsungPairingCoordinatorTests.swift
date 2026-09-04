@@ -648,6 +648,7 @@ private actor SetupCoordinatorStub: SamsungPairingCoordinating {
     private let disconnectStartedContinuation: AsyncStream<Void>.Continuation
     private let suspendsPairing: Bool
     private let suspendsDisconnect: Bool
+    private var pairingContinuation: CheckedContinuation<Void, Error>?
     private var disconnectContinuation: CheckedContinuation<Void, Never>?
     private(set) var pairCallCount = 0
     private(set) var disconnectCount = 0
@@ -671,7 +672,15 @@ private actor SetupCoordinatorStub: SamsungPairingCoordinating {
         await onWaitingForApproval()
         pairingStartedContinuation.yield()
         if suspendsPairing {
-            try await Task.sleep(for: .seconds(60))
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    pairingContinuation = continuation
+                }
+            } onCancel: { [weak self] in
+                Task {
+                    await self?.failPairing()
+                }
+            }
         }
         pairingStartedContinuation.finish()
         return PairedSamsungTV(
@@ -698,6 +707,12 @@ private actor SetupCoordinatorStub: SamsungPairingCoordinating {
         disconnectContinuation?.resume()
         disconnectContinuation = nil
         disconnectStartedContinuation.finish()
+    }
+
+    func failPairing() {
+        pairingContinuation?.resume(throwing: CancellationError())
+        pairingContinuation = nil
+        pairingStartedContinuation.finish()
     }
 }
 
