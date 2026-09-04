@@ -204,6 +204,34 @@ struct SamsungPairingCoordinatorTests {
         await coordinator.disconnect()
     }
 
+    @Test("A rollback failure does not replace pairing cancellation")
+    func rollbackFailurePreservesCancellation() async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let issuedCredential = try SamsungPairingCredential(
+            token: "synthetic-token",
+            certificateSHA256: Data(repeating: 11, count: 32)
+        )
+        let store = SuspendedSaveCredentialStore(rollbackFails: true)
+        let transport = AttemptAwareSamsungTransport(issuedCredential: issuedCredential)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: transport
+        )
+
+        let pairing = Task {
+            try await coordinator.pair(addressText: address.rawValue)
+        }
+        var saveStarts = store.firstSaveStarted.makeAsyncIterator()
+        _ = await saveStarts.next()
+        pairing.cancel()
+        await store.releaseFirstSave()
+
+        await #expect(throws: CancellationError.self) {
+            try await pairing.value
+        }
+    }
+
     @Test("A failed reconnect keeps the saved credential until a retry succeeds")
     func retryPreservesCredentialUntilSuccess() async throws {
         let address = try PrivateIPv4Address("192.168.10.20")
@@ -368,6 +396,8 @@ private actor StubSamsungTransport: SamsungTransporting {
     }
 
     func disconnect() {}
+
+    func disconnect(attemptID: SamsungConnectionAttemptID) {}
 }
 
 private actor SuspendedSamsungTransport: SamsungTransporting {
@@ -396,6 +426,14 @@ private actor SuspendedSamsungTransport: SamsungTransporting {
     func send(_ command: RemoteCommand) {}
 
     func disconnect() {
+        cancelConnection()
+    }
+
+    func disconnect(attemptID: SamsungConnectionAttemptID) {
+        cancelConnection()
+    }
+
+    private func cancelConnection() {
         disconnectCount += 1
         connectionContinuation?.resume(throwing: CancellationError())
         connectionContinuation = nil
@@ -431,6 +469,8 @@ private actor SequencedSamsungTransport: SamsungTransporting {
     func send(_ command: RemoteCommand) {}
 
     func disconnect() {}
+
+    func disconnect(attemptID: SamsungConnectionAttemptID) {}
 }
 
 private actor SuspendedLookupCredentialStore: SamsungPairingCredentialStoring {
@@ -488,6 +528,10 @@ private actor ObservableSamsungTransport: SamsungTransporting {
     func disconnect() {
         disconnectCount += 1
     }
+
+    func disconnect(attemptID: SamsungConnectionAttemptID) {
+        disconnectCount += 1
+    }
 }
 
 private actor SuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
@@ -496,8 +540,10 @@ private actor SuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
     private var firstSaveContinuation: CheckedContinuation<Void, Never>?
     private var values: [PrivateIPv4Address: SamsungPairingCredential] = [:]
     private var saveCallCount = 0
+    private let rollbackFails: Bool
 
-    init() {
+    init(rollbackFails: Bool = false) {
+        self.rollbackFails = rollbackFails
         let (stream, continuation) = AsyncStream<Void>.makeStream()
         firstSaveStarted = stream
         firstSaveStartedContinuation = continuation
@@ -518,7 +564,10 @@ private actor SuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
         }
     }
 
-    func removeCredential(for address: PrivateIPv4Address) {
+    func removeCredential(for address: PrivateIPv4Address) throws {
+        if rollbackFails {
+            throw SyntheticCredentialStoreError.rollbackFailed
+        }
         values[address] = nil
     }
 
@@ -527,6 +576,10 @@ private actor SuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
         firstSaveContinuation = nil
         firstSaveStartedContinuation.finish()
     }
+}
+
+private enum SyntheticCredentialStoreError: Error {
+    case rollbackFailed
 }
 
 private actor AttemptAwareSamsungTransport: SamsungTransporting {

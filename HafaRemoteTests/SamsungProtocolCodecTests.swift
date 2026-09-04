@@ -244,6 +244,51 @@ struct SamsungCommandSerializerTests {
         releaseFirstContinuation.finish()
         secondAttemptedContinuation.finish()
     }
+
+    @Test("Cancellation after ownership transfer releases the serializer")
+    func releasesTransferredOwnershipOnCancellation() async throws {
+        let handoffGate = OwnershipHandoffGate()
+        let serializer = SamsungCommandSerializer {
+            await handoffGate.pauseSecondOwner()
+        }
+        let recorder = CommandOrderRecorder()
+        let (firstStarted, firstStartedContinuation) = AsyncStream<Void>.makeStream()
+        let (releaseFirst, releaseFirstContinuation) = AsyncStream<Void>.makeStream()
+
+        let first = Task {
+            try await serializer.perform {
+                await recorder.append("first")
+                firstStartedContinuation.yield()
+                var releases = releaseFirst.makeAsyncIterator()
+                _ = await releases.next()
+            }
+        }
+        var starts = firstStarted.makeAsyncIterator()
+        _ = await starts.next()
+
+        let cancelled = Task {
+            try await serializer.perform {
+                await recorder.append("cancelled-command")
+            }
+        }
+        releaseFirstContinuation.yield()
+        var handoffs = handoffGate.secondOwnerAcquired.makeAsyncIterator()
+        _ = await handoffs.next()
+        cancelled.cancel()
+        await handoffGate.releaseSecondOwner()
+
+        try await first.value
+        await #expect(throws: CancellationError.self) {
+            try await cancelled.value
+        }
+        try await serializer.perform {
+            await recorder.append("third")
+        }
+        #expect(await recorder.values == ["first", "third"])
+
+        firstStartedContinuation.finish()
+        releaseFirstContinuation.finish()
+    }
 }
 
 struct SamsungTrustPolicyTests {
@@ -339,5 +384,33 @@ private actor CommandOrderRecorder {
 
     func append(_ value: String) {
         values.append(value)
+    }
+}
+
+private actor OwnershipHandoffGate {
+    nonisolated let secondOwnerAcquired: AsyncStream<Void>
+    private let secondOwnerAcquiredContinuation: AsyncStream<Void>.Continuation
+    private var secondOwnerContinuation: CheckedContinuation<Void, Never>?
+    private var acquisitionCount = 0
+
+    init() {
+        let (stream, continuation) = AsyncStream<Void>.makeStream()
+        secondOwnerAcquired = stream
+        secondOwnerAcquiredContinuation = continuation
+    }
+
+    func pauseSecondOwner() async {
+        acquisitionCount += 1
+        guard acquisitionCount == 2 else { return }
+        secondOwnerAcquiredContinuation.yield()
+        await withCheckedContinuation { continuation in
+            secondOwnerContinuation = continuation
+        }
+    }
+
+    func releaseSecondOwner() {
+        secondOwnerContinuation?.resume()
+        secondOwnerContinuation = nil
+        secondOwnerAcquiredContinuation.finish()
     }
 }

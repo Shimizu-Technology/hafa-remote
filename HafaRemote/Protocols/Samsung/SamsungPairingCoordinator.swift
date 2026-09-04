@@ -104,9 +104,9 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                 await transport.disconnect(attemptID: attemptID)
                 if credentialSaveStarted, let attemptedAddress {
                     if let previousCredential {
-                        try await credentialStore.save(previousCredential, for: attemptedAddress)
+                        try? await credentialStore.save(previousCredential, for: attemptedAddress)
                     } else {
-                        try await credentialStore.removeCredential(for: attemptedAddress)
+                        try? await credentialStore.removeCredential(for: attemptedAddress)
                     }
                 }
                 throw CancellationError()

@@ -14,12 +14,6 @@ protocol SamsungTransporting: TVDriver {
     func disconnect(attemptID: SamsungConnectionAttemptID) async
 }
 
-extension SamsungTransporting {
-    func disconnect(attemptID: SamsungConnectionAttemptID) async {
-        await disconnect()
-    }
-}
-
 /// Owns the single secure Samsung WebSocket and its serialized command stream.
 actor SamsungCommandTransport: SamsungTransporting {
     private var session: URLSession?
@@ -150,7 +144,7 @@ actor SamsungCommandTransport: SamsungTransporting {
         let timeout = pairingTimeout
         return try await withThrowingTaskGroup(of: String.self) { group in
             group.addTask {
-                for _ in 0..<10 {
+                while true {
                     let message = try await webSocket.receive()
                     switch try SamsungProtocolCodec.event(from: message) {
                     case .connected(let receivedToken):
@@ -176,7 +170,6 @@ actor SamsungCommandTransport: SamsungTransporting {
                         continue
                     }
                 }
-                throw SamsungConnectionError.invalidResponse
             }
             group.addTask {
                 try await Task.sleep(for: timeout)
@@ -209,10 +202,16 @@ actor SamsungCommandSerializer {
         let continuation: CheckedContinuation<Bool, Never>
     }
     private var waiters: [Waiter] = []
+    private let ownershipHandoffHook: @Sendable () async -> Void
+
+    init(ownershipHandoffHook: @escaping @Sendable () async -> Void = {}) {
+        self.ownershipHandoffHook = ownershipHandoffHook
+    }
 
     func perform(_ operation: @Sendable () async throws -> Void) async throws {
         try await acquire()
         defer { release() }
+        await ownershipHandoffHook()
         try Task.checkCancellation()
         try await operation()
     }
@@ -239,7 +238,6 @@ actor SamsungCommandSerializer {
             }
         }
         guard acquired else { throw CancellationError() }
-        try Task.checkCancellation()
     }
 
     private func release() {
