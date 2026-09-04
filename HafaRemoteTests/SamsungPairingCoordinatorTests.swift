@@ -232,6 +232,73 @@ struct SamsungPairingCoordinatorTests {
         }
     }
 
+    @Test("Cancellation restores an existing credential after a refreshed save")
+    func cancellationRestoresExistingCredential() async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let previousCredential = try SamsungPairingCredential(
+            token: "previous-token",
+            certificateSHA256: Data(repeating: 13, count: 32)
+        )
+        let refreshedCredential = try SamsungPairingCredential(
+            token: "refreshed-token",
+            certificateSHA256: Data(repeating: 13, count: 32)
+        )
+        let store = SuspendedSaveCredentialStore()
+        await store.seed(previousCredential, for: address)
+        let transport = AttemptAwareSamsungTransport(issuedCredential: refreshedCredential)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: transport
+        )
+
+        let pairing = Task {
+            try await coordinator.pair(addressText: address.rawValue)
+        }
+        var saveStarts = store.firstSaveStarted.makeAsyncIterator()
+        _ = await saveStarts.next()
+        pairing.cancel()
+        await store.releaseFirstSave()
+
+        await #expect(throws: CancellationError.self) {
+            try await pairing.value
+        }
+        #expect(await store.credential(for: address) == previousCredential)
+    }
+
+    @Test("A failed existing-credential restore still preserves cancellation")
+    func failedRestorePreservesCancellation() async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let previousCredential = try SamsungPairingCredential(
+            token: "previous-token",
+            certificateSHA256: Data(repeating: 14, count: 32)
+        )
+        let refreshedCredential = try SamsungPairingCredential(
+            token: "refreshed-token",
+            certificateSHA256: Data(repeating: 14, count: 32)
+        )
+        let store = SuspendedSaveCredentialStore(rollbackFails: true)
+        await store.seed(previousCredential, for: address)
+        let transport = AttemptAwareSamsungTransport(issuedCredential: refreshedCredential)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: transport
+        )
+
+        let pairing = Task {
+            try await coordinator.pair(addressText: address.rawValue)
+        }
+        var saveStarts = store.firstSaveStarted.makeAsyncIterator()
+        _ = await saveStarts.next()
+        pairing.cancel()
+        await store.releaseFirstSave()
+
+        await #expect(throws: CancellationError.self) {
+            try await pairing.value
+        }
+    }
+
     @Test("A failed reconnect keeps the saved credential until a retry succeeds")
     func retryPreservesCredentialUntilSuccess() async throws {
         let address = try PrivateIPv4Address("192.168.10.20")
@@ -579,8 +646,11 @@ private actor SuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
         values[address]
     }
 
-    func save(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) async {
+    func save(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) async throws {
         saveCallCount += 1
+        if rollbackFails, saveCallCount > 1 {
+            throw SyntheticCredentialStoreError.rollbackFailed
+        }
         values[address] = credential
         guard saveCallCount == 1 else { return }
 
@@ -595,6 +665,10 @@ private actor SuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
             throw SyntheticCredentialStoreError.rollbackFailed
         }
         values[address] = nil
+    }
+
+    func seed(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) {
+        values[address] = credential
     }
 
     func releaseFirstSave() {
