@@ -117,7 +117,12 @@ final class HafaRemoteUITests: XCTestCase {
         let retry = app.buttons["retryConnectionButton"]
         XCTAssertTrue(retry.exists)
         retry.tap()
-        XCTAssertEqual(app.staticTexts["lastRemoteCommand"].label, "retry")
+        let commandOutput = app.staticTexts["lastRemoteCommand"]
+        let retryRecorded = expectation(
+            for: NSPredicate(format: "label == %@", "retry"),
+            evaluatedWith: commandOutput
+        )
+        wait(for: [retryRecorded], timeout: 2)
 
         let tvSetup = app.buttons["remoteTVSetupButton"]
         XCTAssertTrue(tvSetup.isHittable)

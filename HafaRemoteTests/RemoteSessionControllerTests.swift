@@ -73,6 +73,40 @@ struct RemoteSessionControllerTests {
     }
 
     @MainActor
+    @Test("Reconnect rejects an older connected projection before accepting the new TV")
+    func reconnectRejectsStaleConnectedProjection() async throws {
+        let oldTV = try testTV(address: "192.168.10.20", model: "OLD_MODEL")
+        let newTV = try testTV(address: "192.168.10.21", model: "NEW_MODEL")
+        let projectionGate = ControlledStateProjectionGate()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [
+                .success(tv: oldTV, announcesPairing: false),
+                .success(tv: newTV, announcesPairing: false),
+            ]
+        )
+        let store = RemoteSessionStore(
+            controller: RemoteSessionController(driver: driver),
+            beforeProjectingState: { state in
+                await projectionGate.waitBeforeProjection(of: state)
+            }
+        )
+        var connectedProjections = projectionGate.connectedProjections.makeAsyncIterator()
+
+        await store.connect(to: oldTV.address.rawValue)
+        _ = await connectedProjections.next()
+        await store.disconnect(clearRememberedTV: false)
+        await store.connect(to: newTV.address.rawValue)
+
+        await projectionGate.releaseConnectedProjection()
+        _ = await connectedProjections.next()
+        #expect(store.lastConnectedTV == nil)
+
+        await projectionGate.releaseConnectedProjection()
+        await waitUntil { @MainActor in store.state == .connected(newTV) }
+        #expect(store.lastConnectedTV == newTV)
+    }
+
+    @MainActor
     @Test("Setup cancellation can close the socket without forgetting the last TV")
     func storeCanRetainLastTVWhileDisconnecting() async throws {
         let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
@@ -1300,7 +1334,6 @@ private actor ControlledStateProjectionGate {
     func releaseConnectedProjection() {
         connectedProjectionContinuation?.resume()
         connectedProjectionContinuation = nil
-        connectedProjectionsContinuation.finish()
     }
 }
 
