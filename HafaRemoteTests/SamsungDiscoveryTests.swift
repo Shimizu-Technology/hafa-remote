@@ -82,6 +82,32 @@ struct SamsungDiscoveryTests {
     }
 
     @MainActor
+    @Test("A failed search can recover to verified results")
+    func recoversFromFailure() throws {
+        let television = DiscoveredSamsungTV(
+            reportedIdentifier: "recovered-tv",
+            displayName: "Living Room TV",
+            modelName: "Samsung Q70A",
+            address: try PrivateIPv4Address("192.168.10.20")
+        )
+        let backend = SequencedDiscoveryBackend(
+            eventSequences: [
+                [.failed],
+                [.found(television), .finished],
+            ]
+        )
+        let store = SamsungDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
+
+        store.start()
+        #expect(store.state == .failed)
+
+        store.start()
+        #expect(store.state == .results)
+        #expect(store.televisions == [television])
+        #expect(backend.startCount == 2)
+    }
+
+    @MainActor
     @Test("Stopping discovery cancels its backend and timeout")
     func stopCancelsSearch() async {
         let backend = DiscoveryBackendSpy(events: [])
@@ -121,6 +147,8 @@ private final class DiscoveryBackendSpy: SamsungDiscoveryBackend {
         self.events = events
     }
 
+    deinit {}
+
     func start(
         eventHandler: @escaping @MainActor @Sendable (SamsungDiscoveryBackendEvent) -> Void
     ) {
@@ -131,4 +159,26 @@ private final class DiscoveryBackendSpy: SamsungDiscoveryBackend {
     func stop() {
         stopCount += 1
     }
+}
+
+@MainActor
+private final class SequencedDiscoveryBackend: SamsungDiscoveryBackend {
+    private var eventSequences: [[SamsungDiscoveryBackendEvent]]
+    private(set) var startCount = 0
+
+    init(eventSequences: [[SamsungDiscoveryBackendEvent]]) {
+        self.eventSequences = eventSequences
+    }
+
+    deinit {}
+
+    func start(
+        eventHandler: @escaping @MainActor @Sendable (SamsungDiscoveryBackendEvent) -> Void
+    ) {
+        startCount += 1
+        guard !eventSequences.isEmpty else { return }
+        eventSequences.removeFirst().forEach(eventHandler)
+    }
+
+    func stop() {}
 }

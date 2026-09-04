@@ -423,7 +423,6 @@ struct SamsungSetupView: View {
                         await session.disconnect(clearRememberedTV: false)
                         guard !Task.isCancelled else { return }
                         discovery.start()
-                        recoveryTask = nil
                     }
                 }
             }

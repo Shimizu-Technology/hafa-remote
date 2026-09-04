@@ -3,7 +3,7 @@
 
 **Version:** 0.1  
 **Last updated:** September 4, 2026  
-**Current status:** HR-001 is merged; HR-002 through HR-007 are implemented in a reviewed PR stack; HR-015 release acceptance remains pending
+**Current status:** HR-001 and the no-billing CI change are merged; HR-002 remains pending on physical Q70AA pairing evidence; HR-003 through HR-007 are implemented in the review stack; HR-015 release acceptance remains pending
 **Current execution frontier:** Q70AA hardware acceptance, automatic-discovery validation, ordered merge, and internal TestFlight
 
 ## Delivery targets
