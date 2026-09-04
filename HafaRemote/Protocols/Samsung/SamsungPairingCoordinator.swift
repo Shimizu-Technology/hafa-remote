@@ -9,11 +9,17 @@ struct PairedSamsungTV: Equatable, Sendable {
 protocol SamsungPairingCoordinating: Sendable {
     func pair(
         addressText: String,
-        onWaitingForApproval: @escaping @Sendable @MainActor () -> Void
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV
-    func sendSelect() async throws
+    func send(_ command: RemoteCommand) async throws
     func forget(addressText: String) async throws
     func disconnect() async
+}
+
+extension SamsungPairingCoordinating {
+    func sendSelect() async throws {
+        try await send(.select)
+    }
 }
 
 /// Coordinates capability validation, secure connection, and credential persistence.
@@ -35,7 +41,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
 
     func pair(
         addressText: String,
-        onWaitingForApproval: @escaping @Sendable @MainActor () -> Void = {}
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void = {}
     ) async throws -> PairedSamsungTV {
         guard activeAttemptID == nil else {
             throw SamsungPairingCoordinatorError.pairingInProgress
@@ -119,8 +125,8 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
         }
     }
 
-    func sendSelect() async throws {
-        try await transport.send(.select)
+    func send(_ command: RemoteCommand) async throws {
+        try await transport.send(command)
     }
 
     func forget(addressText: String) async throws {
