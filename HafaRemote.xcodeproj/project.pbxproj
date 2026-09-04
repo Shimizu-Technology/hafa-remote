@@ -13,6 +13,9 @@
 		174B2BC669B6814751000004 /* RemoteSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 174B2BC669B6814751000014 /* RemoteSessionStore.swift */; };
 		174B2BC669B6814751000005 /* RemoteControlButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 174B2BC669B6814751000015 /* RemoteControlButton.swift */; };
 		174B2BC669B6814751000006 /* RemoteControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 174B2BC669B6814751000016 /* RemoteControlView.swift */; };
+		275B2BC669B6814751000001 /* SavedTV.swift in Sources */ = {isa = PBXBuildFile; fileRef = 275B2BC669B6814751000011 /* SavedTV.swift */; };
+		275B2BC669B6814751000002 /* LocalNetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 275B2BC669B6814751000012 /* LocalNetworkMonitor.swift */; };
+		275B2BC669B6814751000003 /* SavedTVTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 275B2BC669B6814751000013 /* SavedTVTests.swift */; };
 		2D3D3C2CF9409A3568772E68 /* SamsungSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10AAEEB17C3074710C8B3AD8 /* SamsungSetupView.swift */; };
 		3802FE2339022BC3629CF923 /* SamsungPairingCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8FBB69EF7BB0B53E30FF7A1 /* SamsungPairingCredential.swift */; };
 		3A58178774479925FA7D5AF6 /* SamsungCommandTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9660B0481989B57E29327545 /* SamsungCommandTransport.swift */; };
@@ -66,6 +69,9 @@
 		174B2BC669B6814751000015 /* RemoteControlButton.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteControlButton.swift; sourceTree = "<group>"; };
 		174B2BC669B6814751000016 /* RemoteControlView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteControlView.swift; sourceTree = "<group>"; };
 		25EE7FE3555C6B4938A553CE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		275B2BC669B6814751000011 /* SavedTV.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SavedTV.swift; sourceTree = "<group>"; };
+		275B2BC669B6814751000012 /* LocalNetworkMonitor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalNetworkMonitor.swift; sourceTree = "<group>"; };
+		275B2BC669B6814751000013 /* SavedTVTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SavedTVTests.swift; sourceTree = "<group>"; };
 		2A781F30B9F124284352D849 /* RemoteCommand.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteCommand.swift; sourceTree = "<group>"; };
 		2A939B24A7E535AB6DA1B6D7 /* HafaRemoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HafaRemoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		314331F56B7422E857B20532 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -171,6 +177,24 @@
 			path = Remote;
 			sourceTree = "<group>";
 		};
+		275B2BC669B6814751000014 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				275B2BC669B6814751000011 /* SavedTV.swift */,
+			);
+			name = Persistence;
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		275B2BC669B6814751000015 /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				275B2BC669B6814751000012 /* LocalNetworkMonitor.swift */,
+			);
+			name = Networking;
+			path = Networking;
+			sourceTree = "<group>";
+		};
 		62C96688E60E0F3A754B9426 = {
 			isa = PBXGroup;
 			children = (
@@ -190,6 +214,7 @@
 				79D1230B04BD184CAC360802 /* SamsungProtocolCodecTests.swift */,
 				11CFB329B0E5168B6E0EC74E /* SamsungPairingCoordinatorTests.swift */,
 				174B2BC669B6814751000013 /* RemoteSessionControllerTests.swift */,
+				275B2BC669B6814751000013 /* SavedTVTests.swift */,
 			);
 			name = HafaRemoteTests;
 			path = HafaRemoteTests;
@@ -233,6 +258,8 @@
 				174B2BC669B6814751000012 /* RemoteSessionState.swift */,
 				174B2BC669B6814751000011 /* RemoteSessionController.swift */,
 				174B2BC669B6814751000014 /* RemoteSessionStore.swift */,
+				275B2BC669B6814751000014 /* Persistence */,
+				275B2BC669B6814751000015 /* Networking */,
 			);
 			name = Core;
 			path = Core;
@@ -410,6 +437,7 @@
 				493B87F071515609FB01C5D6 /* SamsungProtocolCodecTests.swift in Sources */,
 				C7EAE220E972FBE92AD2F6E5 /* SamsungPairingCoordinatorTests.swift in Sources */,
 				174B2BC669B6814751000003 /* RemoteSessionControllerTests.swift in Sources */,
+				275B2BC669B6814751000003 /* SavedTVTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -435,6 +463,8 @@
 				174B2BC669B6814751000004 /* RemoteSessionStore.swift in Sources */,
 				174B2BC669B6814751000005 /* RemoteControlButton.swift in Sources */,
 				174B2BC669B6814751000006 /* RemoteControlView.swift in Sources */,
+				275B2BC669B6814751000001 /* SavedTV.swift in Sources */,
+				275B2BC669B6814751000002 /* LocalNetworkMonitor.swift in Sources */,
 				11DFB409FF879A160B1AB3C4 /* PrivateIPv4Address.swift in Sources */,
 				3802FE2339022BC3629CF923 /* SamsungPairingCredential.swift in Sources */,
 				854D9E6D373AC5EC05814B57 /* SamsungDeviceInfo.swift in Sources */,
