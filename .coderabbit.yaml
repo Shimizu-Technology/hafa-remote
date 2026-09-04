@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: assertive
+  high_level_summary: true
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 5
+  path_instructions:
+    - path: "HafaRemote/Protocols/Samsung/**"
+      instructions: >-
+        Treat TLS trust, pairing tokens, command serialization, cancellation,
+        reconnection, and destructive Samsung keys as security-critical. Reject
+        global trust bypasses, token/address logging, overlapping sockets, and
+        commands outside the reviewed allowlist.
+    - path: "HafaRemote/Features/**"
+      instructions: >-
+        Review for one-handed clarity, truthful connection state, 44-point
+        targets, VoiceOver, Dynamic Type, dark mode, and reduced-motion support.
+    - path: "HafaRemoteTests/**"
+      instructions: >-
+        Require deterministic coverage of command encoding, session transitions,
+        token persistence boundaries, redaction, cancellation, and recovery.

@@ -1,0 +1,38 @@
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# App Store and signing
+*.mobileprovision
+*.p12
+*.cer
+*.key
+*.pem
+AuthKey_*.p8
+ExportOptions.local.plist
+
+# Local configuration and diagnostics
+.env
+.env.*
+!.env.example
+*.log
+diagnostics/
+hardware-test-results/private/
+
+# macOS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
