@@ -48,14 +48,14 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** HR-001
 
-- [ ] Add the local-network purpose string and a development-only manual IP field.
-- [ ] Fetch and parse the TV's non-secret device-information response.
-- [ ] Implement the Samsung secure WebSocket handshake behind `SamsungCommandTransport`.
-- [ ] Put the app name in the protocol handshake without leaking user or device details.
-- [ ] Trigger the television approval prompt and parse the pairing token.
-- [ ] Store the token in Keychain and reconnect with it after app relaunch.
-- [ ] Send one semantic `.select` command through `TVDriver`; do not expose Samsung key strings to the UI.
-- [ ] Record the Q70AA model, firmware, iOS version, pairing result, certificate behavior, and connection timing in a local hardware-test fixture/document without household IP/MAC/token values.
+- [x] Add the local-network purpose string and a development-only manual IP field.
+- [x] Fetch and parse the TV's non-secret device-information response.
+- [x] Implement the Samsung secure WebSocket handshake behind `SamsungCommandTransport`.
+- [x] Put the app name in the protocol handshake without leaking user or device details.
+- [x] Trigger the television approval prompt and parse the pairing token.
+- [x] Store the token in Keychain and reconnect with it after app relaunch.
+- [x] Send one semantic `.select` command through `TVDriver`; do not expose Samsung key strings to the UI.
+- [x] Record the Q70AA model, iOS version, pairing result, certificate behavior, and connection timing in a local hardware-test fixture/document without household IP/MAC/token values. Firmware remains intentionally blank until it can be captured without adding it to discovery or logs.
 
 **Acceptance evidence:** A screen recording shows first pairing, TV approval, one command, app force-quit, relaunch, and reconnection without another approval prompt.
 

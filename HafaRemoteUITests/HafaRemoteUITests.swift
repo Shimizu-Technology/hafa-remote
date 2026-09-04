@@ -90,6 +90,11 @@ final class HafaRemoteUITests: XCTestCase {
 
         // XCTest invokes interruption monitors on the next interaction if iOS presents a prompt.
         app.navigationBars["Add Samsung TV"].tap()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let localNetworkAllow = springboard.buttons["Allow"].firstMatch
+        if localNetworkAllow.waitForExistence(timeout: 3) {
+            localNetworkAllow.tap()
+        }
 
         let discoveredTV = app.buttons["discoveredTVButton"]
         XCTAssertTrue(
@@ -101,6 +106,33 @@ final class HafaRemoteUITests: XCTestCase {
             discoveredTV.label.localizedCaseInsensitiveContains("Q70AA"),
             "Expected the household Q70AA model to be recognizable in the discovery row."
         )
+
+        #if !targetEnvironment(simulator)
+            discoveredTV.tap()
+
+            let connectionStatus = app.staticTexts["remoteConnectionStatus"]
+            XCTAssertTrue(
+                connectionStatus.waitForExistence(timeout: 60),
+                "Expected physical approval to open the connected remote."
+            )
+            XCTAssertEqual(connectionStatus.label, "Connected")
+
+            let select = app.buttons["remote-select"]
+            XCTAssertTrue(select.waitForExistence(timeout: 5))
+            XCTAssertTrue(select.isHittable)
+            XCTAssertTrue(select.isEnabled)
+            select.tap()
+
+            app.terminate()
+            app.launch()
+
+            let restoredStatus = app.staticTexts["remoteConnectionStatus"]
+            XCTAssertTrue(
+                restoredStatus.waitForExistence(timeout: 20),
+                "Expected the saved pairing to restore after relaunch."
+            )
+            XCTAssertEqual(restoredStatus.label, "Connected")
+        #endif
     }
 
     /// Verifies that every MVP control remains discoverable and dispatches through the shared action.

@@ -5,11 +5,11 @@ fingerprints, Wi-Fi names, or typed private content.
 
 ## Test environment
 
-- Date: September 5, 2026 (live-network discovery only)
+- Date: September 5, 2026
 - TV model: Samsung Q70AA
 - TV firmware:
-- iPhone model: iPhone 17 Pro simulator; physical iPhone validation pending
-- iOS version: 26.5 simulator; physical iPhone validation pending
+- iPhone model: iPhone 15 Pro Max; iPhone 17 Pro simulator used for the separate discovery check
+- iOS version: 18.7.8 on iPhone; 26.5 on simulator
 - App version:
 - Build number:
 - Release commit:
@@ -29,17 +29,23 @@ xcodebuild test \
 ```
 
 The test grants the expected Local Network prompt and fails unless a verified Samsung TV row
-appears within 15 seconds. The deterministic gate explicitly skips it because it requires the
-household TV; run it separately against either a simulator on the same LAN or a connected iPhone.
+appears within 15 seconds. On a connected iPhone it continues through physical approval, sends
+Select, relaunches the app, and requires the saved pairing to reconnect. The deterministic gate
+explicitly skips it because it requires the household TV; run it separately against either a
+simulator on the same LAN or a connected iPhone.
 
 - [x] Add Samsung TV found the Q70AA without entering an address.
 - [x] The discovered row showed a useful TV name and model.
-- [ ] First launch reached the TV approval prompt.
-- [ ] Choosing Allow completed secure pairing.
-- [ ] Select changed the focused TV item.
-- [ ] Force-quit and relaunch reconnected without another approval prompt.
-- Connection time:
-- Notes:
+- [x] First launch reached the TV approval flow.
+- [x] Choosing Allow completed secure pairing.
+- [x] The physical iPhone sent Select over the active Q70AA connection.
+- [ ] A tester visually confirmed the focused TV item changed after Select.
+- [x] Force-quit and relaunch reconnected without another approval prompt.
+- Connection time: 5.6 seconds from tapping the discovered Q70AA to the Connected remote.
+- Notes: The selected physical-device UI test passed in 25.5 seconds. It granted the expected
+  Local Network permission, discovered the Q70AA, paired, sent Select, terminated Hafa Remote,
+  relaunched it, and required Connected state again. The result bundle is kept locally and the
+  committed record omits device identifiers and household network details.
 
 ## HR-007 discovery recovery
 
