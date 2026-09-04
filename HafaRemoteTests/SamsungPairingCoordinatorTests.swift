@@ -204,6 +204,33 @@ struct SamsungPairingCoordinatorTests {
         await coordinator.disconnect()
     }
 
+    @Test("A failed credential save disconnects before an immediate retry")
+    func saveFailureDisconnectsAndAllowsRetry() async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let issuedCredential = try SamsungPairingCredential(
+            token: "synthetic-token",
+            certificateSHA256: Data(repeating: 12, count: 32)
+        )
+        let store = FailFirstSaveCredentialStore()
+        let transport = AttemptAwareSamsungTransport(issuedCredential: issuedCredential)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: transport
+        )
+
+        await #expect(throws: SyntheticCredentialStoreError.writeFailed) {
+            try await coordinator.pair(addressText: address.rawValue)
+        }
+        #expect(!(await transport.hasActiveConnection))
+
+        _ = try await coordinator.pair(addressText: address.rawValue)
+        #expect(await store.credential(for: address) == issuedCredential)
+        #expect(await transport.hasActiveConnection)
+
+        await coordinator.disconnect()
+    }
+
     @Test("A rollback failure does not replace pairing cancellation")
     func rollbackFailurePreservesCancellation() async throws {
         let address = try PrivateIPv4Address("192.168.10.20")
@@ -678,7 +705,29 @@ private actor SuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
     }
 }
 
+private actor FailFirstSaveCredentialStore: SamsungPairingCredentialStoring {
+    private var values: [PrivateIPv4Address: SamsungPairingCredential] = [:]
+    private var shouldFailSave = true
+
+    func credential(for address: PrivateIPv4Address) -> SamsungPairingCredential? {
+        values[address]
+    }
+
+    func save(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) throws {
+        if shouldFailSave {
+            shouldFailSave = false
+            throw SyntheticCredentialStoreError.writeFailed
+        }
+        values[address] = credential
+    }
+
+    func removeCredential(for address: PrivateIPv4Address) {
+        values[address] = nil
+    }
+}
+
 private enum SyntheticCredentialStoreError: Error {
+    case writeFailed
     case rollbackFailed
 }
 
@@ -793,6 +842,8 @@ private actor SetupCoordinatorStub: SamsungPairingCoordinating {
 @MainActor
 private final class ApprovalRecorder {
     private(set) var count = 0
+
+    deinit {}
 
     func record() {
         count += 1

@@ -14,16 +14,24 @@ protocol SamsungDeviceInfoProviding: Sendable {
 /// Reads only model, firmware, and token-auth support from the television's local endpoint.
 actor SamsungDeviceInfoClient: SamsungDeviceInfoProviding {
     private let session: URLSession
+    private let redirectDelegate: SamsungRedirectRejectingDelegate?
 
     init(session: URLSession? = nil) {
         if let session {
             self.session = session
+            redirectDelegate = nil
         } else {
             let configuration = URLSessionConfiguration.ephemeral
             configuration.timeoutIntervalForRequest = 6
             configuration.timeoutIntervalForResource = 8
             configuration.waitsForConnectivity = false
-            self.session = URLSession(configuration: configuration)
+            let redirectDelegate = SamsungRedirectRejectingDelegate()
+            self.redirectDelegate = redirectDelegate
+            self.session = URLSession(
+                configuration: configuration,
+                delegate: redirectDelegate,
+                delegateQueue: nil
+            )
         }
     }
 
@@ -48,6 +56,20 @@ actor SamsungDeviceInfoClient: SamsungDeviceInfoProviding {
         } catch {
             throw SamsungDeviceInfoError.unavailable
         }
+    }
+}
+
+final class SamsungRedirectRejectingDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    deinit {}
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
     }
 }
 

@@ -23,9 +23,6 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(app.textFields["tvIPAddressField"].waitForExistence(timeout: 2))
 
         let connectButton = app.buttons["connectToTVButton"]
-        if !connectButton.waitForExistence(timeout: 1) {
-            app.swipeUp()
-        }
         XCTAssertTrue(connectButton.waitForExistence(timeout: 2))
         XCTAssertFalse(connectButton.isEnabled)
     }

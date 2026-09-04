@@ -22,6 +22,7 @@ final class SamsungSetupViewModel {
     private var activeConnectionID: UUID?
     private var activeCommandID: UUID?
     private var disconnectTask: Task<Void, Never>?
+    private var disconnectTaskID: UUID?
 
     init(coordinator: (any SamsungPairingCoordinating)? = nil) {
         self.coordinator =
@@ -38,7 +39,11 @@ final class SamsungSetupViewModel {
     }
 
     var isBusy: Bool {
-        status == .checking || status == .waitingForApproval || disconnectTask != nil
+        isConnecting || disconnectTask != nil
+    }
+
+    var isConnecting: Bool {
+        status == .checking || status == .waitingForApproval
     }
 
     var isControllable: Bool {
@@ -52,7 +57,9 @@ final class SamsungSetupViewModel {
 
     func connect() async {
         if let disconnectTask {
+            let taskID = disconnectTaskID
             await disconnectTask.value
+            clearDisconnectTask(ifMatching: taskID)
         }
         guard !isBusy else { return }
         status = .checking
@@ -136,7 +143,9 @@ final class SamsungSetupViewModel {
 
     func disconnect() async {
         if let disconnectTask {
+            let taskID = disconnectTaskID
             await disconnectTask.value
+            clearDisconnectTask(ifMatching: taskID)
             return
         }
 
@@ -149,16 +158,23 @@ final class SamsungSetupViewModel {
         activePairingTask?.cancel()
 
         let coordinator = coordinator
-        let task = Task { [weak self] in
+        let taskID = UUID()
+        let task = Task {
             if let activePairingTask {
                 _ = await activePairingTask.result
             }
             await coordinator.disconnect()
-            guard let self, self.activePairingID == nil else { return }
-            self.disconnectTask = nil
         }
+        disconnectTaskID = taskID
         disconnectTask = task
         await task.value
+        clearDisconnectTask(ifMatching: taskID)
+    }
+
+    private func clearDisconnectTask(ifMatching taskID: UUID?) {
+        guard disconnectTaskID == taskID else { return }
+        disconnectTask = nil
+        disconnectTaskID = nil
     }
 
     private static func safeMessage(for error: Error) -> String {

@@ -33,6 +33,52 @@ struct SamsungProtocolCodecTests {
         #expect(try SamsungProtocolCodec.event(from: message) == .connected(token: "synthetic-token"))
     }
 
+    @Test(
+        "Connect event without a usable token decodes as a nil token",
+        arguments: [
+            #"{"event":"ms.channel.connect","data":{}}"#,
+            #"{"event":"ms.channel.connect","data":"opaque"}"#,
+            #"{"event":"ms.channel.connect"}"#,
+        ]
+    )
+    func decodesConnectEventWithoutToken(_ payload: String) throws {
+        let message = URLSessionWebSocketTask.Message.string(payload)
+        #expect(try SamsungProtocolCodec.event(from: message) == .connected(token: nil))
+    }
+
+    @Test("Device information redirects are rejected")
+    func rejectsDeviceInfoRedirects() async throws {
+        let delegate = SamsungRedirectRejectingDelegate()
+        let session = URLSession(configuration: .ephemeral)
+        let originalURL = try #require(URL(string: "http://192.168.10.20:8001/api/v2/"))
+        let task = session.dataTask(with: originalURL)
+        let response = try #require(
+            HTTPURLResponse(
+                url: originalURL,
+                statusCode: 302,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Location": "https://example.invalid/outside"]
+            )
+        )
+        let redirectedRequest = URLRequest(
+            url: try #require(URL(string: "https://example.invalid/outside"))
+        )
+
+        let followedRequest = await withCheckedContinuation { continuation in
+            delegate.urlSession(
+                session,
+                task: task,
+                willPerformHTTPRedirection: response,
+                newRequest: redirectedRequest
+            ) { request in
+                continuation.resume(returning: request)
+            }
+        }
+
+        #expect(followedRequest == nil)
+        session.invalidateAndCancel()
+    }
+
     @Test("Unauthorized event is explicit")
     func decodesUnauthorizedEvent() throws {
         let message = URLSessionWebSocketTask.Message.string(

@@ -96,6 +96,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                 )
             } catch {
                 guard Task.isCancelled || error is CancellationError else {
+                    await transport.disconnect(attemptID: attemptID)
                     throw error
                 }
                 // The cancellation handler is best-effort and may run before a

@@ -5,8 +5,8 @@ struct SamsungSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model: SamsungSetupViewModel
 
-    init(model: SamsungSetupViewModel = SamsungSetupViewModel()) {
-        _model = State(wrappedValue: model)
+    init(model: SamsungSetupViewModel? = nil) {
+        _model = State(initialValue: model ?? SamsungSetupViewModel())
     }
 
     var body: some View {
@@ -34,7 +34,7 @@ struct SamsungSetupView: View {
                         }
                     } label: {
                         HStack {
-                            Text(model.isBusy ? "Connecting…" : "Connect to TV")
+                            Text(model.isConnecting ? "Connecting…" : "Connect to TV")
                             Spacer()
                             if model.isBusy {
                                 ProgressView()
