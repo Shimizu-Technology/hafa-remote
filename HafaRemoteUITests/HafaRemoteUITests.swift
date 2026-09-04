@@ -114,11 +114,15 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(keyboard.isHittable)
         keyboard.tap()
 
-        let textField = app.descendants(matching: .any)["remoteTextField"]
+        let textField = app.textViews["remoteTextField"]
         XCTAssertTrue(textField.waitForExistence(timeout: 2))
+        XCTAssertTrue(textField.isHittable)
+        textField.tap()
         textField.typeText("Hafa")
+        XCTAssertEqual(textField.value as? String, "Hafa")
 
         let send = app.buttons["sendRemoteTextButton"]
+        XCTAssertTrue(send.waitForExistence(timeout: 2))
         XCTAssertTrue(send.isEnabled)
         send.tap()
 
