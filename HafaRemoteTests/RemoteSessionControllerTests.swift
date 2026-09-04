@@ -47,6 +47,23 @@ struct RemoteSessionControllerTests {
     }
 
     @MainActor
+    @Test("An immediate disconnect rejects a queued connected projection")
+    func immediateDisconnectDoesNotRestoreRememberedTV() async throws {
+        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false)]
+        )
+        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+
+        await store.connect(to: tv.address.rawValue)
+        await store.disconnect()
+        await waitUntil { @MainActor in store.state == .idle }
+
+        #expect(store.lastConnectedTV == nil)
+        #expect(!store.canSendCommands)
+    }
+
+    @MainActor
     @Test("Setup cancellation can close the socket without forgetting the last TV")
     func storeCanRetainLastTVWhileDisconnecting() async throws {
         let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
@@ -58,6 +75,7 @@ struct RemoteSessionControllerTests {
         await waitUntil { @MainActor in store.state == .connected(tv) }
 
         await store.disconnect(clearRememberedTV: false)
+        await waitUntil { @MainActor in store.state == .idle }
 
         #expect(store.state == .idle)
         #expect(store.lastConnectedTV == tv)
