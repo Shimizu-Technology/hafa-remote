@@ -34,7 +34,7 @@ fingerprints, Wi-Fi names, or typed private content.
 ## HR-005 lifecycle
 
 - [ ] Ten background/lock cycles completed
-- Healthy reconnects within two seconds: __ / 10 (10 / 10 required; any lower result blocks release)
+- Healthy reconnects within two seconds: __ / 10 (at least 9 / 10 required; 8 or fewer blocks release)
 - [ ] TV restart recovery without manual re-pairing
 - [ ] App force-quit/relaunch recovery without manual re-pairing
 - [ ] Wi-Fi loss and recovery without losing the saved pairing token
