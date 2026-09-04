@@ -59,6 +59,16 @@ if [[ "$local_network_copy" != *"Samsung TVs"* ]]; then
   exit 1
 fi
 
+if [[ "$(plutil -extract NSAppTransportSecurity.NSAllowsLocalNetworking raw "$info_plist")" != "true" ]]; then
+  echo "Local-only HTTP capability lookup must be declared explicitly." >&2
+  exit 1
+fi
+
+if plutil -extract NSAppTransportSecurity.NSAllowsArbitraryLoads raw "$info_plist" >/dev/null 2>&1; then
+  echo "Arbitrary network loads are not allowed." >&2
+  exit 1
+fi
+
 if [[ "$(plutil -extract ITSAppUsesNonExemptEncryption raw "$info_plist")" != "false" ]]; then
   echo "Export-compliance declaration must remain false for this app's standard TLS use." >&2
   exit 1
