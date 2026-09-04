@@ -1,0 +1,631 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		506ABD859CC36FF3F83677FC /* HafaRemoteUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF2140DF03D411A6556C98D5 /* HafaRemoteUITests.swift */; };
+		6B5E4B64AE4B8C217F1BBE92 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9C450D22C7D445E62710FF5D /* Foundation.framework */; };
+		6C519C628890A5AF91F135B9 /* HafaTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 621127FDEF5F6BE4013D7C65 /* HafaTheme.swift */; };
+		76ECF14B14B88E8DEC927833 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 314331F56B7422E857B20532 /* Assets.xcassets */; };
+		850DB50EE3A8CCE0C6AAF339 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 25EE7FE3555C6B4938A553CE /* PrivacyInfo.xcprivacy */; };
+		9CABF29420764B69CE52ED09 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9C450D22C7D445E62710FF5D /* Foundation.framework */; };
+		AF670AF8B9F1EB53EEAF349B /* HafaRemoteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F11E2A820EC89F7AD933554 /* HafaRemoteApp.swift */; };
+		D4C49D71FFB313E977E0A762 /* HafaRemoteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 470B5BF9F811323D35B6050E /* HafaRemoteTests.swift */; };
+		DB5A9E7AF0102E13F6C22521 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9C450D22C7D445E62710FF5D /* Foundation.framework */; };
+		F338C28FB5D32B11FAA6CD02 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D907E6B71E286A4EA2A187FA /* HomeView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		22AA0F6BC95F09E6D2149D2C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CC818B5E44F16785E01C3CD4 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C7F7ECCCCB0641A5E074A0B8;
+			remoteInfo = HafaRemote;
+		};
+		8555F17F49B129EB6815164D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CC818B5E44F16785E01C3CD4 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C7F7ECCCCB0641A5E074A0B8;
+			remoteInfo = HafaRemote;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		25EE7FE3555C6B4938A553CE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		2A939B24A7E535AB6DA1B6D7 /* HafaRemoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HafaRemoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		314331F56B7422E857B20532 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		38FA330C10AE07AC9E352C62 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		459EA73C20961A77BD5E1123 /* HafaRemoteTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HafaRemoteTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		470B5BF9F811323D35B6050E /* HafaRemoteTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HafaRemoteTests.swift; sourceTree = "<group>"; };
+		5F11E2A820EC89F7AD933554 /* HafaRemoteApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HafaRemoteApp.swift; path = App/HafaRemoteApp.swift; sourceTree = "<group>"; };
+		6027352C8DF125BE3FD89916 /* HafaRemote.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HafaRemote.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		621127FDEF5F6BE4013D7C65 /* HafaTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HafaTheme.swift; path = DesignSystem/HafaTheme.swift; sourceTree = "<group>"; };
+		9C450D22C7D445E62710FF5D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		BF2140DF03D411A6556C98D5 /* HafaRemoteUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HafaRemoteUITests.swift; sourceTree = "<group>"; };
+		D907E6B71E286A4EA2A187FA /* HomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeView.swift; path = Features/Home/HomeView.swift; sourceTree = "<group>"; };
+		EE6807FBFFE03076A21CC1B1 /* HafaRemote.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = HafaRemote.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		06227FB8A04581201C671B2B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9CABF29420764B69CE52ED09 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		56DE0147D9EC9D848A222782 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B5E4B64AE4B8C217F1BBE92 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F7DC02CD3FD8CAF67C395BE3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DB5A9E7AF0102E13F6C22521 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2CF6AD0EE094B893960FF0D4 /* HafaRemoteUITests */ = {
+			isa = PBXGroup;
+			children = (
+				BF2140DF03D411A6556C98D5 /* HafaRemoteUITests.swift */,
+			);
+			name = HafaRemoteUITests;
+			path = HafaRemoteUITests;
+			sourceTree = "<group>";
+		};
+		62C96688E60E0F3A754B9426 = {
+			isa = PBXGroup;
+			children = (
+				7C928A991764F83D53D78435 /* Products */,
+				E0279846EC80226126686A3D /* Frameworks */,
+				F2624935A3BB8084521F5294 /* HafaRemote */,
+				788EB1518D6036019F1270CC /* HafaRemoteTests */,
+				2CF6AD0EE094B893960FF0D4 /* HafaRemoteUITests */,
+			);
+			sourceTree = "<group>";
+		};
+		788EB1518D6036019F1270CC /* HafaRemoteTests */ = {
+			isa = PBXGroup;
+			children = (
+				470B5BF9F811323D35B6050E /* HafaRemoteTests.swift */,
+			);
+			name = HafaRemoteTests;
+			path = HafaRemoteTests;
+			sourceTree = "<group>";
+		};
+		7C928A991764F83D53D78435 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6027352C8DF125BE3FD89916 /* HafaRemote.app */,
+				459EA73C20961A77BD5E1123 /* HafaRemoteTests.xctest */,
+				2A939B24A7E535AB6DA1B6D7 /* HafaRemoteUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8C278492A67B0829A5B2722B /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				314331F56B7422E857B20532 /* Assets.xcassets */,
+				25EE7FE3555C6B4938A553CE /* PrivacyInfo.xcprivacy */,
+				38FA330C10AE07AC9E352C62 /* Info.plist */,
+				EE6807FBFFE03076A21CC1B1 /* HafaRemote.entitlements */,
+			);
+			name = Resources;
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		9B955847B7FAF1EC76F997AD /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				9C450D22C7D445E62710FF5D /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		E0279846EC80226126686A3D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				9B955847B7FAF1EC76F997AD /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		F2624935A3BB8084521F5294 /* HafaRemote */ = {
+			isa = PBXGroup;
+			children = (
+				5F11E2A820EC89F7AD933554 /* HafaRemoteApp.swift */,
+				621127FDEF5F6BE4013D7C65 /* HafaTheme.swift */,
+				D907E6B71E286A4EA2A187FA /* HomeView.swift */,
+				8C278492A67B0829A5B2722B /* Resources */,
+			);
+			name = HafaRemote;
+			path = HafaRemote;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AD9E80BF995450A4C26F0552 /* HafaRemoteTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D191DF54FC30F2B709ACB7B9 /* Build configuration list for PBXNativeTarget "HafaRemoteTests" */;
+			buildPhases = (
+				101924123B2AA9A12EFF6EEA /* Sources */,
+				F7DC02CD3FD8CAF67C395BE3 /* Frameworks */,
+				EC25420F683F8F2775FCAA4F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				FD6329F44CDACF3D7F7DEAC9 /* PBXTargetDependency */,
+			);
+			name = HafaRemoteTests;
+			productName = HafaRemoteTests;
+			productReference = 459EA73C20961A77BD5E1123 /* HafaRemoteTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		C7F7ECCCCB0641A5E074A0B8 /* HafaRemote */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CDFB64654951507570B5149B /* Build configuration list for PBXNativeTarget "HafaRemote" */;
+			buildPhases = (
+				D822003268461B8DA0932DFD /* Sources */,
+				56DE0147D9EC9D848A222782 /* Frameworks */,
+				54ACFC9984E08B95CFA2CA30 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HafaRemote;
+			productName = HafaRemote;
+			productReference = 6027352C8DF125BE3FD89916 /* HafaRemote.app */;
+			productType = "com.apple.product-type.application";
+		};
+		FA09C26D567DA024832990BA /* HafaRemoteUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B6C50CA4996A2731922E1720 /* Build configuration list for PBXNativeTarget "HafaRemoteUITests" */;
+			buildPhases = (
+				986ADE4489D93F44B04363BE /* Sources */,
+				06227FB8A04581201C671B2B /* Frameworks */,
+				D084CD3BDA283F286EBB73FF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BB9333B9780FAD0FDE0EB146 /* PBXTargetDependency */,
+			);
+			name = HafaRemoteUITests;
+			productName = HafaRemoteUITests;
+			productReference = 2A939B24A7E535AB6DA1B6D7 /* HafaRemoteUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		CC818B5E44F16785E01C3CD4 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					AD9E80BF995450A4C26F0552 = {
+						CreatedOnToolsVersion = 26.6;
+						DevelopmentTeam = 4T358A5S74;
+						ProvisioningStyle = Automatic;
+					};
+					C7F7ECCCCB0641A5E074A0B8 = {
+						CreatedOnToolsVersion = 26.6;
+						DevelopmentTeam = 4T358A5S74;
+						ProvisioningStyle = Automatic;
+					};
+					FA09C26D567DA024832990BA = {
+						CreatedOnToolsVersion = 26.6;
+						DevelopmentTeam = 4T358A5S74;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = FC357E50783E82B44C35ECAE /* Build configuration list for PBXProject "HafaRemote" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 62C96688E60E0F3A754B9426;
+			minimizedProjectReferenceProxies = 0;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 7C928A991764F83D53D78435 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C7F7ECCCCB0641A5E074A0B8 /* HafaRemote */,
+				AD9E80BF995450A4C26F0552 /* HafaRemoteTests */,
+				FA09C26D567DA024832990BA /* HafaRemoteUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		54ACFC9984E08B95CFA2CA30 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				76ECF14B14B88E8DEC927833 /* Assets.xcassets in Resources */,
+				850DB50EE3A8CCE0C6AAF339 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D084CD3BDA283F286EBB73FF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EC25420F683F8F2775FCAA4F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		101924123B2AA9A12EFF6EEA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D4C49D71FFB313E977E0A762 /* HafaRemoteTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		986ADE4489D93F44B04363BE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				506ABD859CC36FF3F83677FC /* HafaRemoteUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D822003268461B8DA0932DFD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AF670AF8B9F1EB53EEAF349B /* HafaRemoteApp.swift in Sources */,
+				6C519C628890A5AF91F135B9 /* HafaTheme.swift in Sources */,
+				F338C28FB5D32B11FAA6CD02 /* HomeView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BB9333B9780FAD0FDE0EB146 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = HafaRemote;
+			target = C7F7ECCCCB0641A5E074A0B8 /* HafaRemote */;
+			targetProxy = 8555F17F49B129EB6815164D /* PBXContainerItemProxy */;
+		};
+		FD6329F44CDACF3D7F7DEAC9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = HafaRemote;
+			target = C7F7ECCCCB0641A5E074A0B8 /* HafaRemote */;
+			targetProxy = 22AA0F6BC95F09E6D2149D2C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		197B971B2729416562AF958E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = HafaRemote/Resources/HafaRemote.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4T358A5S74;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HafaRemote/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote;
+				PRODUCT_MODULE_NAME = HafaRemote;
+				PRODUCT_NAME = "Hafa Remote";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		514876F4C3750B210F427744 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 4T358A5S74;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hafa Remote.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hafa Remote";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		55A48E9190A2A3E22C2BE091 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 4T358A5S74;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = HafaRemote;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		70DB6B1278C816DBF6A333C3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = HafaRemote/Resources/HafaRemote.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4T358A5S74;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HafaRemote/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote;
+				PRODUCT_MODULE_NAME = HafaRemote;
+				PRODUCT_NAME = "Hafa Remote";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		714E11E6E58C604E5876AD62 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		78AD9266EA5BECEED06EB641 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 4T358A5S74;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hafa Remote.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hafa Remote";
+			};
+			name = Debug;
+		};
+		DB81708844F78EEEDF1BCDA6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 4T358A5S74;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = HafaRemote;
+			};
+			name = Debug;
+		};
+		F03A7E669E1B483E5CBF3BD1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B6C50CA4996A2731922E1720 /* Build configuration list for PBXNativeTarget "HafaRemoteUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				55A48E9190A2A3E22C2BE091 /* Release */,
+				DB81708844F78EEEDF1BCDA6 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CDFB64654951507570B5149B /* Build configuration list for PBXNativeTarget "HafaRemote" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				197B971B2729416562AF958E /* Release */,
+				70DB6B1278C816DBF6A333C3 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D191DF54FC30F2B709ACB7B9 /* Build configuration list for PBXNativeTarget "HafaRemoteTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				514876F4C3750B210F427744 /* Release */,
+				78AD9266EA5BECEED06EB641 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FC357E50783E82B44C35ECAE /* Build configuration list for PBXProject "HafaRemote" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F03A7E669E1B483E5CBF3BD1 /* Debug */,
+				714E11E6E58C604E5876AD62 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = CC818B5E44F16785E01C3CD4 /* Project object */;
+}

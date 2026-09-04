@@ -6,6 +6,8 @@ xcuserdata/
 *.xccheckout
 *.moved-aside
 *.ipa
+*.xcarchive
+*.xcresult
 *.dSYM
 *.dSYM.zip
 

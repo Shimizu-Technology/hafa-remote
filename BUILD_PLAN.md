@@ -3,8 +3,8 @@
 
 **Version:** 0.1  
 **Last updated:** September 4, 2026  
-**Current status:** Planning complete; implementation not started  
-**Current execution frontier:** HR-001, followed by HR-002
+**Current status:** HR-001 implemented and awaiting review
+**Current execution frontier:** HR-001 review, followed by HR-002
 
 ## Delivery targets
 
@@ -34,13 +34,13 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** None
 
-- [ ] Create a private `hafa-remote` GitHub repository under Shimizu Technology.
-- [ ] Create the SwiftUI iPhone app, unit-test target, and UI-test target in the existing Shimizu Apple developer team.
-- [ ] Set product name to **Hafa Remote**, bundle ID to `com.ShimizuTechnology.HafaRemote`, Swift 6 language mode, and minimum iOS 18.0.
-- [ ] Add `AGENTS.md`, `README.md`, `PRD.md`, `BUILD_PLAN.md`, `.gitignore`, and `scripts/gate.sh`.
-- [ ] Make the gate compile the app for an explicit simulator destination, run unit/UI tests that do not require hardware, and reject committed secrets/debug leftovers.
-- [ ] Add CI that runs the same gate or equivalent build/test steps on pull requests.
-- [ ] Add build configurations for Debug and Release without secrets or environment files.
+- [x] Create a private `hafa-remote` GitHub repository under Shimizu Technology.
+- [x] Create the SwiftUI iPhone app, unit-test target, and UI-test target in the existing Shimizu Apple developer team.
+- [x] Set product name to **Hafa Remote**, bundle ID to `com.shimizutechnology.hafaremote`, Swift 6 language mode, and minimum iOS 18.0.
+- [x] Add `AGENTS.md`, `README.md`, `PRD.md`, `BUILD_PLAN.md`, `.gitignore`, and `scripts/gate.sh`.
+- [x] Make the gate compile the app for an explicit simulator destination, run unit/UI tests that do not require hardware, and reject committed secrets/debug leftovers.
+- [x] Add CI that runs the same gate or equivalent build/test steps on pull requests.
+- [x] Add build configurations for Debug and Release without secrets or environment files.
 
 **Acceptance evidence:** Clean checkout builds; the gate passes; the empty app launches in one owned simulator; no server or backend exists.
 
@@ -239,7 +239,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 - [ ] Verify Release logging and diagnostics redaction.
 - [ ] Exercise clean install, upgrade from the previous beta, data migration, forget/re-pair, and offline launch.
 - [ ] Review all dependency, privacy-manifest, entitlement, and Info.plist declarations against the actual binary.
-- [ ] Run Greptile review on the current PR head and resolve actionable findings before merge.
+- [ ] Run CodeRabbit review on the current PR head and resolve actionable findings before merge.
 
 **Acceptance evidence:** Release candidate archive installs through TestFlight, full gate passes, required checks are green, and the signed binary matches the documented privacy behavior.
 
@@ -294,7 +294,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 - [ ] App Privacy, privacy policy, diagnostics, and actual binary behavior agree.
 - [ ] Accessibility checks and supported-device screenshots are complete.
 - [ ] CI and `scripts/gate.sh` are green on the release commit.
-- [ ] Greptile has reviewed the current PR head with no unresolved actionable finding.
+- [ ] CodeRabbit has reviewed the current PR head with no unresolved actionable finding.
 - [ ] App Review notes and the support site document the hardware dependency and known limitations.
 - [ ] No P0/P1 defect remains.
 
