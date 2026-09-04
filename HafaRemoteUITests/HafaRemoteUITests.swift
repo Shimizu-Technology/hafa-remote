@@ -99,7 +99,33 @@ final class HafaRemoteUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(keyboard.isHittable)
-        XCTAssertFalse(keyboard.isEnabled)
+        XCTAssertTrue(keyboard.isEnabled)
+    }
+
+    /// Text entry uses the native keyboard and never claims the TV inserted the text.
+    @MainActor
+    func testKeyboardSendsValidatedTextWithHonestResult() throws {
+        let app = launchRemoteHarness()
+        let keyboard = app.buttons["remote-keyboard"]
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 2))
+        for _ in 0..<6 where !keyboard.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(keyboard.isHittable)
+        keyboard.tap()
+
+        let textField = app.descendants(matching: .any)["remoteTextField"]
+        XCTAssertTrue(textField.waitForExistence(timeout: 2))
+        textField.typeText("Hafa")
+
+        let send = app.buttons["sendRemoteTextButton"]
+        XCTAssertTrue(send.isEnabled)
+        send.tap()
+
+        let result = app.staticTexts["remoteTextResult"]
+        XCTAssertTrue(result.waitForExistence(timeout: 2))
+        XCTAssertTrue(result.label.contains("If nothing appeared"))
+        XCTAssertEqual(app.staticTexts["lastRemoteCommand"].label, "text:4")
     }
 
     /// Offline state disables commands while keeping recovery actions obvious and functional.
@@ -115,6 +141,13 @@ final class HafaRemoteUITests: XCTestCase {
         let powerOff = app.buttons["remote-powerOff"]
         XCTAssertTrue(powerOff.waitForExistence(timeout: 2))
         XCTAssertFalse(powerOff.isEnabled)
+
+        let keyboard = app.buttons["remote-keyboard"]
+        for _ in 0..<6 where !keyboard.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(keyboard.exists)
+        XCTAssertFalse(keyboard.isEnabled)
 
         let retry = app.buttons["retryConnectionButton"]
         XCTAssertTrue(retry.waitForExistence(timeout: 2))

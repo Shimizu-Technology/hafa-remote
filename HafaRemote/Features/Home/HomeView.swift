@@ -27,6 +27,8 @@ struct HomeView: View {
                     isConnected: session.canSendCommands
                 ) { command in
                     try? await session.send(command)
+                } textAction: { input in
+                    try await session.sendText(input)
                 } retry: {
                     await session.connect(to: tv.address.rawValue)
                 } showTVSetup: {

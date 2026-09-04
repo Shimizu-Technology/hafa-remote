@@ -127,6 +127,25 @@ actor SamsungCommandTransport: SamsungTransporting {
         }
     }
 
+    func sendText(_ input: RemoteTextInput) async throws {
+        guard let webSocket else {
+            throw SamsungConnectionError.notConnected
+        }
+        let messages = try SamsungProtocolCodec.textMessages(for: input)
+        do {
+            try await commandSerializer.perform {
+                for message in messages {
+                    try Task.checkCancellation()
+                    try await webSocket.send(message)
+                }
+            }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw SamsungConnectionError.unavailable
+        }
+    }
+
     func disconnect() {
         disconnectCurrentSocket()
     }

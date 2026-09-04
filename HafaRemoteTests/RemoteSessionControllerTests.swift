@@ -455,6 +455,30 @@ struct RemoteSessionControllerTests {
         #expect(await driver.maximumActiveConnectionCount == 1)
     }
 
+    @Test("Connected sessions forward validated text without exposing its contents")
+    func connectedSessionSendsText() async throws {
+        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false)]
+        )
+        let session = RemoteSessionController(driver: driver)
+        await session.connect(to: tv.address.rawValue)
+
+        try await session.sendText(RemoteTextInput("Håfa"))
+
+        #expect(await driver.sentTextCharacterCounts == [4])
+        #expect(await session.state == .connected(tv))
+    }
+
+    @Test("Text input is rejected when the TV is offline")
+    func offlineSessionRejectsText() async throws {
+        let session = RemoteSessionController(driver: MockRemoteSessionDriver(outcomes: []))
+
+        await #expect(throws: RemoteSessionControllerError.notConnected) {
+            try await session.sendText(RemoteTextInput("Håfa"))
+        }
+    }
+
     @Test("Denied pairing is distinct from an offline TV")
     func deniedPairingHasDedicatedState() async {
         let driver = MockRemoteSessionDriver(outcomes: [.failure(.denied)])
@@ -912,6 +936,7 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
     private(set) var activeConnectionCount = 0
     private(set) var maximumActiveConnectionCount = 0
     private(set) var forgottenAddresses: [String] = []
+    private(set) var sentTextCharacterCounts: [Int] = []
 
     init(outcomes: [MockConnectionOutcome]) {
         self.outcomes = outcomes
@@ -946,6 +971,10 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
     }
 
     func send(_ command: RemoteCommand) async throws {}
+
+    func sendText(_ input: RemoteTextInput) async throws {
+        sentTextCharacterCounts.append(input.value.count)
+    }
 
     func forget(addressText: String) async throws {
         forgottenAddresses.append(addressText)

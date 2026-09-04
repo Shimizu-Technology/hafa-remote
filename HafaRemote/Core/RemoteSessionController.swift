@@ -132,13 +132,28 @@ actor RemoteSessionController {
     }
 
     func send(_ command: RemoteCommand) async throws {
+        let driver = driver
+        try await performSend {
+            try await driver.send(command)
+        }
+    }
+
+    func sendText(_ input: RemoteTextInput) async throws {
+        let driver = driver
+        try await performSend {
+            try await driver.sendText(input)
+        }
+    }
+
+    private func performSend(
+        _ operation: @escaping @Sendable () async throws -> Void
+    ) async throws {
         guard case .connected = state else {
             throw RemoteSessionControllerError.notConnected
         }
 
         let commandID = UUID()
         let commandGeneration = generation
-        let driver = driver
         let commandSerializer = commandSerializer
         let clock = clock
         let timeout = configuration.commandTimeout
@@ -149,7 +164,7 @@ actor RemoteSessionController {
                 clock: clock
             ) {
                 try await commandSerializer.perform {
-                    try await driver.send(command)
+                    try await operation()
                 }
             }
         }

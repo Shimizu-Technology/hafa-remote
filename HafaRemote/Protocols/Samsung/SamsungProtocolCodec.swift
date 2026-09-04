@@ -55,6 +55,33 @@ enum SamsungProtocolCodec {
         return .string(text)
     }
 
+    /// Encodes one complete Samsung IME transaction without retaining the text.
+    static func textMessages(for input: RemoteTextInput) throws -> [URLSessionWebSocketTask.Message] {
+        let inputRequest = SamsungTextInputRequest(
+            method: "ms.remote.control",
+            params: .init(
+                command: Data(input.value.utf8).base64EncodedString(),
+                data: "base64",
+                remoteType: "SendInputString"
+            )
+        )
+        let endRequest = SamsungTextInputEndRequest(
+            method: "ms.remote.control",
+            params: .init(remoteType: "SendInputEnd")
+        )
+        return try [encodeTextRequest(inputRequest), encodeTextRequest(endRequest)]
+    }
+
+    private static func encodeTextRequest<Request: Encodable>(
+        _ request: Request
+    ) throws -> URLSessionWebSocketTask.Message {
+        let data = try JSONEncoder().encode(request)
+        guard let text = String(data: data, encoding: .utf8) else {
+            throw SamsungProtocolError.invalidCommandEncoding
+        }
+        return .string(text)
+    }
+
     static func event(from message: URLSessionWebSocketTask.Message) throws -> SamsungConnectionEvent {
         let data: Data
         switch message {
@@ -83,6 +110,36 @@ enum SamsungProtocolCodec {
             return .unauthorized
         default:
             return .ignored
+        }
+    }
+}
+
+private struct SamsungTextInputRequest: Encodable {
+    let method: String
+    let params: Parameters
+
+    struct Parameters: Encodable {
+        let command: String
+        let data: String
+        let remoteType: String
+
+        enum CodingKeys: String, CodingKey {
+            case command = "Cmd"
+            case data = "DataOfCmd"
+            case remoteType = "TypeOfRemote"
+        }
+    }
+}
+
+private struct SamsungTextInputEndRequest: Encodable {
+    let method: String
+    let params: Parameters
+
+    struct Parameters: Encodable {
+        let remoteType: String
+
+        enum CodingKeys: String, CodingKey {
+            case remoteType = "TypeOfRemote"
         }
     }
 }

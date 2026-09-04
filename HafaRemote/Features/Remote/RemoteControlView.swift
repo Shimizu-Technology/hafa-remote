@@ -9,10 +9,12 @@ struct RemoteControlView: View {
     let statusLabel: String
     let isConnected: Bool
     let action: @MainActor @Sendable (RemoteCommand) async -> Void
+    let textAction: @MainActor @Sendable (RemoteTextInput) async throws -> Void
     let retry: @MainActor @Sendable () async -> Void
     let showTVSetup: @MainActor @Sendable () -> Void
 
     @State private var isConfirmingPowerOff = false
+    @State private var isShowingKeyboard = false
 
     var body: some View {
         ZStack {
@@ -58,6 +60,13 @@ struct RemoteControlView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Power on is available only after wake support is verified for this TV.")
+        }
+        .sheet(isPresented: $isShowingKeyboard) {
+            SamsungTextInputSheet(
+                tvName: tvName,
+                isConnected: isConnected,
+                send: textAction
+            )
         }
     }
 
@@ -267,6 +276,7 @@ struct RemoteControlView: View {
 
     private var keyboardControl: some View {
         Button {
+            isShowingKeyboard = true
         } label: {
             Label("Keyboard", systemImage: "keyboard")
                 .font(.headline)
@@ -274,9 +284,9 @@ struct RemoteControlView: View {
                 .frame(minHeight: 50)
         }
         .buttonStyle(.bordered)
-        .tint(HafaTheme.secondaryText)
-        .disabled(true)
-        .accessibilityHint("Text entry becomes available after this TV's keyboard support is verified.")
+        .tint(HafaTheme.accent)
+        .disabled(!isConnected)
+        .accessibilityHint("Opens text entry. Focus a text field on the TV first.")
         .accessibilityIdentifier("remote-keyboard")
     }
 
@@ -363,6 +373,8 @@ struct RemoteControlView: View {
                     isConnected: isConnected
                 ) { command in
                     lastCommand = command.rawValue
+                } textAction: { input in
+                    lastCommand = "text:\(input.value.count)"
                 } retry: {
                     lastCommand = "retry"
                 } showTVSetup: {
@@ -382,3 +394,114 @@ struct RemoteControlView: View {
         }
     }
 #endif
+
+private struct SamsungTextInputSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let tvName: String
+    let isConnected: Bool
+    let send: @MainActor @Sendable (RemoteTextInput) async throws -> Void
+
+    @State private var text = ""
+    @State private var isSending = false
+    @State private var resultMessage: String?
+    @FocusState private var isTextFieldFocused: Bool
+
+    private var validatedInput: RemoteTextInput? {
+        try? RemoteTextInput(text)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Text to send", text: $text, axis: .vertical)
+                        .lineLimit(2...5)
+                        .focused($isTextFieldFocused)
+                        .textInputAutocapitalization(.sentences)
+                        .autocorrectionDisabled(false)
+                        .onChange(of: text) { _, newValue in
+                            if newValue.count > RemoteTextInput.maximumCharacterCount {
+                                text = String(newValue.prefix(RemoteTextInput.maximumCharacterCount))
+                            }
+                            resultMessage = nil
+                        }
+                        .accessibilityIdentifier("remoteTextField")
+
+                    Text("\(text.count) / \(RemoteTextInput.maximumCharacterCount)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .accessibilityLabel(
+                            "\(text.count) of \(RemoteTextInput.maximumCharacterCount) characters")
+                } header: {
+                    Text("Send to \(tvName)")
+                } footer: {
+                    Text(
+                        "Open a text field on the TV first. Some apps and secure screens do not accept remote text."
+                    )
+                }
+
+                if let resultMessage {
+                    Section {
+                        Label(resultMessage, systemImage: "info.circle")
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("remoteTextResult")
+                    }
+                }
+
+                Section {
+                    Button {
+                        sendText()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if isSending {
+                                ProgressView()
+                            } else {
+                                Text("Send Text")
+                                    .fontWeight(.semibold)
+                            }
+                            Spacer()
+                        }
+                    }
+                    .disabled(validatedInput == nil || !isConnected || isSending)
+                    .accessibilityIdentifier("sendRemoteTextButton")
+                }
+            }
+            .navigationTitle("TV Keyboard")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .task {
+                isTextFieldFocused = true
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func sendText() {
+        guard let input = validatedInput, isConnected else { return }
+        isSending = true
+        resultMessage = nil
+        Task { @MainActor in
+            defer { isSending = false }
+            do {
+                try await send(input)
+                resultMessage =
+                    "Sent to the TV. If nothing appeared, that TV screen does not accept remote text."
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            } catch is CancellationError {
+                return
+            } catch {
+                resultMessage = "Text was not sent. Check the TV connection and try again."
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
+        }
+    }
+}

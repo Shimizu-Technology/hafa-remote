@@ -4,6 +4,49 @@ import Testing
 @testable import HafaRemote
 
 struct SamsungProtocolCodecTests {
+    @Test("Text input validates length and redacts its description")
+    func validatesAndRedactsTextInput() throws {
+        let secret = "synthetic private search"
+        let input = try RemoteTextInput(secret)
+
+        #expect(input.value == secret)
+        #expect(!String(describing: input).contains(secret))
+        #expect(throws: RemoteTextInputError.invalidText) {
+            try RemoteTextInput("")
+        }
+        #expect(throws: RemoteTextInputError.invalidText) {
+            try RemoteTextInput(String(repeating: "a", count: 257))
+        }
+        #expect(throws: RemoteTextInputError.invalidText) {
+            try RemoteTextInput("unsafe\ntext")
+        }
+    }
+
+    @Test("Text input is base64 encoded and ends as one serialized IME transaction")
+    func encodesTextInputTransaction() throws {
+        let input = try RemoteTextInput("Håfa 🌴")
+        let messages = try SamsungProtocolCodec.textMessages(for: input)
+
+        #expect(messages.count == 2)
+        let objects = try messages.map { message -> [String: Any] in
+            guard case .string(let text) = message else {
+                throw SamsungProtocolError.invalidCommandEncoding
+            }
+            return try #require(
+                JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any]
+            )
+        }
+        let inputParams = try #require(objects[0]["params"] as? [String: String])
+        let endParams = try #require(objects[1]["params"] as? [String: String])
+
+        #expect(objects[0]["method"] as? String == "ms.remote.control")
+        #expect(inputParams["Cmd"] == Data(input.value.utf8).base64EncodedString())
+        #expect(inputParams["DataOfCmd"] == "base64")
+        #expect(inputParams["TypeOfRemote"] == "SendInputString")
+        #expect(objects[1]["method"] as? String == "ms.remote.control")
+        #expect(endParams == ["TypeOfRemote": "SendInputEnd"])
+    }
+
     @Test("Every semantic control maps to exactly one reviewed Samsung key")
     func encodesReviewedCommandAllowlist() throws {
         let mappings: [(RemoteCommand, String)] = [
