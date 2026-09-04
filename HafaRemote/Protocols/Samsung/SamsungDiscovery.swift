@@ -64,10 +64,6 @@ final class SamsungDiscoveryStore {
         televisions = []
         state = .searching
 
-        backend.start { [weak self] event in
-            self?.receive(event)
-        }
-
         timeoutTask = Task { [weak self, searchDuration] in
             do {
                 try await Task.sleep(for: searchDuration)
@@ -76,6 +72,10 @@ final class SamsungDiscoveryStore {
             }
             guard !Task.isCancelled else { return }
             self?.finishSearch()
+        }
+
+        backend.start { [weak self] event in
+            self?.receive(event)
         }
     }
 
@@ -169,13 +169,18 @@ struct SamsungBonjourMetadata: Equatable, Sendable {
 /// candidate through the same local device-information endpoint used for pairing.
 @MainActor
 final class SamsungBonjourDiscoveryBackend: NSObject, SamsungDiscoveryBackend {
+    private struct ValidationOperation {
+        let id: UUID
+        let task: Task<Void, Never>
+    }
+
     private static let serviceType = "_samsungmsf._tcp."
     private static let policyDeniedErrorCode = -72_008
 
     private let deviceInfoProvider: any SamsungDeviceInfoProviding
     private var browser: NetServiceBrowser?
     private var services: [ObjectIdentifier: NetService] = [:]
-    private var validationTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
+    private var validationTasks: [ObjectIdentifier: ValidationOperation] = [:]
     private var eventHandler: (@MainActor @Sendable (SamsungDiscoveryBackendEvent) -> Void)?
 
     init(deviceInfoProvider: any SamsungDeviceInfoProviding = SamsungDeviceInfoClient()) {
@@ -205,8 +210,8 @@ final class SamsungBonjourDiscoveryBackend: NSObject, SamsungDiscoveryBackend {
         }
         services.removeAll()
 
-        for task in validationTasks.values {
-            task.cancel()
+        for operation in validationTasks.values {
+            operation.task.cancel()
         }
         validationTasks.removeAll()
         eventHandler = nil
@@ -225,11 +230,14 @@ final class SamsungBonjourDiscoveryBackend: NSObject, SamsungDiscoveryBackend {
             return
         }
 
-        validationTasks[serviceID]?.cancel()
-        validationTasks[serviceID] = Task { [weak self, deviceInfoProvider] in
+        validationTasks[serviceID]?.task.cancel()
+        let operationID = UUID()
+        let task = Task { [weak self, deviceInfoProvider] in
             defer {
-                self?.validationTasks[serviceID] = nil
-                self?.services[serviceID] = nil
+                if self?.validationTasks[serviceID]?.id == operationID {
+                    self?.validationTasks[serviceID] = nil
+                    self?.services[serviceID] = nil
+                }
             }
 
             do {
@@ -252,12 +260,16 @@ final class SamsungBonjourDiscoveryBackend: NSObject, SamsungDiscoveryBackend {
                 // or unsupported devices are omitted without exposing details.
             }
         }
+        validationTasks[serviceID] = ValidationOperation(id: operationID, task: task)
     }
 
     private static func privateIPv4Address(from service: NetService) -> PrivateIPv4Address? {
         for addressData in service.addresses ?? [] {
             let rawAddress: String? = addressData.withUnsafeBytes { buffer in
-                guard let baseAddress = buffer.baseAddress else { return nil }
+                guard
+                    let baseAddress = buffer.baseAddress,
+                    buffer.count >= MemoryLayout<sockaddr_in>.size
+                else { return nil }
                 let socketAddress = baseAddress.assumingMemoryBound(to: sockaddr.self)
                 guard Int32(socketAddress.pointee.sa_family) == AF_INET else { return nil }
 

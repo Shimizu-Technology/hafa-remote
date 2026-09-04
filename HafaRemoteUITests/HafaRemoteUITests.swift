@@ -49,10 +49,14 @@ final class HafaRemoteUITests: XCTestCase {
         app.launchArguments.append("-ui-testing-discovery-empty")
         app.launch()
 
-        app.buttons["addSamsungTVButton"].tap()
+        let addButton = app.buttons["addSamsungTVButton"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+        addButton.tap()
 
         XCTAssertTrue(app.staticTexts["No Samsung TVs found"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.buttons["scanAgainButton"].isHittable)
+        let scanAgain = app.buttons["scanAgainButton"]
+        XCTAssertTrue(scanAgain.waitForExistence(timeout: 2))
+        XCTAssertTrue(scanAgain.isHittable)
 
         let manualSetup = app.buttons["manualSetupButton"]
         XCTAssertTrue(manualSetup.waitForExistence(timeout: 2))
@@ -88,7 +92,7 @@ final class HafaRemoteUITests: XCTestCase {
             addButton.tap()
 
             // XCTest invokes interruption monitors on the next interaction if iOS presents a prompt.
-            app.tap()
+            app.navigationBars["Add Samsung TV"].tap()
 
             let discoveredTV = app.buttons["discoveredTVButton"]
             XCTAssertTrue(

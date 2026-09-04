@@ -4,6 +4,7 @@ import UIKit
 struct SamsungSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @State private var discovery: SamsungDiscoveryStore
     @State private var address = ""
     @State private var selectedTV: DiscoveredSamsungTV?
@@ -12,6 +13,7 @@ struct SamsungSetupView: View {
     @State private var connectionTaskID: UUID?
     @State private var connectionTask: Task<Void, Never>?
     @State private var repairTaskID: UUID?
+    @State private var recoveryTask: Task<Void, Never>?
     @State private var repairTask: Task<Void, Never>?
     let session: RemoteSessionStore
 
@@ -53,6 +55,8 @@ struct SamsungSetupView: View {
                 connectionTask?.cancel()
                 connectionTask = nil
                 repairTaskID = nil
+                recoveryTask?.cancel()
+                recoveryTask = nil
                 repairTask?.cancel()
                 repairTask = nil
                 guard !session.canSendCommands else { return }
@@ -64,6 +68,12 @@ struct SamsungSetupView: View {
                 if let announcement = discoveryAnnouncement(for: state) {
                     UIAccessibility.post(notification: .announcement, argument: announcement)
                 }
+            }
+            .onChange(of: discovery.televisions.count) { _, count in
+                guard count > 0 else { return }
+                let announcement =
+                    count == 1 ? "Found one Samsung TV." : "Found \(count) Samsung TVs."
+                UIAccessibility.post(notification: .announcement, argument: announcement)
             }
             .onChange(of: session.state) { _, state in
                 preparePairingRepairIfNeeded(for: state)
@@ -260,8 +270,12 @@ struct SamsungSetupView: View {
     private var manualSetupSection: some View {
         Section {
             Button {
-                withAnimation {
+                if accessibilityReduceMotion {
                     isShowingManualSetup.toggle()
+                } else {
+                    withAnimation {
+                        isShowingManualSetup.toggle()
+                    }
                 }
             } label: {
                 HStack {
@@ -404,9 +418,12 @@ struct SamsungSetupView: View {
 
                 Button("Find TVs Again", systemImage: "arrow.clockwise") {
                     connectionTask?.cancel()
-                    Task {
+                    recoveryTask?.cancel()
+                    recoveryTask = Task {
                         await session.disconnect(clearRememberedTV: false)
+                        guard !Task.isCancelled else { return }
                         discovery.start()
+                        recoveryTask = nil
                     }
                 }
             }
@@ -433,16 +450,13 @@ struct SamsungSetupView: View {
 
     private func discoveryAnnouncement(for state: SamsungDiscoveryState) -> String? {
         switch state {
-        case .results:
-            let count = discovery.televisions.count
-            return count == 1 ? "Found one Samsung TV." : "Found \(count) Samsung TVs."
         case .noResults:
             return "No Samsung TVs were found."
         case .permissionDenied:
             return "Local Network access is off."
         case .failed:
             return "TV search stopped."
-        case .idle, .searching:
+        case .idle, .searching, .results:
             return nil
         }
     }

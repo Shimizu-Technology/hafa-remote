@@ -103,8 +103,8 @@ if [[ "$local_network_copy" != *"Samsung TVs"* ]]; then
   exit 1
 fi
 
-bonjour_services="$(plutil -extract NSBonjourServices json -o - "$info_plist" | ruby -rjson -e 'puts JSON.parse(STDIN.read).join(",")')"
-if [[ "$bonjour_services" != "_samsungmsf._tcp" ]]; then
+bonjour_services="$(plutil -extract NSBonjourServices json -o - "$info_plist")"
+if [[ "$bonjour_services" != '["_samsungmsf._tcp"]' ]]; then
   echo "Bonjour declarations must contain only Samsung TV discovery." >&2
   exit 1
 fi

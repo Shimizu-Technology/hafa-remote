@@ -46,7 +46,7 @@ struct SamsungDiscoveryTests {
             address: try PrivateIPv4Address("192.168.10.21")
         )
         let backend = DiscoveryBackendSpy(events: [.found(first), .found(moved), .finished])
-        let store = SamsungDiscoveryStore(backend: backend)
+        let store = SamsungDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
 
         store.start()
 
@@ -60,7 +60,7 @@ struct SamsungDiscoveryTests {
     @Test("A completed search with no verified TVs has a useful empty state")
     func representsNoResults() {
         let backend = DiscoveryBackendSpy(events: [.finished])
-        let store = SamsungDiscoveryStore(backend: backend)
+        let store = SamsungDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
 
         store.start()
 
@@ -70,14 +70,44 @@ struct SamsungDiscoveryTests {
 
     @MainActor
     @Test("Local-network policy denial remains distinct from a generic discovery failure")
-    func representsPermissionDenial() {
+    func representsPermissionDenial() async {
         let backend = DiscoveryBackendSpy(events: [.permissionDenied])
-        let store = SamsungDiscoveryStore(backend: backend)
+        let store = SamsungDiscoveryStore(backend: backend, searchDuration: .milliseconds(10))
 
         store.start()
+        try? await Task.sleep(for: .milliseconds(20))
 
         #expect(store.state == .permissionDenied)
         #expect(store.televisions.isEmpty)
+    }
+
+    @MainActor
+    @Test("Stopping discovery cancels its backend and timeout")
+    func stopCancelsSearch() async {
+        let backend = DiscoveryBackendSpy(events: [])
+        let store = SamsungDiscoveryStore(backend: backend, searchDuration: .milliseconds(10))
+
+        store.start()
+        store.stop()
+        try? await Task.sleep(for: .milliseconds(20))
+
+        #expect(backend.stopCount >= 2)
+        #expect(store.state == .idle)
+        #expect(store.televisions.isEmpty)
+    }
+
+    @Test("A discovered TV never describes its network address")
+    func redactsAddressInDescriptions() throws {
+        let television = DiscoveredSamsungTV(
+            reportedIdentifier: "same-tv",
+            displayName: "Living Room TV",
+            modelName: "Samsung Q70A",
+            address: try PrivateIPv4Address("192.168.10.20")
+        )
+
+        #expect(television.description == "DiscoveredSamsungTV(redacted)")
+        #expect(!television.description.contains(television.address.rawValue))
+        #expect(!television.debugDescription.contains(television.address.rawValue))
     }
 }
 
