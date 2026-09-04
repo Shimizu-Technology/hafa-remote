@@ -28,17 +28,17 @@ fingerprints, Wi-Fi names, or typed private content.
 - [ ] Volume up/down and mute
 - [ ] Play/pause, rewind, and fast-forward
 - [ ] Power-off confirmation and command
-- [ ] Fifty mixed commands without a crash, stuck repeat, or lost session
+- [ ] Fifty mixed commands without a crash, stuck repeat, duplicated command, or lost session
 - Notes:
 
 ## HR-005 lifecycle
 
 - [ ] Ten background/lock cycles completed
 - Healthy reconnects within two seconds: __ / 10 (10 / 10 required; any lower result blocks release)
-- [ ] TV restart recovery
-- [ ] App force-quit/relaunch recovery
-- [ ] Wi-Fi loss and recovery
-- [ ] Pairing-token invalidation and repair
+- [ ] TV restart recovery without manual re-pairing
+- [ ] App force-quit/relaunch recovery without manual re-pairing
+- [ ] Wi-Fi loss and recovery without losing the saved pairing token
+- [ ] Pairing-token invalidation rejects the old token and completes re-pairing
 - Notes:
 
 ## HR-006 text and power truth
@@ -46,6 +46,7 @@ fingerprints, Wi-Fi names, or typed private content.
 - [ ] Text sent into a normal TV search field.
 - [ ] A screen that ignores remote text was explained honestly.
 - [ ] Text was not echoed into logs, screenshots, or diagnostics.
+- [ ] Pairing tokens, network identifiers, and certificate fingerprints are absent from ordinary app logs.
 - [x] Power on remains unavailable in this build.
 - [x] No MAC address is collected while Wake-on-LAN is unavailable.
 - [x] No multicast entitlement or broadcast sender is included.
@@ -56,4 +57,5 @@ fingerprints, Wi-Fi names, or typed private content.
 
 - Decision: Pending physical evidence
 - Open P0/P1 defects:
+- Go is allowed only when every required check passes, physical evidence is complete, and Open P0/P1 defects is `None`.
 - Tester:

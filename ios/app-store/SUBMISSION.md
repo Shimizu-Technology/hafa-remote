@@ -16,9 +16,8 @@
 - Export compliance: No non-exempt encryption
 
 The localized metadata in `en-US/` is the checked-in source of truth. The support,
-marketing, and privacy URLs are reserved paths and must be published and verified
-before public App Review. They do not block a private development build or an
-internal TestFlight upload.
+marketing, and privacy URLs are published at their checked-in production paths.
+Verify those exact endpoints again before every public App Review submission.
 
 ## App privacy
 
