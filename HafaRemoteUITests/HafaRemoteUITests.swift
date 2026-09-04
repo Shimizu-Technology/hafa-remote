@@ -112,7 +112,9 @@ final class HafaRemoteUITests: XCTestCase {
         let select = app.buttons["remote-select"]
         XCTAssertTrue(select.waitForExistence(timeout: 5))
         XCTAssertFalse(select.isEnabled)
-        XCTAssertFalse(app.buttons["remote-powerOff"].isEnabled)
+        let powerOff = app.buttons["remote-powerOff"]
+        XCTAssertTrue(powerOff.waitForExistence(timeout: 2))
+        XCTAssertFalse(powerOff.isEnabled)
 
         let retry = app.buttons["retryConnectionButton"]
         XCTAssertTrue(retry.exists)
