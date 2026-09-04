@@ -21,6 +21,31 @@ struct RemoteSessionControllerTests {
         #expect(store.canSendCommands)
     }
 
+    @MainActor
+    @Test("The observable store clears its remembered TV on disconnect and forget")
+    func storeClearsRememberedTV() async throws {
+        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let driver = MockRemoteSessionDriver(
+            outcomes: [
+                .success(tv: tv, announcesPairing: false),
+                .success(tv: tv, announcesPairing: false),
+            ]
+        )
+        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+
+        await store.connect(to: tv.address.rawValue)
+        await waitUntil { @MainActor in store.state == .connected(tv) }
+        await store.disconnect()
+        await waitUntil { @MainActor in store.state == .idle }
+        #expect(store.lastConnectedTV == nil)
+
+        await store.connect(to: tv.address.rawValue)
+        await waitUntil { @MainActor in store.state == .connected(tv) }
+        try await store.forgetPairing(for: tv.address.rawValue)
+        await waitUntil { @MainActor in store.state == .idle }
+        #expect(store.lastConnectedTV == nil)
+    }
+
     @Test("Forgetting pairing clears the session before removing its credential")
     func forgetPairingClearsSession() async throws {
         let driver = MockRemoteSessionDriver(outcomes: [.failure(.denied)])
@@ -62,6 +87,56 @@ struct RemoteSessionControllerTests {
             #expect(error is SyntheticForgetError)
         }
         #expect(await session.state == .failed(.unexpected))
+    }
+
+    @Test("A later connection waits for pairing removal to finish")
+    func connectionIsSerializedAfterPairingRemoval() async throws {
+        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let driver = SuspendedForgetRemoteSessionDriver(tv: tv)
+        let session = RemoteSessionController(driver: driver)
+        await session.connect(to: tv.address.rawValue)
+        var starts = driver.forgetStarts.makeAsyncIterator()
+
+        let forgetting = Task {
+            try await session.forgetPairing(for: tv.address.rawValue)
+        }
+        _ = await starts.next()
+        let reconnecting = Task {
+            await session.connect(to: tv.address.rawValue)
+        }
+        await Task.yield()
+
+        #expect(await driver.connectCallCount == 1)
+        await driver.completeForget()
+        try await forgetting.value
+        await reconnecting.value
+        #expect(await driver.connectCallCount == 2)
+        #expect(await session.state == .connected(tv))
+    }
+
+    @Test("Cancelling pairing removal releases a waiting connection without stale failure")
+    func cancelledPairingRemovalAllowsRecovery() async throws {
+        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let driver = SuspendedForgetRemoteSessionDriver(tv: tv)
+        let session = RemoteSessionController(driver: driver)
+        await session.connect(to: tv.address.rawValue)
+        var starts = driver.forgetStarts.makeAsyncIterator()
+
+        let forgetting = Task {
+            try await session.forgetPairing(for: tv.address.rawValue)
+        }
+        _ = await starts.next()
+        let reconnecting = Task {
+            await session.connect(to: tv.address.rawValue)
+        }
+        forgetting.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            try await forgetting.value
+        }
+        await reconnecting.value
+        #expect(await driver.cancelledForgetCount == 1)
+        #expect(await session.state == .connected(tv))
     }
 
     @Test("A first connection publishes connecting, pairing, and connected states")
@@ -537,7 +612,9 @@ private actor SuspendedForgetRemoteSessionDriver: RemoteSessionDriving {
     nonisolated let forgetStarts: AsyncStream<Void>
     private let forgetStartsContinuation: AsyncStream<Void>.Continuation
     private let tv: PairedSamsungTV
-    private var forgetContinuation: CheckedContinuation<Void, Never>?
+    private var forgetContinuation: CheckedContinuation<Void, Error>?
+    private(set) var connectCallCount = 0
+    private(set) var cancelledForgetCount = 0
 
     init(tv: PairedSamsungTV) {
         self.tv = tv
@@ -550,24 +627,44 @@ private actor SuspendedForgetRemoteSessionDriver: RemoteSessionDriving {
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV {
-        tv
+        connectCallCount += 1
+        return tv
     }
 
     func send(_ command: RemoteCommand) async throws {}
 
     func forget(addressText: String) async throws {
         forgetStartsContinuation.yield()
-        await withCheckedContinuation { continuation in
-            forgetContinuation = continuation
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                forgetContinuation = continuation
+            }
+        } onCancel: { [weak self] in
+            Task {
+                await self?.cancelForget()
+            }
         }
-        throw SyntheticForgetError.failed
     }
 
     func disconnect() {}
 
     func failForget() {
+        forgetContinuation?.resume(throwing: SyntheticForgetError.failed)
+        forgetContinuation = nil
+        forgetStartsContinuation.finish()
+    }
+
+    func completeForget() {
         forgetContinuation?.resume()
         forgetContinuation = nil
+        forgetStartsContinuation.finish()
+    }
+
+    private func cancelForget() {
+        guard let forgetContinuation else { return }
+        self.forgetContinuation = nil
+        cancelledForgetCount += 1
+        forgetContinuation.resume(throwing: CancellationError())
         forgetStartsContinuation.finish()
     }
 }

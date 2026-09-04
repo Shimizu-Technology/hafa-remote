@@ -121,6 +121,8 @@ struct HomeView: View {
             "Offline"
         case .denied:
             "Approval denied"
+        case .savedPairingRejected:
+            "Pairing expired"
         case .certificateChanged:
             "Pairing changed"
         case .unsupported:

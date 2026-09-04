@@ -5,6 +5,7 @@ struct SamsungSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var address = ""
     @State private var isForgettingPairing = false
+    @State private var repairTask: Task<Void, Never>?
     let session: RemoteSessionStore
 
     var body: some View {
@@ -51,8 +52,10 @@ struct SamsungSetupView: View {
 
                     if canForgetPairing {
                         Button("Forget Saved Pairing and Retry", role: .destructive) {
-                            Task {
+                            repairTask?.cancel()
+                            repairTask = Task {
                                 await forgetAndRetry()
+                                repairTask = nil
                             }
                         }
                         .disabled(isForgettingPairing)
@@ -70,6 +73,8 @@ struct SamsungSetupView: View {
                 }
             }
             .onDisappear {
+                repairTask?.cancel()
+                repairTask = nil
                 guard !session.canSendCommands else { return }
                 Task {
                     await session.disconnect()
@@ -114,7 +119,10 @@ struct SamsungSetupView: View {
         case .offline:
             errorSection("The TV is unavailable. Make sure it is on and connected to the same Wi-Fi.")
         case .denied:
-            errorSection("The TV did not approve Hafa Remote. Remove the saved pairing and approve it again.")
+            errorSection("The TV did not approve Hafa Remote. Try again and choose Allow on the TV.")
+        case .savedPairingRejected:
+            errorSection(
+                "The TV no longer accepts its saved pairing. Remove it and approve Hafa Remote again.")
         case .certificateChanged:
             errorSection("The TV's security identity changed. Remove the saved pairing before reconnecting.")
         case .unsupported:
@@ -135,7 +143,7 @@ struct SamsungSetupView: View {
 
     private var canForgetPairing: Bool {
         switch session.state {
-        case .denied, .certificateChanged, .failed:
+        case .savedPairingRejected, .certificateChanged:
             !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         default:
             false
@@ -156,7 +164,10 @@ struct SamsungSetupView: View {
         defer { isForgettingPairing = false }
         do {
             try await session.forgetPairing(for: address)
+            try Task.checkCancellation()
             await session.connect(to: address)
+        } catch is CancellationError {
+            return
         } catch {
             UIAccessibility.post(
                 notification: .announcement,
@@ -173,6 +184,8 @@ struct SamsungSetupView: View {
             "Connected to \(tv.modelName)."
         case .denied:
             "The TV did not approve Hafa Remote."
+        case .savedPairingRejected:
+            "The TV no longer accepts its saved pairing. Remove it before reconnecting."
         case .certificateChanged:
             "The TV's security identity changed. Remove the saved pairing before reconnecting."
         case .unsupported:

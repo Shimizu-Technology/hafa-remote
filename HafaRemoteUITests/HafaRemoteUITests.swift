@@ -40,10 +40,11 @@ final class HafaRemoteUITests: XCTestCase {
         ]
         for command in requiredCommands {
             let button = app.buttons["remote-\(command)"]
-            if !button.exists {
+            XCTAssertTrue(button.waitForExistence(timeout: 2), "Missing \(command) control")
+            for _ in 0..<6 where !button.isHittable {
                 app.swipeUp()
             }
-            XCTAssertTrue(button.waitForExistence(timeout: 2), "Missing \(command) control")
+            XCTAssertTrue(button.isHittable, "Unreachable \(command) control")
             XCTAssertTrue(button.isEnabled, "Disabled \(command) control")
         }
 
@@ -85,10 +86,11 @@ final class HafaRemoteUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["remote-powerOff"].waitForExistence(timeout: 5))
         let keyboard = app.buttons["remote-keyboard"]
-        for _ in 0..<6 where !keyboard.exists {
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 2))
+        for _ in 0..<6 where !keyboard.isHittable {
             app.swipeUp()
         }
-        XCTAssertTrue(keyboard.exists)
+        XCTAssertTrue(keyboard.isHittable)
         XCTAssertFalse(keyboard.isEnabled)
     }
 

@@ -21,6 +21,8 @@ final class RemoteSessionStore {
                     self?.state = state
                     if case .connected(let tv) = state {
                         self?.lastConnectedTV = tv
+                    } else if case .idle = state {
+                        self?.lastConnectedTV = nil
                     }
                 }
             }

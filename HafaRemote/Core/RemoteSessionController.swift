@@ -74,6 +74,8 @@ actor RemoteSessionController {
 
     private var connectionID: UUID?
     private var connectionTask: Task<PairedSamsungTV, Error>?
+    private var pairingRemovalID: UUID?
+    private var pairingRemovalTask: Task<Void, Error>?
     private var reconnectTask: Task<Void, Never>?
     private var commandTasks: [UUID: Task<Void, Error>] = [:]
     private var stateContinuations: [UUID: AsyncStream<RemoteSessionState>.Continuation] = [:]
@@ -102,6 +104,8 @@ actor RemoteSessionController {
     }
 
     func connect(to addressText: String) async {
+        await waitForPairingRemoval()
+        guard !Task.isCancelled else { return }
         generation = UUID()
         let requestedGeneration = generation
         targetAddressText = addressText
@@ -183,20 +187,51 @@ actor RemoteSessionController {
     }
 
     func forgetPairing(for addressText: String) async throws {
+        await waitForPairingRemoval()
+        try Task.checkCancellation()
         generation = UUID()
+        let removalGeneration = generation
         targetAddressText = nil
         reconnectAttempt = 0
         transition(to: .idle)
         await cancelInFlightWork()
         await disconnectDriverWithinLimit()
-        do {
+        let removalID = UUID()
+        let driver = driver
+        let task = Task {
             try await driver.forget(addressText: addressText)
+        }
+        pairingRemovalID = removalID
+        pairingRemovalTask = task
+        let result = await withTaskCancellationHandler {
+            await task.result
+        } onCancel: {
+            task.cancel()
+        }
+        if pairingRemovalID == removalID {
+            pairingRemovalID = nil
+            pairingRemovalTask = nil
+        }
+        do {
+            try result.get()
+            try Task.checkCancellation()
         } catch {
-            if !(error is CancellationError) {
+            if generation == removalGeneration,
+                !Task.isCancelled,
+                !(error is CancellationError)
+            {
                 transition(to: .failed(.unexpected))
+            }
+            if Task.isCancelled || error is CancellationError {
+                throw CancellationError()
             }
             throw error
         }
+    }
+
+    private func waitForPairingRemoval() async {
+        guard let pairingRemovalTask else { return }
+        _ = await pairingRemovalTask.result
     }
 
     func applicationDidEnterBackground() async {
