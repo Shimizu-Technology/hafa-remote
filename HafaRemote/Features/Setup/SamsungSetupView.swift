@@ -5,7 +5,9 @@ struct SamsungSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var address = ""
     @State private var isForgettingPairing = false
+    @State private var connectionTaskID: UUID?
     @State private var connectionTask: Task<Void, Never>?
+    @State private var repairTaskID: UUID?
     @State private var repairTask: Task<Void, Never>?
     let session: RemoteSessionStore
 
@@ -17,6 +19,7 @@ struct SamsungSetupView: View {
                         .keyboardType(.numbersAndPunctuation)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                        .disabled(isBusy)
                         .accessibilityLabel("TV IP address")
                         .accessibilityIdentifier("tvIPAddressField")
                 } header: {
@@ -36,10 +39,15 @@ struct SamsungSetupView: View {
                     }
 
                     Button {
+                        let operationID = UUID()
+                        connectionTaskID = nil
                         connectionTask?.cancel()
                         let requestedAddress = address
+                        connectionTaskID = operationID
                         connectionTask = Task {
                             await session.connect(to: requestedAddress)
+                            guard connectionTaskID == operationID else { return }
+                            connectionTaskID = nil
                             connectionTask = nil
                         }
                     } label: {
@@ -60,9 +68,15 @@ struct SamsungSetupView: View {
 
                     if canForgetPairing {
                         Button("Forget Saved Pairing and Retry", role: .destructive) {
+                            let operationID = UUID()
+                            let requestedAddress = address
+                            repairTaskID = nil
                             repairTask?.cancel()
+                            repairTaskID = operationID
                             repairTask = Task {
-                                await forgetAndRetry()
+                                await forgetAndRetry(for: requestedAddress)
+                                guard repairTaskID == operationID else { return }
+                                repairTaskID = nil
                                 repairTask = nil
                             }
                         }
@@ -81,8 +95,10 @@ struct SamsungSetupView: View {
                 }
             }
             .onDisappear {
+                connectionTaskID = nil
                 connectionTask?.cancel()
                 connectionTask = nil
+                repairTaskID = nil
                 repairTask?.cancel()
                 repairTask = nil
                 guard !session.canSendCommands else { return }
@@ -172,7 +188,7 @@ struct SamsungSetupView: View {
         }
     }
 
-    private func forgetAndRetry() async {
+    private func forgetAndRetry(for address: String) async {
         guard !isForgettingPairing else { return }
         isForgettingPairing = true
         defer { isForgettingPairing = false }

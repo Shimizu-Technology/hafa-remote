@@ -507,6 +507,27 @@ struct RemoteSessionControllerTests {
         #expect(await driver.cancelledConnectionCount == 1)
     }
 
+    @Test("Replacing then dismissing setup cannot leave the newer connection running")
+    func replacementTaskCleanupRemainsOwnershipSpecific() async {
+        let driver = SuspendedRemoteSessionDriver()
+        let session = RemoteSessionController(driver: driver)
+        var starts = driver.connectionStarts.makeAsyncIterator()
+
+        let first = Task { await session.connect(to: "192.168.10.20") }
+        _ = await starts.next()
+        first.cancel()
+
+        let second = Task { await session.connect(to: "192.168.10.21") }
+        _ = await starts.next()
+        await first.value
+        second.cancel()
+        await session.disconnect()
+        await second.value
+
+        #expect(await session.state == .idle)
+        #expect(await driver.cancelledConnectionCount == 2)
+    }
+
     @Test("Command timeout cancels the write and keeps the failure explicit")
     func commandTimeoutIsEnforced() async throws {
         let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
@@ -557,6 +578,28 @@ struct RemoteSessionControllerTests {
         #expect(await driver.cancelledCommandCount == 1)
     }
 
+    @Test("Concurrent command submissions reach the driver in FIFO order")
+    func commandSubmissionsAreSerialized() async throws {
+        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let driver = SuspendedCommandRemoteSessionDriver(tv: tv)
+        let session = RemoteSessionController(driver: driver)
+        await session.connect(to: tv.address.rawValue)
+        var starts = driver.commandStarts.makeAsyncIterator()
+
+        let first = Task { try await session.send(.up) }
+        _ = await starts.next()
+        let second = Task { try await session.send(.down) }
+        for _ in 0..<100 { await Task.yield() }
+        #expect(await driver.receivedCommands == [.up])
+
+        await driver.completeCommand()
+        try await first.value
+        _ = await starts.next()
+        #expect(await driver.receivedCommands == [.up, .down])
+        await driver.completeCommand()
+        try await second.value
+    }
+
     @Test("Disconnect returns at its deadline and cancels stalled cleanup")
     func disconnectTimeoutIsEnforced() async throws {
         let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
@@ -582,6 +625,37 @@ struct RemoteSessionControllerTests {
 
         #expect(await session.state == .idle)
         #expect(await driver.cancelledDisconnectCount == 1)
+    }
+
+    @Test("A timed out teardown cannot overlap the next connection")
+    func delayedTeardownRemainsSerializedBeforeReconnect() async throws {
+        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = ControlledPairingRemovalDriver(tv: tv)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                disconnectTimeout: .seconds(4),
+                reconnectDelays: []
+            )
+        )
+        await session.connect(to: tv.address.rawValue)
+        var disconnectStarts = driver.disconnectStarts.makeAsyncIterator()
+
+        let reconnect = Task { await session.connect(to: tv.address.rawValue) }
+        _ = await disconnectStarts.next()
+        await resume(clock: clock, duration: .seconds(4))
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(4)) }
+        #expect(await driver.callLog == ["connect", "disconnect-start"])
+
+        await driver.completeDisconnect()
+        await reconnect.value
+        #expect(
+            await driver.callLog == [
+                "connect", "disconnect-start", "disconnect-finish", "connect",
+            ]
+        )
     }
 }
 
@@ -892,6 +966,7 @@ private actor SuspendedCommandRemoteSessionDriver: RemoteSessionDriving {
     private let tv: PairedSamsungTV
     private var commandContinuations: [UUID: CheckedContinuation<Void, Error>] = [:]
     private(set) var cancelledCommandCount = 0
+    private(set) var receivedCommands: [RemoteCommand] = []
 
     init(tv: PairedSamsungTV) {
         self.tv = tv
@@ -909,6 +984,7 @@ private actor SuspendedCommandRemoteSessionDriver: RemoteSessionDriving {
 
     func send(_ command: RemoteCommand) async throws {
         let id = UUID()
+        receivedCommands.append(command)
         commandStartsContinuation.yield()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -924,6 +1000,13 @@ private actor SuspendedCommandRemoteSessionDriver: RemoteSessionDriving {
     func forget(addressText: String) async throws {}
 
     func disconnect() {}
+
+    func completeCommand() {
+        guard let id = commandContinuations.keys.first,
+            let continuation = commandContinuations.removeValue(forKey: id)
+        else { return }
+        continuation.resume()
+    }
 
     private func cancelCommand(_ id: UUID) {
         guard let continuation = commandContinuations.removeValue(forKey: id) else { return }

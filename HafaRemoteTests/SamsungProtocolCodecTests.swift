@@ -26,6 +26,12 @@ struct SamsungProtocolCodecTests {
 
         #expect(mappings.map(\.0) == RemoteCommand.allCases)
         #expect(Set(mappings.map(\.1)).count == mappings.count)
+        let repeatable: Set<RemoteCommand> = [
+            .up, .down, .left, .right, .volumeUp, .volumeDown,
+        ]
+        for command in RemoteCommand.allCases {
+            #expect(command.supportsRepeat == repeatable.contains(command))
+        }
 
         for (command, expectedKey) in mappings {
             let message = try SamsungProtocolCodec.remoteMessage(for: command)

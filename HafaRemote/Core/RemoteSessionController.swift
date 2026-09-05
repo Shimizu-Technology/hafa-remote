@@ -67,6 +67,7 @@ actor RemoteSessionController {
     private let driver: any RemoteSessionDriving
     private let clock: any RemoteSessionClock
     private let configuration: RemoteSessionConfiguration
+    private let commandSerializer = RemoteSessionCommandSerializer()
 
     private var isForeground = true
     private var lastNetworkReachability: Bool?
@@ -76,6 +77,8 @@ actor RemoteSessionController {
 
     private var connectionID: UUID?
     private var connectionTask: Task<PairedSamsungTV, Error>?
+    private var driverTeardownID: UUID?
+    private var driverTeardownTask: Task<Void, Never>?
     private var pairingRemovalID: UUID?
     private var pairingRemovalWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var reconnectTask: Task<Void, Never>?
@@ -136,15 +139,18 @@ actor RemoteSessionController {
         let commandID = UUID()
         let commandGeneration = generation
         let driver = driver
+        let commandSerializer = commandSerializer
         let clock = clock
         let timeout = configuration.commandTimeout
         let task = Task {
-            try await RemoteSessionTimeout.run(
-                operation: .send,
-                timeout: timeout,
-                clock: clock
-            ) {
-                try await driver.send(command)
+            try await commandSerializer.perform {
+                try await RemoteSessionTimeout.run(
+                    operation: .send,
+                    timeout: timeout,
+                    clock: clock
+                ) {
+                    try await driver.send(command)
+                }
             }
         }
         commandTasks[commandID] = task
@@ -350,6 +356,12 @@ actor RemoteSessionController {
     }
 
     private func attemptConnection(generation requestedGeneration: UUID, isReconnect: Bool) async {
+        guard await waitForDriverTeardownWithinLimit() else {
+            if generation == requestedGeneration {
+                transition(to: .failed(.timedOut(.disconnect)))
+            }
+            return
+        }
         guard connectionTask == nil,
             generation == requestedGeneration,
             isForeground,
@@ -486,17 +498,54 @@ actor RemoteSessionController {
         }
     }
 
-    private func disconnectDriverWithinLimit() async {
+    @discardableResult
+    private func disconnectDriverWithinLimit() async -> Bool {
+        if let driverTeardownTask {
+            return await waitForDriverTeardownWithinLimit(task: driverTeardownTask)
+        }
+
         let driver = driver
-        let clock = clock
-        let timeout = configuration.disconnectTimeout
-        _ = try? await RemoteSessionTimeout.run(
-            operation: .disconnect,
-            timeout: timeout,
-            clock: clock
-        ) {
+        let teardownID = UUID()
+        let task = Task {
             await driver.disconnect()
         }
+        driverTeardownID = teardownID
+        driverTeardownTask = task
+        Task { [weak self] in
+            await task.value
+            await self?.finishDriverTeardown(id: teardownID)
+        }
+
+        return await waitForDriverTeardownWithinLimit(task: task)
+    }
+
+    private func waitForDriverTeardownWithinLimit() async -> Bool {
+        guard let driverTeardownTask else { return true }
+        return await waitForDriverTeardownWithinLimit(task: driverTeardownTask)
+    }
+
+    private func waitForDriverTeardownWithinLimit(task: Task<Void, Never>) async -> Bool {
+        let clock = clock
+        let timeout = configuration.disconnectTimeout
+        do {
+            try await RemoteSessionTimeout.run(
+                operation: .disconnect,
+                timeout: timeout,
+                clock: clock
+            ) {
+                await task.value
+            }
+            return true
+        } catch {
+            task.cancel()
+            return false
+        }
+    }
+
+    private func finishDriverTeardown(id: UUID) {
+        guard driverTeardownID == id else { return }
+        driverTeardownID = nil
+        driverTeardownTask = nil
     }
 
     private func transition(to newState: RemoteSessionState) {
@@ -572,6 +621,8 @@ private final class RemoteSessionTimeoutRace<Value: Sendable>: @unchecked Sendab
     private var pendingResult: Result<Value, Error>?
     private var isResolved = false
 
+    deinit {}
+
     func install(_ continuation: CheckedContinuation<Value, Error>) {
         lock.lock()
         if let pendingResult {
@@ -599,5 +650,60 @@ private final class RemoteSessionTimeoutRace<Value: Sendable>: @unchecked Sendab
             pendingResult = result
             lock.unlock()
         }
+    }
+}
+
+/// Preserves command submission order while allowing each caller to cancel independently.
+private actor RemoteSessionCommandSerializer {
+    private struct Waiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Bool, Never>
+    }
+
+    private var isExecuting = false
+    private var waiters: [Waiter] = []
+
+    func perform(_ operation: @Sendable () async throws -> Void) async throws {
+        try await acquire()
+        defer { release() }
+        try Task.checkCancellation()
+        try await operation()
+    }
+
+    private func acquire() async throws {
+        try Task.checkCancellation()
+        if !isExecuting {
+            isExecuting = true
+            return
+        }
+
+        let waiterID = UUID()
+        let acquired = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume(returning: false)
+                } else {
+                    waiters.append(Waiter(id: waiterID, continuation: continuation))
+                }
+            }
+        } onCancel: {
+            Task {
+                await self.cancelWaiter(waiterID)
+            }
+        }
+        guard acquired else { throw CancellationError() }
+    }
+
+    private func release() {
+        if waiters.isEmpty {
+            isExecuting = false
+        } else {
+            waiters.removeFirst().continuation.resume(returning: true)
+        }
+    }
+
+    private func cancelWaiter(_ waiterID: UUID) {
+        guard let index = waiters.firstIndex(where: { $0.id == waiterID }) else { return }
+        waiters.remove(at: index).continuation.resume(returning: false)
     }
 }
