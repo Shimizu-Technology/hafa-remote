@@ -5,6 +5,8 @@ enum SamsungProtocolCodec {
     static func remoteMessage(for command: RemoteCommand) throws -> URLSessionWebSocketTask.Message {
         let key: String
         switch command {
+        case .powerOn:
+            throw SamsungProtocolError.unsupportedCommand
         case .powerOff:
             // Newer Tizen TVs use KEY_POWER for power-off while the secure
             // session proves the television is currently awake.
@@ -153,6 +155,7 @@ enum SamsungConnectionEvent: Equatable, Sendable {
 enum SamsungProtocolError: Error, Equatable, Sendable {
     case invalidCommandEncoding
     case invalidEvent
+    case unsupportedCommand
 }
 
 private struct SamsungRemoteControlRequest: Encodable {

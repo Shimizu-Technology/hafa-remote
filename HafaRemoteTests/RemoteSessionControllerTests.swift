@@ -191,6 +191,38 @@ struct RemoteSessionControllerTests {
     }
 
     @MainActor
+    @Test("A saved-target wait ignores a connected state from the previous TV")
+    func storeTargetWaitIgnoresPreviousTV() async throws {
+        let previousTV = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "previous-tv",
+            model: "PREVIOUS"
+        )
+        let selectedTV = try testTV(
+            address: "192.168.10.21",
+            reportedDeviceID: "selected-tv",
+            model: "SELECTED"
+        )
+        let driver = MockRemoteSessionDriver(
+            outcomes: [
+                .success(tv: previousTV, announcesPairing: false),
+                .success(tv: selectedTV, announcesPairing: false),
+            ]
+        )
+        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+        await store.connect(to: previousTV.connectionTarget)
+        await waitUntil { @MainActor in store.connectedTV == previousTV }
+
+        let result = try await store.connectAndWait(
+            to: selectedTV.connectionTarget,
+            timeout: .seconds(2)
+        )
+
+        #expect(result == selectedTV)
+        #expect(store.connectedTV == selectedTV)
+    }
+
+    @MainActor
     @Test("The observable store timeout cancels a suspended initial connection")
     func storeConnectionWaitTimesOut() async throws {
         let clock = ManualRemoteSessionClock()

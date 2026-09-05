@@ -124,6 +124,46 @@ final class RemoteSessionStore {
         }
     }
 
+    /// Connects to a saved brand-scoped target and ignores any stale state from another TV.
+    func connectAndWait(
+        to target: TVConnectionTarget,
+        timeout: Duration
+    ) async throws -> ConnectedTV {
+        let states = await controller.states()
+        let connectionWaitClock = connectionWaitClock
+        let expectedDeviceKey = "\(target.brand.rawValue):\(target.reportedDeviceID)"
+
+        return try await withThrowingTaskGroup(of: ConnectedTV?.self) { group in
+            group.addTask {
+                await self.connect(to: target)
+                try Task.checkCancellation()
+                return nil
+            }
+            group.addTask {
+                for await state in states {
+                    try Task.checkCancellation()
+                    if case .connected(let tv) = state, tv.stableDeviceKey == expectedDeviceKey {
+                        return tv
+                    }
+                }
+                throw CancellationError()
+            }
+            group.addTask {
+                try await connectionWaitClock.sleep(for: timeout)
+                try Task.checkCancellation()
+                throw RemoteSessionControllerError.timedOut(.connect)
+            }
+
+            while let result = try await group.next() {
+                if let connectedTV = result {
+                    group.cancelAll()
+                    return connectedTV
+                }
+            }
+            throw RemoteSessionControllerError.timedOut(.connect)
+        }
+    }
+
     func send(_ command: RemoteCommand) async throws {
         try await controller.send(command)
     }

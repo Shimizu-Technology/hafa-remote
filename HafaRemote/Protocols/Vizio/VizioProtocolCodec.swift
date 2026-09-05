@@ -93,6 +93,8 @@ enum VizioProtocolCodec {
     static func remoteCommand(_ command: RemoteCommand) throws -> Data {
         let key: VizioRemoteKey
         switch command {
+        case .powerOn:
+            key = VizioRemoteKey(codeSet: 11, code: 1)
         case .powerOff:
             key = VizioRemoteKey(codeSet: 11, code: 0)
         case .up:

@@ -9,20 +9,22 @@ struct RemoteControlView: View {
     let statusLabel: String
     let isConnected: Bool
     let supportsTextInput: Bool
-    let canWakeTV: Bool
-    let wakeWasVerified: Bool
+    let canPowerOnTV: Bool
+    let powerOnWasVerified: Bool
+    let powerOnHelpText: String
+    let powerOnFailureText: String
     let action: @MainActor @Sendable (RemoteCommand) async -> Void
     let textAction: @MainActor @Sendable (RemoteTextInput) async throws -> Void
-    let wakeAction: @MainActor @Sendable () async throws -> Void
+    let powerOnAction: @MainActor @Sendable () async throws -> Void
     let retry: @MainActor @Sendable () async -> Void
     let showTVSetup: @MainActor @Sendable () -> Void
 
     @State private var isConfirmingPowerOff = false
     @State private var isShowingKeyboard = false
-    @State private var isWakingTV = false
-    @State private var activeWakeID: UUID?
-    @State private var wakeTask: Task<Void, Never>?
-    @State private var wakeFailureMessage: String?
+    @State private var isPoweringOnTV = false
+    @State private var activePowerOnID: UUID?
+    @State private var powerOnTask: Task<Void, Never>?
+    @State private var powerOnFailureMessage: String?
 
     var body: some View {
         ZStack {
@@ -54,9 +56,8 @@ struct RemoteControlView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .preferredColorScheme(.dark)
         .onChange(of: isConnected) { wasConnected, isConnected in
-            if isConnected {
-                isWakingTV = false
-                wakeFailureMessage = nil
+            if isConnected, !isPoweringOnTV {
+                powerOnFailureMessage = nil
             }
             guard wasConnected, !isConnected else { return }
             UIAccessibility.post(
@@ -64,8 +65,8 @@ struct RemoteControlView: View {
                 argument: "The TV connection is offline. Recovery controls are now available."
             )
         }
-        .onChange(of: isWakingTV) { _, isWakingTV in
-            guard isWakingTV else { return }
+        .onChange(of: isPoweringOnTV) { _, isPoweringOnTV in
+            guard isPoweringOnTV else { return }
             UIAccessibility.post(notification: .announcement, argument: recoveryMessage)
         }
         .alert(
@@ -77,22 +78,22 @@ struct RemoteControlView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            if canWakeTV {
-                Text("You can try turning it back on here when Power On With Mobile is enabled on the TV.")
+            if canPowerOnTV {
+                Text(powerOnHelpText)
             } else {
                 Text("Reconnect once while the TV is on before Hafa Remote can prepare power on.")
             }
         }
         .alert(
-            "Couldn’t Wake TV",
+            "Couldn’t Turn On TV",
             isPresented: Binding(
-                get: { wakeFailureMessage != nil },
-                set: { if !$0 { wakeFailureMessage = nil } }
+                get: { powerOnFailureMessage != nil },
+                set: { if !$0 { powerOnFailureMessage = nil } }
             )
         ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(wakeFailureMessage ?? "")
+            Text(powerOnFailureMessage ?? "")
         }
         .sheet(isPresented: $isShowingKeyboard) {
             SamsungTextInputSheet(
@@ -102,10 +103,10 @@ struct RemoteControlView: View {
             )
         }
         .onDisappear {
-            activeWakeID = nil
-            isWakingTV = false
-            let task = wakeTask
-            wakeTask = nil
+            activePowerOnID = nil
+            isPoweringOnTV = false
+            let task = powerOnTask
+            powerOnTask = nil
             task?.cancel()
         }
     }
@@ -132,11 +133,11 @@ struct RemoteControlView: View {
                     if isConnected {
                         isConfirmingPowerOff = true
                     } else {
-                        wakeTV()
+                        powerOnTV()
                     }
                 } label: {
                     Group {
-                        if isWakingTV {
+                        if isPoweringOnTV {
                             ProgressView()
                                 .tint(HafaTheme.accent)
                         } else {
@@ -148,14 +149,16 @@ struct RemoteControlView: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(isConnected ? .red : HafaTheme.accent)
-                .disabled(!isConnected && (!canWakeTV || isWakingTV))
-                .accessibilityLabel(isConnected ? "Power off TV" : "Turn on TV")
+                .disabled(isPoweringOnTV || (!isConnected && !canPowerOnTV))
+                .accessibilityLabel(
+                    isPoweringOnTV ? "Turning on TV" : (isConnected ? "Power off TV" : "Turn on TV")
+                )
                 .accessibilityHint(powerAccessibilityHint)
                 .accessibilityIdentifier(isConnected ? "remote-powerOff" : "remote-powerOn")
             }
 
             Label(
-                isWakingTV ? "Waking TV…" : statusLabel,
+                isPoweringOnTV ? "Turning on TV…" : statusLabel,
                 systemImage: isConnected
                     ? "checkmark.circle.fill" : "arrow.trianglehead.2.clockwise.rotate.90"
             )
@@ -232,12 +235,12 @@ struct RemoteControlView: View {
                 .font(.subheadline)
                 .foregroundStyle(HafaTheme.secondaryText)
 
-            if canWakeTV {
+            if canPowerOnTV {
                 Label(
-                    wakeWasVerified
+                    powerOnWasVerified
                         ? "Power on worked previously for this TV and network."
-                        : "Requires Power On With Mobile in the TV's Network settings.",
-                    systemImage: wakeWasVerified ? "checkmark.circle" : "info.circle"
+                        : powerOnHelpText,
+                    systemImage: powerOnWasVerified ? "checkmark.circle" : "info.circle"
                 )
                 .font(.caption)
                 .foregroundStyle(HafaTheme.secondaryText)
@@ -257,7 +260,7 @@ struct RemoteControlView: View {
             .buttonStyle(.borderedProminent)
             .tint(HafaTheme.accent)
             .foregroundStyle(HafaTheme.canvas)
-            .disabled(isWakingTV)
+            .disabled(isPoweringOnTV)
             .accessibilityIdentifier("retryConnectionButton")
 
             HStack {
@@ -423,9 +426,9 @@ struct RemoteControlView: View {
     }
 
     private var recoveryMessage: String {
-        if isWakingTV {
-            "Wake signal sent. Hafa Remote is waiting for the TV to reconnect."
-        } else if canWakeTV {
+        if isPoweringOnTV {
+            "Power on sent. Hafa Remote is waiting for the TV to reconnect."
+        } else if canPowerOnTV {
             "The TV is offline. Use the power button to turn it on, or retry the connection."
         } else {
             "Controls are paused. Reconnect once while the TV is on to enable power on."
@@ -435,42 +438,41 @@ struct RemoteControlView: View {
     private var powerAccessibilityHint: String {
         if isConnected {
             "Asks for confirmation before turning off the TV."
-        } else if canWakeTV {
-            "Sends a local wake signal and reconnects when the TV responds."
+        } else if canPowerOnTV {
+            "Sends the saved TV's local power-on action and reconnects when it responds."
         } else {
             "Unavailable until Hafa Remote reconnects while the TV is on."
         }
     }
 
-    private func wakeTV() {
-        guard !isConnected, canWakeTV, wakeTask == nil else { return }
+    private func powerOnTV() {
+        guard !isConnected, canPowerOnTV, powerOnTask == nil else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        let wakeID = UUID()
-        activeWakeID = wakeID
-        isWakingTV = true
-        wakeFailureMessage = nil
-        wakeTask = Task { @MainActor in
+        let powerOnID = UUID()
+        activePowerOnID = powerOnID
+        isPoweringOnTV = true
+        powerOnFailureMessage = nil
+        powerOnTask = Task { @MainActor in
             defer {
-                finishWake(wakeID)
+                finishPowerOn(powerOnID)
             }
             do {
-                try await wakeAction()
+                try await powerOnAction()
             } catch is CancellationError {
                 return
             } catch {
-                guard activeWakeID == wakeID else { return }
-                wakeFailureMessage =
-                    "The wake signal could not be completed. Confirm your iPhone and TV use the same Wi-Fi, enable Power On With Mobile on the TV, then try again."
+                guard activePowerOnID == powerOnID else { return }
+                powerOnFailureMessage = powerOnFailureText
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
         }
     }
 
-    private func finishWake(_ wakeID: UUID) {
-        guard activeWakeID == wakeID else { return }
-        activeWakeID = nil
-        wakeTask = nil
-        isWakingTV = false
+    private func finishPowerOn(_ powerOnID: UUID) {
+        guard activePowerOnID == powerOnID else { return }
+        activePowerOnID = nil
+        powerOnTask = nil
+        isPoweringOnTV = false
     }
 }
 
@@ -488,14 +490,16 @@ struct RemoteControlView: View {
                     statusLabel: isConnected ? "Connected" : "Offline",
                     isConnected: isConnected,
                     supportsTextInput: true,
-                    canWakeTV: true,
-                    wakeWasVerified: false
+                    canPowerOnTV: true,
+                    powerOnWasVerified: false,
+                    powerOnHelpText: "Requires the TV's network standby setting.",
+                    powerOnFailureText: "The TV did not respond to power on."
                 ) { command in
                     lastCommand = command.rawValue
                 } textAction: { input in
                     lastCommand = "text:\(input.value.count)"
-                } wakeAction: {
-                    lastCommand = "wake"
+                } powerOnAction: {
+                    lastCommand = "powerOn"
                 } retry: {
                     lastCommand = "retry"
                 } showTVSetup: {
