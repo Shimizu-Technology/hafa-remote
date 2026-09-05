@@ -121,6 +121,7 @@ actor KeychainSonyPairingCredentialStore: SonyPairingCredentialStoring {
         guard let credential = try? JSONDecoder().decode(SonyPairingCredential.self, from: data),
             credential == candidate
         else {
+            try keychain.remove(account: candidate.reportedDeviceID)
             throw SonyKeychainError.invalidStoredCredential
         }
         return credential

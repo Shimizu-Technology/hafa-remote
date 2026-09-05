@@ -238,6 +238,9 @@ actor SonyTLSChannel: SonyTLSChanneling {
 
         while true {
             let chunk = try await receiveChunk(on: connection)
+            guard self.connection === connection else {
+                throw SonyTLSChannelError.connectionClosed
+            }
             if let message = try messageBuffer.append(chunk) { return message }
         }
     }

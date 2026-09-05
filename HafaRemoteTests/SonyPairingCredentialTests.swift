@@ -46,6 +46,34 @@ struct SonyPairingCredentialTests {
             try await store.credential(for: Data(repeating: 9, count: 32)) == nil
         )
     }
+
+    @Test("Removing a credential clears its persisted fingerprint")
+    func removesCredential() async throws {
+        let keychain = InMemorySonyPairingCredentialKeychain()
+        let store = KeychainSonyPairingCredentialStore(keychain: keychain)
+        let credential = try SonyPairingCredential(
+            certificateSHA256: Data(repeating: 10, count: 32)
+        )
+        try await store.save(credential)
+
+        try await store.remove(reportedDeviceID: credential.reportedDeviceID)
+
+        #expect(try await store.credential(for: credential.certificateSHA256) == nil)
+    }
+
+    @Test("Corrupt credential data is discarded before reporting the error")
+    func discardsCorruptCredential() async throws {
+        let fingerprint = Data(repeating: 11, count: 32)
+        let credential = try SonyPairingCredential(certificateSHA256: fingerprint)
+        let keychain = InMemorySonyPairingCredentialKeychain()
+        keychain.seed(Data("not-json".utf8), for: credential.reportedDeviceID)
+        let store = KeychainSonyPairingCredentialStore(keychain: keychain)
+
+        await #expect(throws: SonyKeychainError.invalidStoredCredential) {
+            try await store.credential(for: fingerprint)
+        }
+        #expect(keychain.data(for: credential.reportedDeviceID) == nil)
+    }
 }
 
 private final class InMemorySonyPairingCredentialKeychain:
@@ -65,5 +93,9 @@ private final class InMemorySonyPairingCredentialKeychain:
 
     func remove(account: String) {
         lock.withLock { values[account] = nil }
+    }
+
+    func seed(_ data: Data, for account: String) {
+        lock.withLock { values[account] = data }
     }
 }

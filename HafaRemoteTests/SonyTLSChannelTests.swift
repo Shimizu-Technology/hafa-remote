@@ -68,4 +68,46 @@ struct SonyTLSChannelTests {
             try await task.value
         }
     }
+
+    @Test("A stalled TLS connection reaches its typed deadline")
+    func connectionDeadlineTimesOut() async {
+        await #expect(throws: SonyTLSChannelError.timedOut) {
+            try await SonyTLSConnectionDeadline.run(timeout: .milliseconds(20)) {
+                try await Task.sleep(for: .seconds(1))
+                return true
+            }
+        }
+    }
+
+    @Test("A stalled remote handshake becomes the coordinator timeout state")
+    func remoteHandshakeTimesOut() async {
+        await #expect(throws: SonyPairingCoordinatorError.remoteHandshakeTimedOut) {
+            try await SonyRemoteHandshake.run(
+                on: StalledSonyTLSChannel(),
+                fallbackModelName: "Sony TV",
+                timeout: .milliseconds(20),
+                maximumMessages: 8
+            )
+        }
+    }
+}
+
+private actor StalledSonyTLSChannel: SonyTLSChanneling {
+    func connect(
+        address: PrivateIPv4Address,
+        port: UInt16,
+        identity: SonyClientIdentityReference,
+        trustMode: SonyTLSTrustMode
+    ) async throws -> SonyTLSPeer {
+        throw SonyTLSChannelError.unavailable
+    }
+
+    func send(_ message: Data) async throws {}
+
+    func receive() async throws -> Data {
+        try await Task.sleep(for: .seconds(1))
+        return Data()
+    }
+
+    func disconnect() async {}
 }

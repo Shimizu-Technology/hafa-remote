@@ -14,7 +14,6 @@ protocol SonyPairingCoordinating: TVDriver {
 actor SonyPairingCoordinator: SonyPairingCoordinating {
     private static let pairingPort: UInt16 = 6467
     private static let controlPort: UInt16 = 6466
-    private static let keyFeature: UInt64 = 2
     private static let remoteHandshakeTimeout: Duration = .seconds(10)
     private static let maximumRemoteHandshakeMessages = 128
 
@@ -197,19 +196,12 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             throw SonyPairingCoordinatorError.certificateChanged
         }
 
-        let device: SonyRemoteDevice
-        do {
-            device = try await SonyTLSConnectionDeadline.run(
-                timeout: Self.remoteHandshakeTimeout
-            ) { [controlChannel] in
-                try await Self.completeRemoteHandshake(
-                    on: controlChannel,
-                    fallbackModelName: peer.displayName
-                )
-            }
-        } catch SonyTLSChannelError.timedOut {
-            throw SonyPairingCoordinatorError.remoteHandshakeTimedOut
-        }
+        let device = try await SonyRemoteHandshake.run(
+            on: controlChannel,
+            fallbackModelName: peer.displayName,
+            timeout: Self.remoteHandshakeTimeout,
+            maximumMessages: Self.maximumRemoteHandshakeMessages
+        )
 
         let generation = UUID()
         sessionGeneration = generation
@@ -224,40 +216,6 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             modelName: device.model,
             firmwareVersion: device.softwareVersion.isEmpty ? nil : device.softwareVersion
         )
-    }
-
-    private static func completeRemoteHandshake(
-        on controlChannel: any SonyTLSChanneling,
-        fallbackModelName: String
-    ) async throws -> SonyRemoteDevice {
-        var device: SonyRemoteDevice?
-        for _ in 0..<maximumRemoteHandshakeMessages {
-            switch try SonyRemoteProtocolCodec.parse(await controlChannel.receive()) {
-            case .configured(let vendor, let model, let softwareVersion, let supportedFeatures):
-                guard vendor.localizedCaseInsensitiveContains("sony"),
-                    supportedFeatures & keyFeature == keyFeature
-                else {
-                    throw SonyPairingCoordinatorError.unsupportedDevice
-                }
-                device = SonyRemoteDevice(
-                    model: model.isEmpty ? fallbackModelName : model,
-                    softwareVersion: softwareVersion
-                )
-                try await controlChannel.send(SonyRemoteProtocolCodec.configurationResponse())
-            case .setActive:
-                try await controlChannel.send(SonyRemoteProtocolCodec.activeResponse())
-            case .ping(let value):
-                try await controlChannel.send(SonyRemoteProtocolCodec.pingResponse(value))
-            case .powerState:
-                guard let device else {
-                    throw SonyPairingCoordinatorError.invalidRemoteResponse
-                }
-                return device
-            case .other:
-                continue
-            }
-        }
-        throw SonyPairingCoordinatorError.remoteHandshakeTimedOut
     }
 
     private func readRemoteEvents(generation: UUID) async {
@@ -296,9 +254,67 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     }
 }
 
-private struct SonyRemoteDevice: Sendable {
+struct SonyRemoteDevice: Sendable {
     let model: String
     let softwareVersion: String
+}
+
+enum SonyRemoteHandshake {
+    private static let keyFeature: UInt64 = 2
+
+    static func run(
+        on controlChannel: any SonyTLSChanneling,
+        fallbackModelName: String,
+        timeout: Duration,
+        maximumMessages: Int
+    ) async throws -> SonyRemoteDevice {
+        do {
+            return try await SonyTLSConnectionDeadline.run(timeout: timeout) {
+                try await complete(
+                    on: controlChannel,
+                    fallbackModelName: fallbackModelName,
+                    maximumMessages: maximumMessages
+                )
+            }
+        } catch SonyTLSChannelError.timedOut {
+            throw SonyPairingCoordinatorError.remoteHandshakeTimedOut
+        }
+    }
+
+    private static func complete(
+        on controlChannel: any SonyTLSChanneling,
+        fallbackModelName: String,
+        maximumMessages: Int
+    ) async throws -> SonyRemoteDevice {
+        var device: SonyRemoteDevice?
+        for _ in 0..<maximumMessages {
+            switch try SonyRemoteProtocolCodec.parse(await controlChannel.receive()) {
+            case .configured(let vendor, let model, let softwareVersion, let supportedFeatures):
+                guard vendor.localizedCaseInsensitiveContains("sony"),
+                    supportedFeatures & keyFeature == keyFeature
+                else {
+                    throw SonyPairingCoordinatorError.unsupportedDevice
+                }
+                device = SonyRemoteDevice(
+                    model: model.isEmpty ? fallbackModelName : model,
+                    softwareVersion: softwareVersion
+                )
+                try await controlChannel.send(SonyRemoteProtocolCodec.configurationResponse())
+            case .setActive:
+                try await controlChannel.send(SonyRemoteProtocolCodec.activeResponse())
+            case .ping(let value):
+                try await controlChannel.send(SonyRemoteProtocolCodec.pingResponse(value))
+            case .powerState:
+                guard let device else {
+                    throw SonyPairingCoordinatorError.invalidRemoteResponse
+                }
+                return device
+            case .other:
+                continue
+            }
+        }
+        throw SonyPairingCoordinatorError.remoteHandshakeTimedOut
+    }
 }
 
 actor SonyWriteSerializer {
