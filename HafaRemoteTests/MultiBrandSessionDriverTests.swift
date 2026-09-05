@@ -155,6 +155,46 @@ struct MultiBrandSessionDriverTests {
         #expect(await sony.commands.isEmpty)
     }
 
+    @Test("Switching targets cancels a pending Vizio PIN and leaves Samsung active")
+    @MainActor
+    func switchingToSamsungCancelsVizioPairing() async throws {
+        let samsung = MultiBrandSamsungFixture()
+        let sony = MultiBrandSonyFixture()
+        let vizio = MultiBrandVizioFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony, vizio: vizio)
+        let vizioTarget = TVConnectionTarget(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-vizio",
+            address: try PrivateIPv4Address("192.168.10.52"),
+            controlPort: 7345
+        )
+        let samsungTarget = TVConnectionTarget(
+            brand: .samsung,
+            reportedDeviceID: "synthetic-samsung",
+            address: try PrivateIPv4Address("192.168.10.51"),
+            controlPort: 8002
+        )
+        let requestSignal = PairingRequestSignal()
+        let vizioConnection = Task {
+            try await driver.connect(to: vizioTarget) {
+                await requestSignal.signal()
+            }
+        }
+        try await requestSignal.wait()
+
+        _ = try await driver.connect(to: samsungTarget) {}
+
+        await #expect(throws: CancellationError.self) {
+            try await vizioConnection.value
+        }
+        await #expect(throws: MultiBrandSessionDriverError.pairingCodeNotExpected) {
+            try await driver.submitPairingCode("1234")
+        }
+        try await driver.send(.home)
+        #expect(await samsung.commands == [.home])
+        #expect(await vizio.commands.isEmpty)
+    }
+
     @Test("Vizio pairing removal stays brand-scoped after a Samsung connection")
     @MainActor
     func forgetUsesSavedVizioBrand() async throws {

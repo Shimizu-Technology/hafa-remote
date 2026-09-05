@@ -585,6 +585,7 @@ actor RemoteSessionController {
         } else if error as? VizioPairingCoordinatorError == .savedPairingRejected {
             transition(to: .savedPairingRejected)
         } else if error as? VizioPairingCoordinatorError == .certificateChanged
+            || error as? VizioPairingCoordinatorError == .deviceIdentityChanged
             || error as? VizioHTTPSClientError == .certificateChanged
         {
             transition(to: .certificateChanged)

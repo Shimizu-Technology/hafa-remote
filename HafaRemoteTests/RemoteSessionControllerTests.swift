@@ -725,6 +725,16 @@ struct RemoteSessionControllerTests {
         #expect(await session.state == .certificateChanged)
     }
 
+    @Test("A changed Vizio identity requires deliberate pairing repair")
+    func changedVizioIdentityHasDedicatedState() async {
+        let driver = MockRemoteSessionDriver(outcomes: [.failure(.vizioIdentityChanged)])
+        let session = RemoteSessionController(driver: driver)
+
+        await session.connect(to: "192.168.10.20")
+
+        #expect(await session.state == .certificateChanged)
+    }
+
     @Test("Unsupported token authentication has a dedicated state")
     func unsupportedTVHasDedicatedState() async {
         let driver = MockRemoteSessionDriver(outcomes: [.failure(.unsupported)])
@@ -1208,6 +1218,7 @@ private enum MockConnectionFailure: Sendable {
     case unsupported
     case sonyPairingTimedOut
     case sonyRemoteHandshakeTimedOut
+    case vizioIdentityChanged
 }
 
 private enum MockConnectionOutcome: Sendable {
@@ -1262,6 +1273,8 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
             throw SonyPairingCoordinatorError.pairingTimedOut
         case .failure(.sonyRemoteHandshakeTimedOut):
             throw SonyPairingCoordinatorError.remoteHandshakeTimedOut
+        case .failure(.vizioIdentityChanged):
+            throw VizioPairingCoordinatorError.deviceIdentityChanged
         }
     }
 

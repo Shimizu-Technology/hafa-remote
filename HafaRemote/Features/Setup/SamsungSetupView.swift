@@ -637,7 +637,7 @@ struct TVSetupView: View {
         case .connected(let tv):
             "Connected to \(tv.modelName)."
         case .denied:
-            "The TV did not approve Hafa Remote."
+            pairingDeniedMessage
         case .savedPairingRejected:
             "The TV no longer accepts its saved pairing. Remove it before reconnecting."
         case .certificateChanged:
