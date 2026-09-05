@@ -1,6 +1,7 @@
 import Foundation
 
 protocol RemoteSessionDriving: TVDriver {
+    var brand: TVBrand { get }
     func connect(
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
@@ -10,6 +11,8 @@ protocol RemoteSessionDriving: TVDriver {
 }
 
 extension RemoteSessionDriving {
+    var brand: TVBrand { .samsung }
+
     func forget(addressText: String, reportedDeviceID: String?) async throws {
         try await forget(addressText: addressText)
     }
@@ -136,6 +139,19 @@ actor RemoteSessionController {
         await disconnectDriverWithinLimit()
         guard generation == requestedGeneration, isForeground else { return }
         await attemptConnection(generation: requestedGeneration, isReconnect: false)
+    }
+
+    func connect(to target: TVConnectionTarget) async {
+        guard target.brand == driver.brand else {
+            generation = UUID()
+            targetAddressText = nil
+            reconnectAttempt = 0
+            await cancelInFlightWork()
+            await disconnectDriverWithinLimit()
+            transition(to: .unsupported)
+            return
+        }
+        await connect(to: target.address.rawValue)
     }
 
     func send(_ command: RemoteCommand) async throws {

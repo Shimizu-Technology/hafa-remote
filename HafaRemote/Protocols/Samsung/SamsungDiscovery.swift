@@ -30,6 +30,15 @@ struct DiscoveredTV: Identifiable, Equatable, Sendable,
 
     var id: String { "\(brand.rawValue):\(reportedIdentifier)" }
 
+    var connectionTarget: TVConnectionTarget {
+        TVConnectionTarget(
+            brand: brand,
+            reportedDeviceID: reportedIdentifier,
+            address: address,
+            controlPort: controlPort
+        )
+    }
+
     var description: String { "DiscoveredTV(redacted)" }
     var debugDescription: String { description }
 }

@@ -392,13 +392,26 @@ struct TVSetupView: View {
         selectedTV = television
         address = television.address.rawValue
         discovery.stop()
-        connectUsingCurrentAddress()
+        connect(to: television.connectionTarget)
     }
 
     private func connectManually() {
         selectedTV = nil
         discovery.stop()
         connectUsingCurrentAddress()
+    }
+
+    private func connect(to target: TVConnectionTarget) {
+        let operationID = UUID()
+        connectionTaskID = nil
+        connectionTask?.cancel()
+        connectionTaskID = operationID
+        connectionTask = Task {
+            await session.connect(to: target)
+            guard connectionTaskID == operationID else { return }
+            connectionTaskID = nil
+            connectionTask = nil
+        }
     }
 
     private func connectUsingCurrentAddress() {

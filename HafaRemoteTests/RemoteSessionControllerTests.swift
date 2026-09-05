@@ -4,6 +4,31 @@ import Testing
 @testable import HafaRemote
 
 struct RemoteSessionControllerTests {
+    @Test("A Sony discovery never enters the Samsung session driver")
+    func rejectsTargetForDifferentDriverBrand() async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let samsungTV = try testTV(
+            address: address.rawValue,
+            reportedDeviceID: "synthetic-samsung",
+            model: "TEST_SAMSUNG"
+        )
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: samsungTV, announcesPairing: false)]
+        )
+        let controller = RemoteSessionController(driver: driver)
+        let sonyTarget = TVConnectionTarget(
+            brand: .sony,
+            reportedDeviceID: "synthetic-sony",
+            address: address,
+            controlPort: 6466
+        )
+
+        await controller.connect(to: sonyTarget)
+
+        #expect(await controller.state == .unsupported)
+        #expect(await driver.connectCallCount == 0)
+    }
+
     @MainActor
     @Test("The observable store projects actor state for SwiftUI")
     func storeProjectsSessionState() async throws {
