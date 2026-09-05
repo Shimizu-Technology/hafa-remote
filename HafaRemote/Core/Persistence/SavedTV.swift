@@ -51,11 +51,16 @@ final class SavedTV: CustomStringConvertible {
         "SavedTV(redacted)"
     }
 
-    func recordConnection(to tv: PairedSamsungTV, at date: Date = .now) {
+    func recordConnection(
+        to tv: PairedSamsungTV,
+        at date: Date = .now,
+        wakeWasJustVerified: Bool = false
+    ) {
         reportedDeviceID = tv.reportedDeviceID
         modelName = tv.modelName
         firmwareVersion = tv.firmwareVersion
         lastKnownAddress = tv.address.rawValue
+        let previousMACAddress = macAddress
         switch tv.networkConnection {
         case .wired:
             macAddress = nil
@@ -67,6 +72,13 @@ final class SavedTV: CustomStringConvertible {
                     wakeWasVerified = false
                     self.macAddress = incomingMACAddress
                 }
+            }
+            let reportedMACAddress = tv.macAddress?.persistedValue
+            if wakeWasJustVerified,
+                macAddress != nil,
+                reportedMACAddress == nil || reportedMACAddress == previousMACAddress
+            {
+                wakeWasVerified = true
             }
         case .unavailable:
             break

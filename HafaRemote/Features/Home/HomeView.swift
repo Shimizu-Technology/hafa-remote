@@ -304,10 +304,11 @@ struct HomeView: View {
         let now = Date.now
         let wakeWasJustVerified = pendingWakeAttempt?.reportedDeviceID == tv.reportedDeviceID
         if let saved = savedTVs.first(where: { $0.reportedDeviceID == tv.reportedDeviceID }) {
-            saved.recordConnection(to: tv, at: now)
-            if wakeWasJustVerified {
-                saved.wakeWasVerified = true
-            }
+            saved.recordConnection(
+                to: tv,
+                at: now,
+                wakeWasJustVerified: wakeWasJustVerified
+            )
         } else {
             let canPersistWakeMetadata = tv.networkConnection == .wireless
             modelContext.insert(
