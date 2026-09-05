@@ -4,6 +4,15 @@ import Testing
 @testable import HafaRemote
 
 struct SonyTLSChannelTests {
+    @Test("Certificate subjects expose the TV name without its network identifier")
+    func sanitizesCertificateDisplayName() {
+        let subject = "atvremote/bravia/bravia/Living Room Sony/AA:BB:CC:DD:EE:FF"
+
+        #expect(SonyCertificateDisplayName.make(from: subject) == "Living Room Sony")
+        #expect(SonyCertificateDisplayName.make(from: nil) == "Sony / Google TV")
+        #expect(!SonyCertificateDisplayName.make(from: subject).contains("AA:BB"))
+    }
+
     @Test("A selected pairing candidate pins one certificate for the whole connection")
     func pairingCandidateUsesOneCertificate() {
         let first = Data(repeating: 1, count: 32)

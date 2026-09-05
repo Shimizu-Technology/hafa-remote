@@ -50,6 +50,20 @@ struct SonyTLSPeer: Equatable, Sendable {
     let displayName: String
 }
 
+enum SonyCertificateDisplayName {
+    static func make(from subject: String?) -> String {
+        guard let subject else { return "Sony / Google TV" }
+        let cleaned = String(
+            String.UnicodeScalarView(
+                subject.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }
+            )
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        let components = cleaned.split(separator: "/", omittingEmptySubsequences: true)
+        let deviceName = components.count > 1 ? String(components[components.count - 2]) : cleaned
+        return deviceName.isEmpty ? "Sony / Google TV" : String(deviceName.prefix(80))
+    }
+}
+
 protocol SonyTLSChanneling: Sendable {
     func connect(
         address: PrivateIPv4Address,
@@ -292,7 +306,9 @@ private final class SonyTLSPeerCapture: @unchecked Sendable {
         let peer = SonyTLSPeer(
             certificateDER: certificateDER,
             certificateSHA256: fingerprint,
-            displayName: Self.cleanedSubject(SecCertificateCopySubjectSummary(certificate) as String?)
+            displayName: SonyCertificateDisplayName.make(
+                from: SecCertificateCopySubjectSummary(certificate) as String?
+            )
         )
         return lock.withLock {
             switch policy.evaluate(fingerprint: fingerprint) {
@@ -309,15 +325,5 @@ private final class SonyTLSPeerCapture: @unchecked Sendable {
     private func reject(_ error: SonyTLSChannelError) -> Bool {
         lock.withLock { storedFailure = error }
         return false
-    }
-
-    private static func cleanedSubject(_ value: String?) -> String {
-        guard let value else { return "Sony / Google TV" }
-        let cleaned = String(
-            String.UnicodeScalarView(
-                value.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }
-            )
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
-        return cleaned.isEmpty ? "Sony / Google TV" : String(cleaned.prefix(80))
     }
 }
