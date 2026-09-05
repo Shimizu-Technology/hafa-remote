@@ -253,7 +253,7 @@ struct HomeView: View {
         }
         await restoration.restore(
             from: savedTVs,
-            alreadyConnected: session.lastConnectedTV != nil
+            skipBecauseConnectionWasInitiated: session.hasInitiatedConnection
         ) { target in
             await session.connect(to: target)
         }
@@ -543,11 +543,11 @@ final class SavedTVRestorationCoordinator {
 
     func restore(
         from savedTVs: [SavedTV],
-        alreadyConnected: Bool = false,
+        skipBecauseConnectionWasInitiated: Bool = false,
         connect: @MainActor (TVConnectionTarget) async throws -> Void
     ) async {
         guard !didAttempt else { return }
-        if alreadyConnected {
+        if skipBecauseConnectionWasInitiated {
             didAttempt = true
             return
         }

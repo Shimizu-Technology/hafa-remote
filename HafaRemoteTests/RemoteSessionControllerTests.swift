@@ -23,6 +23,41 @@ struct RemoteSessionControllerTests {
         #expect(store.state == initialState)
         #expect(store.connectedTV == television)
         #expect(store.lastConnectedTV == television)
+        #expect(store.hasInitiatedConnection)
+    }
+
+    @MainActor
+    @Test("A delayed saved query cannot replace an in-progress manual connection")
+    func delayedRestorationDoesNotReplaceManualConnection() async throws {
+        let driver = SuspendedRemoteSessionDriver()
+        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+        let restoration = SavedTVRestorationCoordinator()
+        let savedTV = SavedTV(
+            reportedDeviceID: "saved-tv",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.21"
+        )
+        var starts = driver.connectionStarts.makeAsyncIterator()
+        let manualConnection = Task { @MainActor in
+            await store.connect(to: "192.168.10.20")
+        }
+        _ = await starts.next()
+        await waitUntil { @MainActor in store.state == .connecting }
+        var restorationConnections = 0
+
+        await restoration.restore(
+            from: [savedTV],
+            skipBecauseConnectionWasInitiated: store.hasInitiatedConnection
+        ) { _ in
+            restorationConnections += 1
+        }
+
+        #expect(restorationConnections == 0)
+        #expect(await driver.connectionStartCount == 1)
+        manualConnection.cancel()
+        await manualConnection.value
     }
 
     @Test("A Sony discovery never enters the Samsung session driver")

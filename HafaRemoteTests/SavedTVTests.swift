@@ -499,7 +499,10 @@ struct SavedTVTests {
         await restoration.restore(from: []) { _ in
             connectionAttempts += 1
         }
-        await restoration.restore(from: [newlyPairedTV], alreadyConnected: true) { _ in
+        await restoration.restore(
+            from: [newlyPairedTV],
+            skipBecauseConnectionWasInitiated: true
+        ) { _ in
             connectionAttempts += 1
         }
 

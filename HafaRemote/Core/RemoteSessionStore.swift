@@ -7,6 +7,7 @@ import Observation
 final class RemoteSessionStore {
     private(set) var state: RemoteSessionState = .idle
     private(set) var lastConnectedTV: ConnectedTV?
+    private(set) var hasInitiatedConnection = false
     private var acceptsConnectedTVUpdates = true
     private var projectionRevision = 0
 
@@ -23,6 +24,7 @@ final class RemoteSessionStore {
         self.controller = controller
         self.connectionWaitClock = connectionWaitClock
         state = initialState
+        hasInitiatedConnection = initialState != .idle
         if case .connected(let tv) = initialState {
             lastConnectedTV = tv
         }
@@ -70,12 +72,14 @@ final class RemoteSessionStore {
     }
 
     func connect(to addressText: String) async {
+        hasInitiatedConnection = true
         projectionRevision &+= 1
         acceptsConnectedTVUpdates = true
         await controller.connect(to: addressText)
     }
 
     func connect(to target: TVConnectionTarget) async {
+        hasInitiatedConnection = true
         projectionRevision &+= 1
         acceptsConnectedTVUpdates = true
         await controller.connect(to: target)
