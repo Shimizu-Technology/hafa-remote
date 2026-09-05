@@ -82,7 +82,11 @@ final class TVDiscoveryStore {
         backend: (any TVDiscoveryBackend)? = nil,
         searchDuration: Duration = .seconds(8)
     ) {
-        self.backend = backend ?? SamsungBonjourDiscoveryBackend()
+        self.backend =
+            backend
+            ?? CompositeTVDiscoveryBackend(
+                backends: [SamsungBonjourDiscoveryBackend(), SonyBonjourDiscoveryBackend()]
+            )
         self.searchDuration = searchDuration
     }
 

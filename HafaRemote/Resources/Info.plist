@@ -28,6 +28,7 @@
 	<string>Hafa Remote uses your Wi-Fi network to find and control supported TVs you choose.</string>
 	<key>NSBonjourServices</key>
 	<array>
+		<string>_androidtvremote2._tcp</string>
 		<string>_samsungmsf._tcp</string>
 	</array>
 	<key>NSAppTransportSecurity</key>
