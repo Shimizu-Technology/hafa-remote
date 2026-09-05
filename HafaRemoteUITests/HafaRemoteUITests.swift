@@ -403,11 +403,11 @@ final class HafaRemoteUITests: XCTestCase {
         powerOn.tap()
 
         let commandOutput = app.staticTexts["lastRemoteCommand"]
-        let wakeRecorded = expectation(
-            for: NSPredicate(format: "label == %@", "wake"),
+        let powerOnRecorded = expectation(
+            for: NSPredicate(format: "label == %@", "powerOn"),
             evaluatedWith: commandOutput
         )
-        wait(for: [wakeRecorded], timeout: 2)
+        wait(for: [powerOnRecorded], timeout: 2)
 
         let keyboard = app.buttons["remote-keyboard"]
         for _ in 0..<6 where !keyboard.exists {

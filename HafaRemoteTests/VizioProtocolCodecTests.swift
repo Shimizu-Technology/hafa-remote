@@ -7,6 +7,7 @@ struct VizioProtocolCodecTests {
     @Test("Every remote action maps to one reviewed Vizio keypress")
     func encodesRemoteCommands() throws {
         let expected: [RemoteCommand: (Int, Int)] = [
+            .powerOn: (11, 1),
             .powerOff: (11, 0),
             .up: (3, 8),
             .down: (3, 0),

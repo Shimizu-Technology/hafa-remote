@@ -279,7 +279,7 @@ enum SonyRemoteProtocolCodec {
         case .rewind: keyCode = 89
         case .fastForward: keyCode = 90
         case .mute: keyCode = 164
-        case .powerOff: keyCode = 177
+        case .powerOn, .powerOff: keyCode = 177
         }
         let key =
             SonyProtobuf.varintField(1, keyCode)

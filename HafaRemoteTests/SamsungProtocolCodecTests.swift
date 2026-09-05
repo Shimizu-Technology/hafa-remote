@@ -67,13 +67,16 @@ struct SamsungProtocolCodecTests {
             (.mute, "KEY_MUTE"),
         ]
 
-        #expect(mappings.map(\.0) == RemoteCommand.allCases)
+        #expect(mappings.map(\.0) == RemoteCommand.allCases.filter { $0 != .powerOn })
         #expect(Set(mappings.map(\.1)).count == mappings.count)
         let repeatable: Set<RemoteCommand> = [
             .up, .down, .left, .right, .volumeUp, .volumeDown,
         ]
         for command in RemoteCommand.allCases {
             #expect(command.supportsRepeat == repeatable.contains(command))
+        }
+        #expect(throws: SamsungProtocolError.unsupportedCommand) {
+            try SamsungProtocolCodec.remoteMessage(for: .powerOn)
         }
 
         for (command, expectedKey) in mappings {

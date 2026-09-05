@@ -38,18 +38,27 @@ struct HomeView: View {
                     statusLabel: statusLabel,
                     isConnected: isPresentedTVConnected,
                     supportsTextInput: tv.brand == .samsung,
-                    canWakeTV: wakeMACAddress(for: tv, savedTV: savedTV) != nil,
-                    wakeWasVerified: savedTV?.wakeWasVerified ?? false
+                    canPowerOnTV: canPowerOn(tv, savedTV: savedTV),
+                    powerOnWasVerified: savedTV?.wakeWasVerified ?? false,
+                    powerOnHelpText: powerOnHelpText(for: tv.brand),
+                    powerOnFailureText: powerOnFailureText(for: tv.brand)
                 ) { command in
                     guard isPresentedTVConnected else { return }
-                    try? await session.send(command)
+                    do {
+                        try await session.send(command)
+                        if command == .powerOff {
+                            await session.disconnect(clearRememberedTV: false)
+                        }
+                    } catch {
+                        // The session projects the protocol failure and reconnect state.
+                    }
                 } textAction: { input in
                     guard isPresentedTVConnected else {
                         throw TVSelectionError.notConnected
                     }
                     try await session.sendText(input)
-                } wakeAction: {
-                    try await wake(tv, savedTV: savedTV)
+                } powerOnAction: {
+                    try await powerOn(tv, savedTV: savedTV)
                 } retry: {
                     await session.connect(to: tv.connectionTarget)
                 } showTVSetup: {
@@ -349,6 +358,54 @@ struct HomeView: View {
     ) -> TVMACAddress? {
         guard tv.isEligibleForSamsungWake else { return nil }
         return tv.macAddress ?? savedTV?.validatedMACAddress
+    }
+
+    private func canPowerOn(_ tv: ConnectedTV, savedTV: SavedTV?) -> Bool {
+        switch tv.brand {
+        case .samsung:
+            wakeMACAddress(for: tv, savedTV: savedTV) != nil
+        case .sony, .vizio:
+            savedTV?.connectionTarget != nil
+        }
+    }
+
+    private func powerOnHelpText(for brand: TVBrand) -> String {
+        switch brand {
+        case .samsung:
+            "Requires Power On With Mobile in the Samsung TV's Network settings."
+        case .sony:
+            "Requires Remote Start or network standby in the Sony TV's settings."
+        case .vizio:
+            "Requires Quick Start mode in the Vizio TV's System settings."
+        }
+    }
+
+    private func powerOnFailureText(for brand: TVBrand) -> String {
+        "The \(brand.displayName) TV did not respond. Confirm the iPhone and TV use the same Wi-Fi, enable \(powerOnSettingName(for: brand)), then try again."
+    }
+
+    private func powerOnSettingName(for brand: TVBrand) -> String {
+        switch brand {
+        case .samsung:
+            "Power On With Mobile"
+        case .sony:
+            "Remote Start or network standby"
+        case .vizio:
+            "Quick Start mode"
+        }
+    }
+
+    private func powerOn(_ tv: ConnectedTV, savedTV: SavedTV?) async throws {
+        switch tv.brand {
+        case .samsung:
+            try await wake(tv, savedTV: savedTV)
+        case .sony, .vizio:
+            guard let target = savedTV?.connectionTarget else {
+                throw TVSelectionError.notConnected
+            }
+            _ = try await session.connectAndWait(to: target, timeout: .seconds(30))
+            try await session.send(.powerOn)
+        }
     }
 
     private func wake(_ tv: ConnectedTV, savedTV: SavedTV?) async throws {

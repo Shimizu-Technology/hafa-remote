@@ -141,7 +141,7 @@ struct SonyProtocolCodecTests {
 
     private func expectedCode(for command: RemoteCommand) -> UInt64 {
         switch command {
-        case .powerOff: 177
+        case .powerOn, .powerOff: 177
         case .up: 19
         case .down: 20
         case .left: 21
