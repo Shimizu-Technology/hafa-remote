@@ -45,14 +45,10 @@ struct RemoteSessionControllerTests {
     }
 
     @MainActor
-    @Test("The observable store bounds an unsuccessful connection sequence")
+    @Test("The observable store timeout cancels a suspended initial connection")
     func storeConnectionWaitTimesOut() async throws {
-        let driver = MockRemoteSessionDriver(outcomes: [.failure(.offline)])
-        let controller = RemoteSessionController(
-            driver: driver,
-            configuration: testConfiguration(reconnectDelays: [])
-        )
-        let store = RemoteSessionStore(controller: controller)
+        let driver = SuspendedRemoteSessionDriver()
+        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
 
         await #expect(throws: RemoteSessionControllerError.timedOut(.connect)) {
             try await store.connectAndWait(
@@ -60,7 +56,29 @@ struct RemoteSessionControllerTests {
                 timeout: .milliseconds(20)
             )
         }
-        #expect(await driver.connectCallCount == 1)
+        #expect(await driver.cancelledConnectionCount == 1)
+    }
+
+    @MainActor
+    @Test("Cancelling the observable store wait cancels its initial connection")
+    func cancellingStoreConnectionWaitStopsConnection() async throws {
+        let driver = SuspendedRemoteSessionDriver()
+        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+        var starts = driver.connectionStarts.makeAsyncIterator()
+
+        let connection = Task {
+            try await store.connectAndWait(
+                to: "192.168.10.20",
+                timeout: .seconds(30)
+            )
+        }
+        _ = await starts.next()
+        connection.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            try await connection.value
+        }
+        #expect(await driver.cancelledConnectionCount == 1)
     }
 
     @MainActor

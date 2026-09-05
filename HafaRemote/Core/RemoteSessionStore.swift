@@ -67,7 +67,12 @@ final class RemoteSessionStore {
     ) async throws -> PairedSamsungTV {
         let states = await controller.states()
 
-        return try await withThrowingTaskGroup(of: PairedSamsungTV.self) { group in
+        return try await withThrowingTaskGroup(of: PairedSamsungTV?.self) { group in
+            group.addTask {
+                await self.connect(to: addressText)
+                try Task.checkCancellation()
+                return nil
+            }
             group.addTask {
                 for await state in states {
                     try Task.checkCancellation()
@@ -82,12 +87,13 @@ final class RemoteSessionStore {
                 throw RemoteSessionControllerError.timedOut(.connect)
             }
 
-            await connect(to: addressText)
-            guard let connectedTV = try await group.next() else {
-                throw RemoteSessionControllerError.timedOut(.connect)
+            while let result = try await group.next() {
+                if let connectedTV = result {
+                    group.cancelAll()
+                    return connectedTV
+                }
             }
-            group.cancelAll()
-            return connectedTV
+            throw RemoteSessionControllerError.timedOut(.connect)
         }
     }
 
