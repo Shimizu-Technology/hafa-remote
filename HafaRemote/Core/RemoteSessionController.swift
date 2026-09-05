@@ -579,8 +579,15 @@ actor RemoteSessionController {
             transition(to: .certificateChanged)
         } else if error as? SonyPairingCoordinatorError == .invalidPairingCode
             || error as? SonyPairingCoordinatorError == .pairingRejected
+            || error as? VizioPairingCoordinatorError == .pinRejected
         {
             transition(to: .denied)
+        } else if error as? VizioPairingCoordinatorError == .savedPairingRejected {
+            transition(to: .savedPairingRejected)
+        } else if error as? VizioPairingCoordinatorError == .certificateChanged
+            || error as? VizioHTTPSClientError == .certificateChanged
+        {
+            transition(to: .certificateChanged)
         } else if Self.isUnsupportedError(error) {
             transition(to: .unsupported)
         } else if Self.isOfflineError(error) {
@@ -719,6 +726,7 @@ actor RemoteSessionController {
     private static func isUnsupportedError(_ error: Error) -> Bool {
         error as? SamsungPairingCoordinatorError == .unsupportedTokenAuthentication
             || error as? SonyPairingCoordinatorError == .unsupportedDevice
+            || error as? VizioPairingCoordinatorError == .invalidTarget
             || error as? MultiBrandSessionDriverError == .unsupportedBrand
     }
 
@@ -728,6 +736,9 @@ actor RemoteSessionController {
         }
         if let error = error as? SonyTLSChannelError {
             return error == .unavailable || error == .connectionClosed
+        }
+        if let error = error as? VizioHTTPSClientError {
+            return error == .unavailable || error == .notConnected
         }
         return false
     }

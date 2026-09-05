@@ -85,7 +85,11 @@ final class TVDiscoveryStore {
         self.backend =
             backend
             ?? CompositeTVDiscoveryBackend(
-                backends: [SamsungBonjourDiscoveryBackend(), SonyBonjourDiscoveryBackend()]
+                backends: [
+                    SamsungBonjourDiscoveryBackend(),
+                    SonyBonjourDiscoveryBackend(),
+                    VizioBonjourDiscoveryBackend(),
+                ]
             )
         self.searchDuration = searchDuration
     }
@@ -367,6 +371,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
         enum Fixture {
             case television
             case sonyTelevision
+            case vizioTelevision
             case noResults
             case noResultsThenTelevision
         }
@@ -387,6 +392,8 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
                 publishTelevision(brand: .samsung, to: eventHandler)
             case .sonyTelevision:
                 publishTelevision(brand: .sony, to: eventHandler)
+            case .vizioTelevision:
+                publishTelevision(brand: .vizio, to: eventHandler)
             case .noResults:
                 eventHandler(.finished)
             case .noResultsThenTelevision:
@@ -408,15 +415,28 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
                 eventHandler(.failed)
                 return
             }
+            let modelName: String
+            let controlPort: UInt16?
+            switch brand {
+            case .samsung:
+                modelName = "Samsung Q70A"
+                controlPort = nil
+            case .sony:
+                modelName = "Sony BRAVIA"
+                controlPort = 6466
+            case .vizio:
+                modelName = "Vizio SmartCast"
+                controlPort = 7345
+            }
             eventHandler(
                 .found(
                     DiscoveredTV(
                         brand: brand,
                         reportedIdentifier: "synthetic-\(brand.rawValue)-tv",
                         displayName: "Living Room TV",
-                        modelName: brand == .sony ? "Sony BRAVIA" : "Samsung Q70A",
+                        modelName: modelName,
                         address: address,
-                        controlPort: brand == .sony ? 6466 : nil
+                        controlPort: controlPort
                     )
                 )
             )

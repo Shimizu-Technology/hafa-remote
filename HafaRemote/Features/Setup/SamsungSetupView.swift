@@ -87,7 +87,7 @@ struct TVSetupView: View {
             }
             .onChange(of: session.state) { _, state in
                 if case .pairing = state {
-                    // Preserve entered digits while the Sony handshake is waiting.
+                    // Preserve entered digits while the selected TV is waiting.
                 } else {
                     resetPairingCodeSubmission()
                     pairingCode = ""
@@ -259,39 +259,8 @@ struct TVSetupView: View {
             }
         case .pairing:
             Section {
-                if selectedTV?.brand == .sony {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Label("Enter the code shown on your Sony TV.", systemImage: "number")
-                            .font(.headline)
-
-                        TextField("6-character code", text: $pairingCode)
-                            .keyboardType(.asciiCapable)
-                            .textInputAutocapitalization(.characters)
-                            .autocorrectionDisabled()
-                            .textContentType(.oneTimeCode)
-                            .onChange(of: pairingCode) { _, value in
-                                pairingCode = sanitizedPairingCode(value)
-                            }
-                            .accessibilityLabel("Sony TV pairing code")
-                            .accessibilityIdentifier("sonyPairingCodeField")
-
-                        Button {
-                            submitSonyPairingCode()
-                        } label: {
-                            HStack {
-                                Text(hasSubmittedPairingCode ? "Code Submitted" : "Pair Sony TV")
-                                Spacer()
-                                if isSubmittingPairingCode {
-                                    ProgressView()
-                                }
-                            }
-                        }
-                        .disabled(
-                            pairingCode.count != 6 || isSubmittingPairingCode
-                                || hasSubmittedPairingCode
-                        )
-                        .accessibilityIdentifier("submitSonyPairingCodeButton")
-                    }
+                if let brand = selectedTV?.brand, brand == .sony || brand == .vizio {
+                    pairingCodeEntry(for: brand)
                 } else {
                     Label(
                         "Choose Allow if your TV asks to approve Hafa Remote.",
@@ -309,11 +278,7 @@ struct TVSetupView: View {
             connectionErrorSection(
                 "The TV is unavailable. Make sure it is on and connected to the same Wi-Fi.")
         case .denied:
-            connectionErrorSection(
-                selectedTV?.brand == .sony
-                    ? "The Sony pairing code was not accepted. Find the TV and try again."
-                    : "The TV did not approve Hafa Remote. Try again and choose Allow on the TV."
-            )
+            connectionErrorSection(pairingDeniedMessage)
         case .savedPairingRejected:
             connectionErrorSection(
                 "The TV no longer accepts its saved pairing. Remove it and approve Hafa Remote again.")
@@ -405,6 +370,17 @@ struct TVSetupView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var pairingDeniedMessage: String {
+        switch selectedTV?.brand {
+        case .sony:
+            "The Sony pairing code was not accepted. Find the TV and try again."
+        case .vizio:
+            "The Vizio PIN was not accepted. Find the TV and try again."
+        case .samsung, .none:
+            "The TV did not approve Hafa Remote. Try again and choose Allow on the TV."
         }
     }
 
@@ -508,14 +484,72 @@ struct TVSetupView: View {
         }
     }
 
-    private func sanitizedPairingCode(_ value: String) -> String {
-        String(
-            value.uppercased().filter { $0.isHexDigit }.prefix(6)
-        )
+    @ViewBuilder
+    private func pairingCodeEntry(for brand: TVBrand) -> some View {
+        let isSony = brand == .sony
+        let requiredLength = isSony ? 6 : 4
+        let fieldIdentifier = isSony ? "sonyPairingCodeField" : "vizioPairingCodeField"
+        let buttonIdentifier =
+            isSony ? "submitSonyPairingCodeButton" : "submitVizioPairingCodeButton"
+
+        VStack(alignment: .leading, spacing: 14) {
+            Label(
+                isSony
+                    ? "Enter the code shown on your Sony TV."
+                    : "Enter the PIN shown on your Vizio TV.",
+                systemImage: "number"
+            )
+            .font(.headline)
+
+            TextField(isSony ? "6-character code" : "4-digit PIN", text: $pairingCode)
+                .keyboardType(isSony ? .asciiCapable : .numberPad)
+                .textInputAutocapitalization(isSony ? .characters : .never)
+                .autocorrectionDisabled()
+                .textContentType(.oneTimeCode)
+                .onChange(of: pairingCode) { _, value in
+                    pairingCode = sanitizedPairingCode(value, for: brand)
+                }
+                .accessibilityLabel("\(brand.displayName) TV pairing code")
+                .accessibilityIdentifier(fieldIdentifier)
+
+            Button {
+                submitPairingCode(requiredLength: requiredLength)
+            } label: {
+                HStack {
+                    Text(
+                        hasSubmittedPairingCode
+                            ? "Code Submitted" : "Pair \(brand.displayName) TV"
+                    )
+                    Spacer()
+                    if isSubmittingPairingCode {
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(
+                pairingCode.count != requiredLength || isSubmittingPairingCode
+                    || hasSubmittedPairingCode
+            )
+            .accessibilityIdentifier(buttonIdentifier)
+        }
     }
 
-    private func submitSonyPairingCode() {
-        guard pairingCode.count == 6, !isSubmittingPairingCode, !hasSubmittedPairingCode else {
+    private func sanitizedPairingCode(_ value: String, for brand: TVBrand) -> String {
+        switch brand {
+        case .sony:
+            String(value.uppercased().filter(\.isHexDigit).prefix(6))
+        case .vizio:
+            String(value.filter(\.isNumber).prefix(4))
+        case .samsung:
+            ""
+        }
+    }
+
+    private func submitPairingCode(requiredLength: Int) {
+        guard pairingCode.count == requiredLength,
+            !isSubmittingPairingCode,
+            !hasSubmittedPairingCode
+        else {
             return
         }
         pairingCodeTask?.cancel()
@@ -592,9 +626,14 @@ struct TVSetupView: View {
     private func accessibilityAnnouncement(for state: RemoteSessionState) -> String? {
         switch state {
         case .pairing:
-            selectedTV?.brand == .sony
-                ? "Enter the six-character code shown on your Sony TV."
-                : "Choose Allow if your TV asks to approve Hafa Remote."
+            switch selectedTV?.brand {
+            case .sony:
+                "Enter the six-character code shown on your Sony TV."
+            case .vizio:
+                "Enter the four-digit PIN shown on your Vizio TV."
+            case .samsung, .none:
+                "Choose Allow if your TV asks to approve Hafa Remote."
+            }
         case .connected(let tv):
             "Connected to \(tv.modelName)."
         case .denied:

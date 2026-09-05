@@ -106,6 +106,39 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertFalse(app.buttons["remote-keyboard"].exists)
     }
 
+    /// Vizio discovery stays address-free and uses the four-digit PIN shown on the TV.
+    @MainActor
+    func testVizioPairingPINFlow() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-vizio-pairing")
+        app.launch()
+
+        let addButton = app.buttons["addTVButton"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+        addButton.tap()
+
+        let discoveredTV = app.buttons["discoveredTVButton"]
+        XCTAssertTrue(discoveredTV.waitForExistence(timeout: 2))
+        XCTAssertTrue(discoveredTV.label.contains("Vizio"))
+        discoveredTV.tap()
+
+        let codeField = app.textFields["vizioPairingCodeField"]
+        XCTAssertTrue(codeField.waitForExistence(timeout: 2))
+        let submit = app.buttons["submitVizioPairingCodeButton"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 2))
+        XCTAssertFalse(submit.isEnabled)
+
+        codeField.tap()
+        codeField.typeText("1234")
+        XCTAssertTrue(submit.isEnabled)
+        submit.tap()
+
+        let connectionStatus = app.staticTexts["remoteConnectionStatus"]
+        XCTAssertTrue(connectionStatus.waitForExistence(timeout: 5))
+        XCTAssertEqual(connectionStatus.label, "Connected")
+        XCTAssertFalse(app.buttons["remote-keyboard"].exists)
+    }
+
     /// Runs separately from the deterministic gate against the powered-on household TV.
     @MainActor
     func testHardwareDiscoveryFindsSamsungTV() throws {
