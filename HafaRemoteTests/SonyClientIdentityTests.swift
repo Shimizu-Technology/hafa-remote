@@ -1,0 +1,84 @@
+import Foundation
+import Security
+import Testing
+
+@testable import HafaRemote
+
+struct SonyClientIdentityTests {
+    @Test("A generated Sony client certificate contains its RSA public key")
+    func generatesSelfSignedRSAClientCertificate() throws {
+        let privateKey = try makeRSAKey()
+        let certificate = try SonyClientCertificateFactory.make(
+            privateKey: privateKey,
+            commonName: "Hafa Remote Test",
+            serialNumber: Data(repeating: 7, count: 16),
+            now: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        let certificateKey = try #require(SecCertificateCopyKey(certificate))
+        let originalKey = try #require(SecKeyCopyPublicKey(privateKey))
+
+        #expect(try externalRepresentation(certificateKey) == externalRepresentation(originalKey))
+        #expect(try SonyRSAKeyComponents(certificate: certificate).exponent == Data([1, 0, 1]))
+    }
+
+    @Test("The six-character Sony pairing code verifies certificate ownership")
+    func verifiesPairingCode() throws {
+        let clientCertificate = try makeCertificate(serialByte: 8)
+        let serverCertificate = try makeCertificate(serialByte: 9)
+        let suffix = Data([0x12, 0x34])
+        let displayCode = try SonyPairingSecret.displayCode(
+            suffix: suffix,
+            clientCertificate: clientCertificate,
+            serverCertificate: serverCertificate
+        )
+
+        let digest = try SonyPairingSecret.make(
+            pairingCode: displayCode.lowercased(),
+            clientCertificate: clientCertificate,
+            serverCertificate: serverCertificate
+        )
+
+        #expect(displayCode.count == 6)
+        #expect(digest.count == 32)
+        #expect(throws: SonyClientIdentityError.pairingCodeMismatch) {
+            try SonyPairingSecret.make(
+                pairingCode: "00" + String(displayCode.dropFirst(2)),
+                clientCertificate: clientCertificate,
+                serverCertificate: serverCertificate
+            )
+        }
+        #expect(throws: SonyClientIdentityError.invalidPairingCode) {
+            try SonyPairingSecret.make(
+                pairingCode: "12345Z",
+                clientCertificate: clientCertificate,
+                serverCertificate: serverCertificate
+            )
+        }
+    }
+
+    private func makeCertificate(serialByte: UInt8) throws -> SecCertificate {
+        try SonyClientCertificateFactory.make(
+            privateKey: makeRSAKey(),
+            commonName: "Synthetic TV",
+            serialNumber: Data(repeating: serialByte, count: 16),
+            now: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+    }
+
+    private func makeRSAKey() throws -> SecKey {
+        var error: Unmanaged<CFError>?
+        let key = SecKeyCreateRandomKey(
+            [
+                kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
+                kSecAttrKeySizeInBits as String: 2_048,
+            ] as CFDictionary,
+            &error
+        )
+        return try #require(key)
+    }
+
+    private func externalRepresentation(_ key: SecKey) throws -> Data {
+        var error: Unmanaged<CFError>?
+        return try #require(SecKeyCopyExternalRepresentation(key, &error) as Data?)
+    }
+}

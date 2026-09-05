@@ -33,6 +33,10 @@
 		854D9E6D373AC5EC05814B57 /* SamsungDeviceInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FD1515BC189F740FA4DE7A3 /* SamsungDeviceInfo.swift */; };
 		A61000000000000000000001 /* SamsungWakeOnLAN.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62000000000000000000001 /* SamsungWakeOnLAN.swift */; };
 		A61000000000000000000002 /* SamsungWakeOnLANTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62000000000000000000002 /* SamsungWakeOnLANTests.swift */; };
+		B11000000000000000000001 /* SonyProtocolCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = B12000000000000000000001 /* SonyProtocolCodec.swift */; };
+		B11000000000000000000002 /* SonyProtocolCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B12000000000000000000002 /* SonyProtocolCodecTests.swift */; };
+		B11000000000000000000003 /* SonyClientIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B12000000000000000000003 /* SonyClientIdentity.swift */; };
+		B11000000000000000000004 /* SonyClientIdentityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B12000000000000000000004 /* SonyClientIdentityTests.swift */; };
 		8F86632B2E9ADC46C98BFB1C /* TVDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44405F91DE5FC74EFF634D3 /* TVDriver.swift */; };
 		9CABF29420764B69CE52ED09 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9C450D22C7D445E62710FF5D /* Foundation.framework */; };
 		AF670AF8B9F1EB53EEAF349B /* HafaRemoteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F11E2A820EC89F7AD933554 /* HafaRemoteApp.swift */; };
@@ -89,6 +93,10 @@
 		7FD1515BC189F740FA4DE7A3 /* SamsungDeviceInfo.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDeviceInfo.swift; sourceTree = "<group>"; };
 		A62000000000000000000001 /* SamsungWakeOnLAN.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungWakeOnLAN.swift; sourceTree = "<group>"; };
 		A62000000000000000000002 /* SamsungWakeOnLANTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungWakeOnLANTests.swift; sourceTree = "<group>"; };
+		B12000000000000000000001 /* SonyProtocolCodec.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SonyProtocolCodec.swift; sourceTree = "<group>"; };
+		B12000000000000000000002 /* SonyProtocolCodecTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SonyProtocolCodecTests.swift; sourceTree = "<group>"; };
+		B12000000000000000000003 /* SonyClientIdentity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SonyClientIdentity.swift; sourceTree = "<group>"; };
+		B12000000000000000000004 /* SonyClientIdentityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SonyClientIdentityTests.swift; sourceTree = "<group>"; };
 		7A7000110000000000000001 /* SamsungDiscovery.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDiscovery.swift; sourceTree = "<group>"; };
 		7A7000120000000000000002 /* SamsungDiscoveryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDiscoveryTests.swift; sourceTree = "<group>"; };
 		9660B0481989B57E29327545 /* SamsungCommandTransport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungCommandTransport.swift; sourceTree = "<group>"; };
@@ -153,9 +161,20 @@
 			isa = PBXGroup;
 			children = (
 				088025519B8EA59CEFAD391A /* Samsung */,
+				B13000000000000000000001 /* Sony */,
 			);
 			name = Protocols;
 			path = Protocols;
+			sourceTree = "<group>";
+		};
+		B13000000000000000000001 /* Sony */ = {
+			isa = PBXGroup;
+			children = (
+				B12000000000000000000003 /* SonyClientIdentity.swift */,
+				B12000000000000000000001 /* SonyProtocolCodec.swift */,
+			);
+			name = Sony;
+			path = Sony;
 			sourceTree = "<group>";
 		};
 		2CF6AD0EE094B893960FF0D4 /* HafaRemoteUITests */ = {
@@ -227,6 +246,8 @@
 				174B2BC669B6814751000013 /* RemoteSessionControllerTests.swift */,
 				275B2BC669B6814751000013 /* SavedTVTests.swift */,
 				A62000000000000000000002 /* SamsungWakeOnLANTests.swift */,
+				B12000000000000000000004 /* SonyClientIdentityTests.swift */,
+				B12000000000000000000002 /* SonyProtocolCodecTests.swift */,
 			);
 			name = HafaRemoteTests;
 			path = HafaRemoteTests;
@@ -452,6 +473,8 @@
 				174B2BC669B6814751000003 /* RemoteSessionControllerTests.swift in Sources */,
 				275B2BC669B6814751000003 /* SavedTVTests.swift in Sources */,
 				A61000000000000000000002 /* SamsungWakeOnLANTests.swift in Sources */,
+				B11000000000000000000004 /* SonyClientIdentityTests.swift in Sources */,
+				B11000000000000000000002 /* SonyProtocolCodecTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -488,6 +511,8 @@
 				5C0C08C13F47A1E0A1C4EF91 /* SamsungTrustDelegate.swift in Sources */,
 				3A58178774479925FA7D5AF6 /* SamsungCommandTransport.swift in Sources */,
 				D39084F5026A79477345A47B /* SamsungPairingCoordinator.swift in Sources */,
+				B11000000000000000000003 /* SonyClientIdentity.swift in Sources */,
+				B11000000000000000000001 /* SonyProtocolCodec.swift in Sources */,
 				2D3D3C2CF9409A3568772E68 /* SamsungSetupView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
