@@ -64,6 +64,10 @@ final class RemoteSessionStore {
         try await controller.send(command)
     }
 
+    func sendText(_ input: RemoteTextInput) async throws {
+        try await controller.sendText(input)
+    }
+
     func disconnect(clearRememberedTV: Bool = true) async {
         projectionRevision &+= 1
         acceptsConnectedTVUpdates = false

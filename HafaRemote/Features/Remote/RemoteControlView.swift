@@ -9,10 +9,12 @@ struct RemoteControlView: View {
     let statusLabel: String
     let isConnected: Bool
     let action: @MainActor @Sendable (RemoteCommand) async -> Void
+    let textAction: @MainActor @Sendable (RemoteTextInput) async throws -> Void
     let retry: @MainActor @Sendable () async -> Void
     let showTVSetup: @MainActor @Sendable () -> Void
 
     @State private var isConfirmingPowerOff = false
+    @State private var isShowingKeyboard = false
 
     var body: some View {
         ZStack {
@@ -58,6 +60,13 @@ struct RemoteControlView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Power on is available only after wake support is verified for this TV.")
+        }
+        .sheet(isPresented: $isShowingKeyboard) {
+            SamsungTextInputSheet(
+                tvName: tvName,
+                isConnected: isConnected,
+                send: textAction
+            )
         }
     }
 
@@ -267,6 +276,7 @@ struct RemoteControlView: View {
 
     private var keyboardControl: some View {
         Button {
+            isShowingKeyboard = true
         } label: {
             Label("Keyboard", systemImage: "keyboard")
                 .font(.headline)
@@ -274,9 +284,9 @@ struct RemoteControlView: View {
                 .frame(minHeight: 50)
         }
         .buttonStyle(.bordered)
-        .tint(HafaTheme.secondaryText)
-        .disabled(true)
-        .accessibilityHint("Text entry becomes available after this TV's keyboard support is verified.")
+        .tint(HafaTheme.accent)
+        .disabled(!isConnected)
+        .accessibilityHint("Opens text entry. Focus a text field on the TV first.")
         .accessibilityIdentifier("remote-keyboard")
     }
 
@@ -363,6 +373,8 @@ struct RemoteControlView: View {
                     isConnected: isConnected
                 ) { command in
                     lastCommand = command.rawValue
+                } textAction: { input in
+                    lastCommand = "text:\(input.value.count)"
                 } retry: {
                     lastCommand = "retry"
                 } showTVSetup: {
@@ -382,3 +394,184 @@ struct RemoteControlView: View {
         }
     }
 #endif
+
+private struct SamsungTextInputSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let tvName: String
+    let isConnected: Bool
+    let send: @MainActor @Sendable (RemoteTextInput) async throws -> Void
+
+    @State private var text = ""
+    @State private var delivery = SamsungTextDeliveryController()
+    @FocusState private var isTextFieldFocused: Bool
+
+    private var validatedInput: RemoteTextInput? {
+        try? RemoteTextInput(text)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Text to send", text: $text)
+                        .focused($isTextFieldFocused)
+                        .textInputAutocapitalization(.sentences)
+                        .autocorrectionDisabled(false)
+                        .submitLabel(.send)
+                        .onSubmit {
+                            sendText()
+                        }
+                        .onChange(of: text) { _, newValue in
+                            if newValue.count > RemoteTextInput.maximumCharacterCount {
+                                text = String(newValue.prefix(RemoteTextInput.maximumCharacterCount))
+                            }
+                            delivery.clearResult()
+                        }
+                        .accessibilityIdentifier("remoteTextField")
+
+                    Text("\(text.count) / \(RemoteTextInput.maximumCharacterCount)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .accessibilityLabel(
+                            "\(text.count) of \(RemoteTextInput.maximumCharacterCount) characters")
+                } header: {
+                    Text("Send to \(tvName)")
+                } footer: {
+                    Text(
+                        "Open a text field on the TV first. Some apps and secure screens do not accept remote text."
+                    )
+                }
+
+                if let resultMessage = delivery.result?.message {
+                    Section {
+                        Label(resultMessage, systemImage: "info.circle")
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("remoteTextResult")
+                    }
+                }
+
+                Section {
+                    Button {
+                        sendText()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            if delivery.isSending {
+                                ProgressView()
+                            } else {
+                                Text("Send Text")
+                                    .fontWeight(.semibold)
+                            }
+                            Spacer()
+                        }
+                    }
+                    .disabled(validatedInput == nil || !isConnected || delivery.isSending)
+                    .accessibilityIdentifier("sendRemoteTextButton")
+                }
+            }
+            .navigationTitle("TV Keyboard")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        delivery.cancel()
+                        dismiss()
+                    }
+                }
+            }
+            .task {
+                isTextFieldFocused = true
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .onChange(of: delivery.result) { _, result in
+            guard let result else { return }
+            UINotificationFeedbackGenerator().notificationOccurred(result.feedbackType)
+            UIAccessibility.post(notification: .announcement, argument: result.message)
+        }
+        .onDisappear {
+            delivery.cancel()
+        }
+    }
+
+    private func sendText() {
+        guard let input = validatedInput, isConnected else { return }
+        delivery.send(input, using: send)
+    }
+}
+
+enum SamsungTextDeliveryResult: Equatable {
+    case sent
+    case failed
+
+    var message: String {
+        switch self {
+        case .sent:
+            "Sent to the TV. If nothing appeared, that TV screen does not accept remote text."
+        case .failed:
+            "Text was not sent. Check the TV connection and try again."
+        }
+    }
+
+    var feedbackType: UINotificationFeedbackGenerator.FeedbackType {
+        switch self {
+        case .sent: .success
+        case .failed: .error
+        }
+    }
+}
+
+@MainActor
+@Observable
+final class SamsungTextDeliveryController {
+    private(set) var isSending = false
+    private(set) var result: SamsungTextDeliveryResult?
+
+    private var activeDeliveryID: UUID?
+    private var deliveryTask: Task<Void, Never>?
+
+    func send(
+        _ input: RemoteTextInput,
+        using operation: @escaping @MainActor @Sendable (RemoteTextInput) async throws -> Void
+    ) {
+        guard deliveryTask == nil else { return }
+
+        let deliveryID = UUID()
+        activeDeliveryID = deliveryID
+        isSending = true
+        result = nil
+        deliveryTask = Task { @MainActor [weak self] in
+            do {
+                try await operation(input)
+                try Task.checkCancellation()
+                self?.finish(deliveryID, with: .sent)
+            } catch is CancellationError {
+                self?.finish(deliveryID, with: nil)
+            } catch {
+                self?.finish(deliveryID, with: .failed)
+            }
+        }
+    }
+
+    func cancel() {
+        activeDeliveryID = nil
+        isSending = false
+        let task = deliveryTask
+        deliveryTask = nil
+        task?.cancel()
+    }
+
+    func clearResult() {
+        result = nil
+    }
+
+    private func finish(_ deliveryID: UUID, with result: SamsungTextDeliveryResult?) {
+        guard activeDeliveryID == deliveryID else { return }
+        activeDeliveryID = nil
+        deliveryTask = nil
+        isSending = false
+        self.result = result
+    }
+}

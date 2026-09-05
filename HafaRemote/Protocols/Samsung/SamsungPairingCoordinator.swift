@@ -13,6 +13,7 @@ protocol SamsungPairingCoordinating: Sendable {
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV
     func send(_ command: RemoteCommand) async throws
+    func sendText(_ input: RemoteTextInput) async throws
     func forget(addressText: String) async throws
     func disconnect() async
 }
@@ -20,6 +21,10 @@ protocol SamsungPairingCoordinating: Sendable {
 extension SamsungPairingCoordinating {
     func sendSelect() async throws {
         try await send(.select)
+    }
+
+    func sendText(_ input: RemoteTextInput) async throws {
+        throw TVDriverError.unsupportedTextInput
     }
 }
 
@@ -129,6 +134,10 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
 
     func send(_ command: RemoteCommand) async throws {
         try await transport.send(command)
+    }
+
+    func sendText(_ input: RemoteTextInput) async throws {
+        try await transport.sendText(input)
     }
 
     func forget(addressText: String) async throws {
