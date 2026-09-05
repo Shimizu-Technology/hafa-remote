@@ -124,7 +124,9 @@ struct SonyTLSChannelTests {
     }
 }
 
-private final class SonyTestConnection: @unchecked Sendable {}
+private final class SonyTestConnection: @unchecked Sendable {
+    deinit {}
+}
 
 private actor SonyReceiveIsolationHarness {
     private var connection: SonyTestConnection?
