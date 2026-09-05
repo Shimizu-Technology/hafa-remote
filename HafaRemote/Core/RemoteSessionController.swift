@@ -6,6 +6,10 @@ protocol RemoteSessionDriving: TVDriver {
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> ConnectedTV
+    func connect(
+        to target: TVConnectionTarget,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> ConnectedTV
     func forget(addressText: String) async throws
     func forget(addressText: String, reportedDeviceID: String?) async throws
 }
@@ -13,18 +17,45 @@ protocol RemoteSessionDriving: TVDriver {
 extension RemoteSessionDriving {
     var brand: TVBrand { .samsung }
 
+    func connect(
+        to target: TVConnectionTarget,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> ConnectedTV {
+        try await connect(
+            addressText: target.address.rawValue,
+            onWaitingForApproval: onWaitingForApproval
+        )
+    }
+
     func forget(addressText: String, reportedDeviceID: String?) async throws {
         try await forget(addressText: addressText)
     }
 }
 
 extension SamsungPairingCoordinator: RemoteSessionDriving {
+    nonisolated var brand: TVBrand { .samsung }
+
     func connect(
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> ConnectedTV {
         try await pair(
             addressText: addressText,
+            onWaitingForApproval: onWaitingForApproval
+        )
+    }
+
+    func connect(
+        to target: TVConnectionTarget,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> ConnectedTV {
+        guard target.brand == .samsung,
+            target.controlPort == nil || target.controlPort == 8002
+        else {
+            throw SamsungPairingCoordinatorError.unsupportedTokenAuthentication
+        }
+        return try await pair(
+            addressText: target.address.rawValue,
             onWaitingForApproval: onWaitingForApproval
         )
     }
@@ -82,6 +113,7 @@ actor RemoteSessionController {
     private var isForeground = true
     private var lastNetworkReachability: Bool?
     private var targetAddressText: String?
+    private var connectionTarget: TVConnectionTarget?
     private var generation = UUID()
     private var reconnectAttempt = 0
 
@@ -119,6 +151,27 @@ actor RemoteSessionController {
     }
 
     func connect(to addressText: String) async {
+        await beginConnection(to: addressText, target: nil)
+    }
+
+    func connect(to target: TVConnectionTarget) async {
+        guard target.brand == driver.brand else {
+            generation = UUID()
+            targetAddressText = nil
+            connectionTarget = nil
+            reconnectAttempt = 0
+            await cancelInFlightWork()
+            await disconnectDriverWithinLimit()
+            transition(to: .unsupported)
+            return
+        }
+        await beginConnection(to: target.address.rawValue, target: target)
+    }
+
+    private func beginConnection(
+        to addressText: String,
+        target: TVConnectionTarget?
+    ) async {
         do {
             try await waitForPairingRemoval()
         } catch is CancellationError {
@@ -131,6 +184,7 @@ actor RemoteSessionController {
         generation = UUID()
         let requestedGeneration = generation
         targetAddressText = addressText
+        connectionTarget = target
         reconnectAttempt = 0
         reconnectTask?.cancel()
         reconnectTask = nil
@@ -139,19 +193,6 @@ actor RemoteSessionController {
         await disconnectDriverWithinLimit()
         guard generation == requestedGeneration, isForeground else { return }
         await attemptConnection(generation: requestedGeneration, isReconnect: false)
-    }
-
-    func connect(to target: TVConnectionTarget) async {
-        guard target.brand == driver.brand else {
-            generation = UUID()
-            targetAddressText = nil
-            reconnectAttempt = 0
-            await cancelInFlightWork()
-            await disconnectDriverWithinLimit()
-            transition(to: .unsupported)
-            return
-        }
-        await connect(to: target.address.rawValue)
     }
 
     func send(_ command: RemoteCommand) async throws {
@@ -238,6 +279,7 @@ actor RemoteSessionController {
     func disconnect() async {
         generation = UUID()
         targetAddressText = nil
+        connectionTarget = nil
         reconnectAttempt = 0
         await cancelInFlightWork()
         transition(to: .idle)
@@ -253,6 +295,7 @@ actor RemoteSessionController {
         generation = UUID()
         let removalGeneration = generation
         targetAddressText = nil
+        connectionTarget = nil
         reconnectAttempt = 0
         transition(to: .idle)
         await cancelInFlightWork()
@@ -432,18 +475,29 @@ actor RemoteSessionController {
         let driver = driver
         let clock = clock
         let timeout = configuration.connectionTimeout
+        let connectionTarget = connectionTarget
         let task = Task { [weak self] in
             try await RemoteSessionTimeout.run(
                 operation: .connect,
                 timeout: timeout,
                 clock: clock
             ) {
-                try await driver.connect(addressText: targetAddressText) {
+                let onWaitingForApproval: @MainActor @Sendable () async -> Void = {
                     await self?.setPairingState(
                         generation: requestedGeneration,
                         connectionID: id
                     )
                 }
+                if let connectionTarget {
+                    return try await driver.connect(
+                        to: connectionTarget,
+                        onWaitingForApproval: onWaitingForApproval
+                    )
+                }
+                return try await driver.connect(
+                    addressText: targetAddressText,
+                    onWaitingForApproval: onWaitingForApproval
+                )
             }
         }
         connectionTask = task

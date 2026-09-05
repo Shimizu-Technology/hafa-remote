@@ -29,6 +29,56 @@ struct RemoteSessionControllerTests {
         #expect(await driver.connectCallCount == 0)
     }
 
+    @Test("A same-brand target reaches the driver with identity and control port intact")
+    func preservesFullConnectionTargetForDriver() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv",
+            model: "TEST_MODEL"
+        )
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false)]
+        )
+        let controller = RemoteSessionController(driver: driver)
+        let target = TVConnectionTarget(
+            brand: .samsung,
+            reportedDeviceID: "discovered-identity",
+            address: tv.address,
+            controlPort: 9_999
+        )
+
+        await controller.connect(to: target)
+
+        #expect(await driver.presentedTargets == [target])
+        #expect(await controller.state == .connected(tv))
+    }
+
+    @Test("A mismatched target cancels an active connection and cannot reconnect it")
+    func mismatchCancelsActiveConnectionAndClearsReconnectTarget() async throws {
+        let driver = SuspendedRemoteSessionDriver()
+        let controller = RemoteSessionController(driver: driver)
+        var starts = driver.connectionStarts.makeAsyncIterator()
+        let initialConnection = Task {
+            await controller.connect(to: "192.168.10.20")
+        }
+        _ = await starts.next()
+        let sonyTarget = TVConnectionTarget(
+            brand: .sony,
+            reportedDeviceID: "synthetic-sony",
+            address: try PrivateIPv4Address("192.168.10.21"),
+            controlPort: 6466
+        )
+
+        await controller.connect(to: sonyTarget)
+        await initialConnection.value
+        await controller.networkReachabilityChanged(isReachable: false)
+        await controller.networkReachabilityChanged(isReachable: true)
+
+        #expect(await driver.cancelledConnectionCount == 1)
+        #expect(await driver.connectionStartCount == 1)
+        #expect(await controller.state == .unsupported)
+    }
+
     @MainActor
     @Test("The observable store projects actor state for SwiftUI")
     func storeProjectsSessionState() async throws {
@@ -1104,6 +1154,7 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
     private(set) var maximumActiveConnectionCount = 0
     private(set) var forgottenAddresses: [String] = []
     private(set) var sentTextCharacterCounts: [Int] = []
+    private(set) var presentedTargets: [TVConnectionTarget] = []
 
     init(
         outcomes: [MockConnectionOutcome],
@@ -1139,6 +1190,17 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
         case .failure(.unsupported):
             throw SamsungPairingCoordinatorError.unsupportedTokenAuthentication
         }
+    }
+
+    func connect(
+        to target: TVConnectionTarget,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> PairedSamsungTV {
+        presentedTargets.append(target)
+        return try await connect(
+            addressText: target.address.rawValue,
+            onWaitingForApproval: onWaitingForApproval
+        )
     }
 
     func send(_ command: RemoteCommand) async throws {}
@@ -1227,6 +1289,7 @@ private actor SuspendedRemoteSessionDriver: RemoteSessionDriving {
     private let connectionStartsContinuation: AsyncStream<Void>.Continuation
     private var continuations: [UUID: CheckedContinuation<Void, Error>] = [:]
     private(set) var cancelledConnectionCount = 0
+    private(set) var connectionStartCount = 0
 
     init() {
         let (stream, continuation) = AsyncStream<Void>.makeStream()
@@ -1238,6 +1301,7 @@ private actor SuspendedRemoteSessionDriver: RemoteSessionDriving {
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV {
+        connectionStartCount += 1
         let id = UUID()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
