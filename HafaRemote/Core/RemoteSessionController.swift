@@ -34,12 +34,14 @@ struct RemoteSessionConfiguration: Equatable, Sendable {
     let connectionTimeout: Duration
     let commandTimeout: Duration
     let disconnectTimeout: Duration
+    let pairingRemovalTimeout: Duration
     let reconnectDelays: [Duration]
 
     static let production = RemoteSessionConfiguration(
         connectionTimeout: .seconds(12),
         commandTimeout: .seconds(3),
         disconnectTimeout: .seconds(2),
+        pairingRemovalTimeout: .seconds(3),
         reconnectDelays: [.milliseconds(250), .seconds(1), .seconds(2)]
     )
 }
@@ -204,8 +206,16 @@ actor RemoteSessionController {
         await disconnectDriverWithinLimit()
         try Task.checkCancellation()
         let driver = driver
+        let clock = clock
+        let timeout = configuration.pairingRemovalTimeout
         let task = Task {
-            try await driver.forget(addressText: addressText)
+            try await RemoteSessionTimeout.run(
+                operation: .forgetPairing,
+                timeout: timeout,
+                clock: clock
+            ) {
+                try await driver.forget(addressText: addressText)
+            }
         }
         let result = await withTaskCancellationHandler {
             await task.result
@@ -220,7 +230,11 @@ actor RemoteSessionController {
                 !Task.isCancelled,
                 !(error is CancellationError)
             {
-                transition(to: .failed(.unexpected))
+                if let timeoutError = error as? RemoteSessionControllerError {
+                    transition(to: .failed(.timedOut(timeoutError.operation)))
+                } else {
+                    transition(to: .failed(.unexpected))
+                }
             }
             if Task.isCancelled || error is CancellationError {
                 throw CancellationError()
@@ -469,20 +483,76 @@ private enum RemoteSessionTimeout {
         clock: any RemoteSessionClock,
         work: @escaping @Sendable () async throws -> Value
     ) async throws -> Value {
-        try await withThrowingTaskGroup(of: Value.self) { group in
-            group.addTask {
-                try await work()
+        let race = RemoteSessionTimeoutRace<Value>()
+        let workTask = Task {
+            do {
+                race.resolve(.success(try await work()))
+            } catch {
+                race.resolve(.failure(error))
             }
-            group.addTask {
+        }
+        let timeoutTask = Task {
+            do {
                 try await clock.sleep(for: timeout)
-                throw RemoteSessionControllerError.timedOut(operation)
+                try Task.checkCancellation()
+                race.resolve(.failure(RemoteSessionControllerError.timedOut(operation)))
+            } catch is CancellationError {
+                return
+            } catch {
+                race.resolve(.failure(error))
             }
+        }
 
-            guard let result = try await group.next() else {
-                throw CancellationError()
+        defer {
+            workTask.cancel()
+            timeoutTask.cancel()
+        }
+
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                race.install(continuation)
             }
-            group.cancelAll()
-            return result
+        } onCancel: {
+            workTask.cancel()
+            timeoutTask.cancel()
+            race.resolve(.failure(CancellationError()))
+        }
+    }
+}
+
+/// Resolves a timeout race once without structurally awaiting a task that ignores cancellation.
+private final class RemoteSessionTimeoutRace<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Value, Error>?
+    private var pendingResult: Result<Value, Error>?
+    private var isResolved = false
+
+    func install(_ continuation: CheckedContinuation<Value, Error>) {
+        lock.lock()
+        if let pendingResult {
+            self.pendingResult = nil
+            lock.unlock()
+            continuation.resume(with: pendingResult)
+        } else {
+            self.continuation = continuation
+            lock.unlock()
+        }
+    }
+
+    func resolve(_ result: Result<Value, Error>) {
+        lock.lock()
+        guard !isResolved else {
+            lock.unlock()
+            return
+        }
+        isResolved = true
+        if let continuation {
+            self.continuation = nil
+            lock.unlock()
+            continuation.resume(with: result)
+        } else {
+            pendingResult = result
+            lock.unlock()
         }
     }
 }

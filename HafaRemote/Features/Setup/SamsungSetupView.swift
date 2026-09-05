@@ -80,6 +80,10 @@ struct SamsungSetupView: View {
                     await session.disconnect()
                 }
             }
+            .onAppear {
+                guard address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                address = session.lastConnectedTV?.address.rawValue ?? ""
+            }
             .onChange(of: session.state) { _, state in
                 if let announcement = accessibilityAnnouncement(for: state) {
                     UIAccessibility.post(notification: .announcement, argument: announcement)

@@ -184,6 +184,40 @@ struct RemoteSessionControllerTests {
         )
     }
 
+    @Test("A stalled pairing removal times out and releases a waiting connection")
+    func pairingRemovalTimeoutReleasesWaiters() async throws {
+        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = ControlledPairingRemovalDriver(tv: tv)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                pairingRemovalTimeout: .seconds(4),
+                reconnectDelays: []
+            )
+        )
+        var forgetStarts = driver.forgetStarts.makeAsyncIterator()
+
+        let forgetting = Task {
+            try await session.forgetPairing(for: tv.address.rawValue)
+        }
+        _ = await forgetStarts.next()
+        let reconnecting = Task {
+            await session.connect(to: tv.address.rawValue)
+        }
+
+        await resume(clock: clock, duration: .seconds(4))
+        await #expect(throws: RemoteSessionControllerError.timedOut(.forgetPairing)) {
+            try await forgetting.value
+        }
+        await reconnecting.value
+
+        #expect(await session.state == .connected(tv))
+        #expect(await driver.callLog == ["forget-start", "connect"])
+        await driver.completeForget()
+    }
+
     @Test("Cancelling pairing removal releases a waiting connection without stale failure")
     func cancelledPairingRemovalAllowsRecovery() async throws {
         let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
@@ -959,12 +993,14 @@ private func testConfiguration(
     connectionTimeout: Duration = .seconds(10),
     commandTimeout: Duration = .seconds(2),
     disconnectTimeout: Duration = .seconds(1),
+    pairingRemovalTimeout: Duration = .seconds(3),
     reconnectDelays: [Duration]
 ) -> RemoteSessionConfiguration {
     RemoteSessionConfiguration(
         connectionTimeout: connectionTimeout,
         commandTimeout: commandTimeout,
         disconnectTimeout: disconnectTimeout,
+        pairingRemovalTimeout: pairingRemovalTimeout,
         reconnectDelays: reconnectDelays
     )
 }

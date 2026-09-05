@@ -48,10 +48,12 @@ final class HafaRemoteUITests: XCTestCase {
             XCTAssertTrue(button.isEnabled, "Disabled \(command) control")
         }
 
-        app.swipeDown()
-        app.swipeDown()
         let select = app.buttons["remote-select"]
         XCTAssertTrue(select.waitForExistence(timeout: 2))
+        for _ in 0..<6 where !select.isHittable {
+            app.swipeDown()
+        }
+        XCTAssertTrue(select.isHittable, "Unreachable select control")
         select.tap()
 
         let commandOutput = app.staticTexts["lastRemoteCommand"]
