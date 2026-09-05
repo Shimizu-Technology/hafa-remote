@@ -128,7 +128,7 @@ The main session state machine must represent at least:
 
 ### Power-on
 
-1. When a saved TV is offline and has a known MAC address plus verified wake support, the power control sends a Wake-on-LAN packet.
+1. When a saved Samsung TV is offline, explicitly wireless, and has a known MAC address plus verified wake support, the power control sends a Wake-on-LAN packet. Sony and Vizio use separately tested brand-specific power behavior and never enter this Samsung wake path.
 2. Hafa Remote displays **Waking TV…**, searches for the TV, and connects when it becomes available.
 3. If wake support is unknown or has failed, the app explains the TV/network limitation and does not imply success.
 
