@@ -12,6 +12,7 @@ struct HomeView: View {
     @State private var isShowingSetup = false
     @State private var scenePhaseEvents = ScenePhaseEvents()
     @State private var restoration = SavedTVRestorationCoordinator()
+    @State private var selection = SavedTVSelectionCoordinator()
     @State private var persistenceWarning: String?
     @State private var pendingWakeAttempt: PendingWakeAttempt?
 
@@ -29,19 +30,23 @@ struct HomeView: View {
 
     var body: some View {
         NavigationStack {
-            if let tv = session.lastConnectedTV {
+            if let tv = presentedTV {
                 let savedTV = savedTV(for: tv)
                 RemoteControlView(
                     tvName: displayName(for: tv),
                     modelName: tv.modelName,
                     statusLabel: statusLabel,
-                    isConnected: session.canSendCommands,
+                    isConnected: isPresentedTVConnected,
                     supportsTextInput: tv.brand == .samsung,
                     canWakeTV: wakeMACAddress(for: tv, savedTV: savedTV) != nil,
                     wakeWasVerified: savedTV?.wakeWasVerified ?? false
                 ) { command in
+                    guard isPresentedTVConnected else { return }
                     try? await session.send(command)
                 } textAction: { input in
+                    guard isPresentedTVConnected else {
+                        throw TVSelectionError.notConnected
+                    }
                     try await session.sendText(input)
                 } wakeAction: {
                     try await wake(tv, savedTV: savedTV)
@@ -52,13 +57,7 @@ struct HomeView: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button("Change TV", systemImage: "tv.badge.wifi") {
-                            Task {
-                                await session.disconnect(clearRememberedTV: false)
-                                isShowingSetup = true
-                            }
-                        }
-                        .accessibilityIdentifier("changeTVButton")
+                        tvPicker
                     }
                 }
             } else if restoration.isRestoring {
@@ -72,14 +71,14 @@ struct HomeView: View {
             TVSetupView(
                 session: session,
                 initialAddress:
-                    session.lastConnectedTV?.address.rawValue
+                    presentedTV?.address.rawValue
                     ?? savedTVs.first?.lastKnownAddress
                     ?? "",
                 initialReportedDeviceID:
-                    session.lastConnectedTV?.reportedDeviceID
+                    presentedTV?.reportedDeviceID
                     ?? savedTVs.first?.reportedDeviceID,
                 initialTarget:
-                    session.lastConnectedTV?.connectionTarget
+                    presentedTV?.connectionTarget
                     ?? savedTVs.first?.connectionTarget,
                 discovery: discovery
             )
@@ -101,6 +100,7 @@ struct HomeView: View {
         }
         .onChange(of: session.state) { _, state in
             guard case .connected(let tv) = state else { return }
+            selection.markConnected(tv.stableDeviceKey)
             saveConnectedTV(tv)
         }
         .onChange(of: networkMonitor.isReachable) { _, isReachable in
@@ -221,7 +221,11 @@ struct HomeView: View {
     }
 
     private var statusLabel: String {
-        switch session.state {
+        guard isPresentedTVConnected else {
+            if selection.isSwitching { return "Connecting" }
+            return "Offline"
+        }
+        return switch session.state {
         case .connected:
             "Connected"
         case .pairing:
@@ -248,9 +252,83 @@ struct HomeView: View {
     }
 
     private func restoreLastUsedTVIfNeeded() async {
+        if selection.selectedDeviceKey == nil {
+            selection.selectWithoutConnecting(savedTVs.first?.stableDeviceKey)
+        }
         await restoration.restore(from: savedTVs) { target in
             await session.connect(to: target)
         }
+    }
+
+    private var selectedSavedTV: SavedTV? {
+        guard let selectedDeviceKey = selection.selectedDeviceKey else { return nil }
+        return savedTVs.first(where: { $0.stableDeviceKey == selectedDeviceKey })
+    }
+
+    private var presentedTV: ConnectedTV? {
+        if let selectedSavedTV {
+            if session.connectedTV?.stableDeviceKey == selectedSavedTV.stableDeviceKey {
+                return session.connectedTV
+            }
+            return selectedSavedTV.rememberedTV
+        }
+        return session.lastConnectedTV
+    }
+
+    private var isPresentedTVConnected: Bool {
+        guard let presentedTV else { return false }
+        return session.connectedTV?.stableDeviceKey == presentedTV.stableDeviceKey
+    }
+
+    @ViewBuilder
+    private var tvPicker: some View {
+        Menu {
+            ForEach(savedTVs, id: \.stableDeviceKey) { savedTV in
+                Button {
+                    select(savedTV)
+                } label: {
+                    if savedTV.stableDeviceKey == selection.selectedDeviceKey {
+                        Label(savedTV.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(savedTV.displayName)
+                    }
+                }
+                .accessibilityIdentifier("savedTV-\(savedTV.stableDeviceKey)")
+            }
+
+            if !savedTVs.isEmpty {
+                Divider()
+            }
+
+            Button("Add TV", systemImage: "plus") {
+                isShowingSetup = true
+            }
+            .accessibilityIdentifier("addAnotherTVButton")
+        } label: {
+            Label("TVs", systemImage: "tv.badge.wifi")
+        }
+        .accessibilityIdentifier("changeTVButton")
+    }
+
+    private func select(_ savedTV: SavedTV) {
+        guard let target = savedTV.connectionTarget else {
+            persistenceWarning =
+                "Hafa Remote no longer has a valid network address for \(savedTV.displayName). Add it again while the TV is on."
+            return
+        }
+        guard savedTV.stableDeviceKey != selection.selectedDeviceKey || !isPresentedTVConnected
+        else { return }
+
+        selection.select(
+            deviceKey: savedTV.stableDeviceKey,
+            target: target,
+            disconnect: {
+                await session.disconnect(clearRememberedTV: false)
+            },
+            connect: { target in
+                await session.connect(to: target)
+            }
+        )
     }
 
     private func displayName(for tv: ConnectedTV) -> String {
@@ -309,6 +387,7 @@ struct HomeView: View {
     }
 
     private func saveConnectedTV(_ tv: ConnectedTV) {
+        selection.markConnected(tv.stableDeviceKey)
         let now = Date.now
         let wakeWasJustVerified = pendingWakeAttempt?.matches(tv) == true
         if let saved = savedTVs.first(where: { $0.stableDeviceKey == tv.stableDeviceKey }) {
@@ -358,6 +437,76 @@ struct HomeView: View {
             persistenceWarning =
                 "Hafa Remote could not finish updating a saved TV. Reconnect it to keep it available."
         }
+    }
+}
+
+enum TVSelectionError: Error {
+    case notConnected
+}
+
+@MainActor
+@Observable
+final class SavedTVSelectionCoordinator {
+    private(set) var selectedDeviceKey: String?
+    private(set) var isSwitching = false
+    private var operationID: UUID?
+    private nonisolated let taskHolder = SavedTVSelectionTaskHolder()
+
+    func selectWithoutConnecting(_ deviceKey: String?) {
+        guard selectedDeviceKey == nil else { return }
+        selectedDeviceKey = deviceKey
+    }
+
+    func markConnected(_ deviceKey: String) {
+        selectedDeviceKey = deviceKey
+        isSwitching = false
+        operationID = nil
+        taskHolder.cancel()
+    }
+
+    func select(
+        deviceKey: String,
+        target: TVConnectionTarget,
+        disconnect: @escaping @MainActor () async -> Void,
+        connect: @escaping @MainActor (TVConnectionTarget) async -> Void
+    ) {
+        taskHolder.cancel()
+        let operationID = UUID()
+        self.operationID = operationID
+        selectedDeviceKey = deviceKey
+        isSwitching = true
+        taskHolder.install(
+            Task { @MainActor [weak self] in
+                await disconnect()
+                guard !Task.isCancelled, self?.operationID == operationID else { return }
+                await connect(target)
+                guard !Task.isCancelled, self?.operationID == operationID else { return }
+                self?.isSwitching = false
+                self?.operationID = nil
+            })
+    }
+}
+
+private final class SavedTVSelectionTaskHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: Task<Void, Never>?
+
+    func install(_ task: Task<Void, Never>) {
+        lock.lock()
+        self.task = task
+        lock.unlock()
+    }
+
+    func cancel() {
+        lock.lock()
+        let task = task
+        self.task = nil
+        lock.unlock()
+        task?.cancel()
+    }
+
+    deinit {
+        cancel()
     }
 }
 

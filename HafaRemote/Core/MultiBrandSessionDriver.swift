@@ -345,7 +345,6 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
 
         nonisolated var brand: TVBrand { .vizio }
         private var pendingPairing: PendingPairing?
-
         func connect(
             addressText: String,
             onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
@@ -421,5 +420,45 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
             pendingPairing?.continuation.resume(throwing: CancellationError())
             pendingPairing = nil
         }
+    }
+
+    actor SavedTVSwitchingUIFixtureDriver: RemoteSessionDriving {
+        nonisolated var brand: TVBrand { .samsung }
+
+        nonisolated func supports(_ brand: TVBrand) -> Bool {
+            true
+        }
+
+        func connect(
+            addressText: String,
+            onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+        ) async throws -> ConnectedTV {
+            let address = try PrivateIPv4Address(addressText)
+            return ConnectedTV(
+                reportedDeviceID: "fixture-samsung",
+                address: address,
+                modelName: "Q70AA",
+                firmwareVersion: "1.0"
+            )
+        }
+
+        func connect(
+            to target: TVConnectionTarget,
+            onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+        ) async throws -> ConnectedTV {
+            ConnectedTV(
+                brand: target.brand,
+                reportedDeviceID: target.reportedDeviceID,
+                address: target.address,
+                controlPort: target.controlPort,
+                modelName: target.brand == .samsung ? "Q70AA" : "Sony BRAVIA",
+                firmwareVersion: "1.0"
+            )
+        }
+
+        func submitPairingCode(_ code: String) async throws {}
+        func send(_ command: RemoteCommand) async throws {}
+        func forget(addressText: String) async throws {}
+        func disconnect() async {}
     }
 #endif

@@ -575,6 +575,70 @@ struct SavedTVTests {
         #expect(connecting.title == "Connecting to your TV…")
         #expect(connecting.instruction == nil)
     }
+
+    @Test("A saved TV can present its identity while it is offline")
+    func buildsOfflinePresentationFromSavedMetadata() throws {
+        let savedTV = SavedTV(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-vizio",
+            displayName: "Office TV",
+            modelName: "V655-G9",
+            firmwareVersion: "1.2.3",
+            lastKnownAddress: "192.168.10.30",
+            controlPort: 7_345
+        )
+
+        let rememberedTV = try #require(savedTV.rememberedTV)
+
+        #expect(rememberedTV.brand == .vizio)
+        #expect(rememberedTV.reportedDeviceID == "synthetic-vizio")
+        #expect(rememberedTV.address == (try PrivateIPv4Address("192.168.10.30")))
+        #expect(rememberedTV.controlPort == 7_345)
+        #expect(rememberedTV.modelName == "V655-G9")
+        #expect(rememberedTV.networkConnection == .unavailable)
+    }
+
+    @MainActor
+    @Test("Selecting another TV immediately changes identity and cancels the stale switch")
+    func latestTVSelectionWins() async throws {
+        let selection = SavedTVSelectionCoordinator()
+        let first = TVConnectionTarget(
+            brand: .samsung,
+            reportedDeviceID: "first",
+            address: try PrivateIPv4Address("192.168.10.20"),
+            controlPort: 8_002
+        )
+        let second = TVConnectionTarget(
+            brand: .sony,
+            reportedDeviceID: "second",
+            address: try PrivateIPv4Address("192.168.10.21"),
+            controlPort: 6_466
+        )
+        var connectedTargets: [TVConnectionTarget] = []
+
+        selection.select(
+            deviceKey: "samsung:first",
+            target: first,
+            disconnect: {
+                try? await Task.sleep(for: .seconds(30))
+            },
+            connect: { connectedTargets.append($0) }
+        )
+        #expect(selection.selectedDeviceKey == "samsung:first")
+
+        selection.select(
+            deviceKey: "sony:second",
+            target: second,
+            disconnect: {},
+            connect: { connectedTargets.append($0) }
+        )
+
+        for _ in 0..<100 where connectedTargets != [second] {
+            await Task.yield()
+        }
+        #expect(selection.selectedDeviceKey == "sony:second")
+        #expect(!selection.isSwitching)
+    }
 }
 
 private enum RestorationTestError: Error {

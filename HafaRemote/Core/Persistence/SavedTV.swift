@@ -74,6 +74,23 @@ final class SavedTV: CustomStringConvertible {
         )
     }
 
+    /// A non-connected presentation of this saved TV for the remote screen.
+    /// Command availability must still be derived from the active session identity.
+    var rememberedTV: ConnectedTV? {
+        guard let address = validatedAddress else { return nil }
+        let savedMACAddress = validatedMACAddress
+        return ConnectedTV(
+            brand: brand,
+            reportedDeviceID: reportedDeviceID,
+            address: address,
+            controlPort: validatedControlPort,
+            modelName: modelName,
+            firmwareVersion: firmwareVersion,
+            networkConnection: savedMACAddress == nil ? .unavailable : .wireless,
+            macAddress: savedMACAddress
+        )
+    }
+
     var validatedMACAddress: TVMACAddress? {
         macAddress.flatMap { try? TVMACAddress($0) }
     }
