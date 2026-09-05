@@ -23,6 +23,94 @@ struct RemoteSessionControllerTests {
     }
 
     @MainActor
+    @Test("The observable store waits for the reconnect sequence to succeed")
+    func storeWaitsForEventualConnection() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [
+                .failure(.offline),
+                .success(tv: tv, announcesPairing: false),
+            ]
+        )
+        let controller = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                connectionTimeout: .seconds(5),
+                reconnectDelays: [.seconds(4)]
+            )
+        )
+        let store = RemoteSessionStore(controller: controller, connectionWaitClock: clock)
+
+        let connection = Task {
+            try await store.connectAndWait(
+                to: tv.address.rawValue,
+                timeout: .seconds(30)
+            )
+        }
+        await resume(clock: clock, duration: .seconds(4))
+        let connectedTV = try await connection.value
+
+        #expect(connectedTV == tv)
+        #expect(await driver.connectCallCount == 2)
+    }
+
+    @MainActor
+    @Test("The observable store timeout cancels a suspended initial connection")
+    func storeConnectionWaitTimesOut() async throws {
+        let clock = ManualRemoteSessionClock()
+        let driver = SuspendedRemoteSessionDriver()
+        let controller = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                connectionTimeout: .seconds(5),
+                reconnectDelays: []
+            )
+        )
+        let store = RemoteSessionStore(controller: controller, connectionWaitClock: clock)
+        var starts = driver.connectionStarts.makeAsyncIterator()
+
+        let connection = Task {
+            try await store.connectAndWait(
+                to: "192.168.10.20",
+                timeout: .seconds(2)
+            )
+        }
+        _ = await starts.next()
+        await resume(clock: clock, duration: .seconds(2))
+
+        await #expect(throws: RemoteSessionControllerError.timedOut(.connect)) {
+            try await connection.value
+        }
+        #expect(await driver.cancelledConnectionCount == 1)
+    }
+
+    @MainActor
+    @Test("Cancelling the observable store wait cancels its initial connection")
+    func cancellingStoreConnectionWaitStopsConnection() async throws {
+        let driver = SuspendedRemoteSessionDriver()
+        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+        var starts = driver.connectionStarts.makeAsyncIterator()
+
+        let connection = Task {
+            try await store.connectAndWait(
+                to: "192.168.10.20",
+                timeout: .seconds(30)
+            )
+        }
+        _ = await starts.next()
+        connection.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            try await connection.value
+        }
+        #expect(await driver.cancelledConnectionCount == 1)
+    }
+
+    @MainActor
     @Test("The observable store clears its remembered TV on disconnect and forget")
     func storeClearsRememberedTV() async throws {
         let tv = try testTV(
@@ -1126,10 +1214,10 @@ private actor SuspendedRemoteSessionDriver: RemoteSessionDriving {
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV {
         let id = UUID()
-        connectionStartsContinuation.yield()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 continuations[id] = continuation
+                connectionStartsContinuation.yield()
             }
         } onCancel: { [weak self] in
             Task {

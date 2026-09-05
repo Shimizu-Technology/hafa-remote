@@ -4,6 +4,8 @@
 
 - Version: `1.0`
 - Next TestFlight build: `1`
+- App Store Connect Apple ID: `6808899369`
+- SKU: `hafa-remote-ios`
 - Bundle ID: `com.shimizutechnology.hafaremote`
 - Apple team: `4T358A5S74`
 - Minimum OS: iOS 18.4

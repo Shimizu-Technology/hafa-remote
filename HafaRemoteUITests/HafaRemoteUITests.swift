@@ -258,7 +258,7 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["lastRemoteCommand"].label, "text:4")
     }
 
-    /// Offline state disables commands while keeping recovery actions obvious and functional.
+    /// Offline state disables commands while keeping wake and recovery obvious and functional.
     @MainActor
     func testOfflineRemoteOffersRecoveryWithoutSendingCommands() throws {
         let app = makeApplication()
@@ -268,9 +268,17 @@ final class HafaRemoteUITests: XCTestCase {
         let select = app.buttons["remote-select"]
         XCTAssertTrue(select.waitForExistence(timeout: 5))
         XCTAssertFalse(select.isEnabled)
-        let powerOff = app.buttons["remote-powerOff"]
-        XCTAssertTrue(powerOff.waitForExistence(timeout: 2))
-        XCTAssertFalse(powerOff.isEnabled)
+        let powerOn = app.buttons["remote-powerOn"]
+        XCTAssertTrue(powerOn.waitForExistence(timeout: 2))
+        XCTAssertTrue(powerOn.isEnabled)
+        powerOn.tap()
+
+        let commandOutput = app.staticTexts["lastRemoteCommand"]
+        let wakeRecorded = expectation(
+            for: NSPredicate(format: "label == %@", "wake"),
+            evaluatedWith: commandOutput
+        )
+        wait(for: [wakeRecorded], timeout: 2)
 
         let keyboard = app.buttons["remote-keyboard"]
         for _ in 0..<6 where !keyboard.exists {
@@ -282,7 +290,6 @@ final class HafaRemoteUITests: XCTestCase {
         let retry = app.buttons["retryConnectionButton"]
         XCTAssertTrue(retry.waitForExistence(timeout: 2))
         retry.tap()
-        let commandOutput = app.staticTexts["lastRemoteCommand"]
         let retryRecorded = expectation(
             for: NSPredicate(format: "label == %@", "retry"),
             evaluatedWith: commandOutput

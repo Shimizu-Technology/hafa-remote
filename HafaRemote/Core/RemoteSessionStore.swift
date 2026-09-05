@@ -11,13 +11,16 @@ final class RemoteSessionStore {
     private var projectionRevision = 0
 
     private let controller: RemoteSessionController
+    private let connectionWaitClock: any RemoteSessionClock
     private let stateSubscription = RemoteSessionStateSubscription()
 
     init(
         controller: RemoteSessionController,
+        connectionWaitClock: any RemoteSessionClock = ContinuousRemoteSessionClock(),
         beforeProjectingState: @escaping @Sendable (RemoteSessionState) async -> Void = { _ in }
     ) {
         self.controller = controller
+        self.connectionWaitClock = connectionWaitClock
         stateSubscription.install(
             Task { [weak self, controller] in
                 let states = await controller.states()
@@ -58,6 +61,45 @@ final class RemoteSessionStore {
         projectionRevision &+= 1
         acceptsConnectedTVUpdates = true
         await controller.connect(to: addressText)
+    }
+
+    /// Starts one connection sequence and waits for its eventual connected state.
+    func connectAndWait(
+        to addressText: String,
+        timeout: Duration
+    ) async throws -> PairedSamsungTV {
+        let states = await controller.states()
+        let connectionWaitClock = connectionWaitClock
+
+        return try await withThrowingTaskGroup(of: PairedSamsungTV?.self) { group in
+            group.addTask {
+                await self.connect(to: addressText)
+                try Task.checkCancellation()
+                return nil
+            }
+            group.addTask {
+                for await state in states {
+                    try Task.checkCancellation()
+                    if case .connected(let tv) = state {
+                        return tv
+                    }
+                }
+                throw CancellationError()
+            }
+            group.addTask {
+                try await connectionWaitClock.sleep(for: timeout)
+                try Task.checkCancellation()
+                throw RemoteSessionControllerError.timedOut(.connect)
+            }
+
+            while let result = try await group.next() {
+                if let connectedTV = result {
+                    group.cancelAll()
+                    return connectedTV
+                }
+            }
+            throw RemoteSessionControllerError.timedOut(.connect)
+        }
     }
 
     func send(_ command: RemoteCommand) async throws {

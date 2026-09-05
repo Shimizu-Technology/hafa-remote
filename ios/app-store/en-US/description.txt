@@ -17,6 +17,5 @@ Compatibility and limitations:
 • Your iPhone and TV must be on the same non-guest Wi-Fi network.
 • Initial setup requires approving Hafa Remote on the TV.
 • Some apps and secure fields do not accept remote text.
-• Power on is not currently supported; use the physical remote or the TV's normal power control.
 
 Hafa Remote is an independent app by Shimizu Technology. It is not affiliated with, endorsed by, or sponsored by Samsung Electronics.

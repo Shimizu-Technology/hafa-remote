@@ -1,18 +1,43 @@
 import Foundation
 
-/// Non-sensitive capability details read from a Samsung TV before pairing.
+enum SamsungNetworkConnection: Equatable, Sendable {
+    case unavailable
+    case wireless
+    case wired
+}
+
+/// Capability details read from a Samsung TV before pairing.
+/// The optional MAC is protected local metadata and must never be logged.
 struct SamsungDeviceInfo: Equatable, Sendable {
     let reportedDeviceID: String
     let modelName: String
     let firmwareVersion: String?
     let supportsTokenAuthentication: Bool
+    let networkConnection: SamsungNetworkConnection
+    let macAddress: SamsungMACAddress?
+
+    init(
+        reportedDeviceID: String,
+        modelName: String,
+        firmwareVersion: String?,
+        supportsTokenAuthentication: Bool,
+        networkConnection: SamsungNetworkConnection = .unavailable,
+        macAddress: SamsungMACAddress? = nil
+    ) {
+        self.reportedDeviceID = reportedDeviceID
+        self.modelName = modelName
+        self.firmwareVersion = firmwareVersion
+        self.supportsTokenAuthentication = supportsTokenAuthentication
+        self.networkConnection = networkConnection
+        self.macAddress = macAddress
+    }
 }
 
 protocol SamsungDeviceInfoProviding: Sendable {
     func fetchDeviceInfo(at address: PrivateIPv4Address) async throws -> SamsungDeviceInfo
 }
 
-/// Reads only model, firmware, and token-auth support from the television's local endpoint.
+/// Reads the reviewed pairing and wake fields from the television's local endpoint.
 actor SamsungDeviceInfoClient: SamsungDeviceInfoProviding {
     private let session: URLSession
     private let redirectDelegate: SamsungRedirectRejectingDelegate?
@@ -90,11 +115,27 @@ enum SamsungDeviceInfoParser {
             throw SamsungDeviceInfoError.invalidResponse
         }
 
+        let networkConnection =
+            switch envelope.device.networkType?.nonemptyTrimmed?.lowercased() {
+            case "wired", "ethernet":
+                SamsungNetworkConnection.wired
+            case "wireless", "wifi", "wi-fi":
+                SamsungNetworkConnection.wireless
+            default:
+                SamsungNetworkConnection.unavailable
+            }
+        let macAddress =
+            networkConnection == .wireless
+            ? envelope.device.wifiMac?.nonemptyTrimmed.flatMap { try? SamsungMACAddress($0) }
+            : nil
+
         return SamsungDeviceInfo(
             reportedDeviceID: reportedDeviceID,
             modelName: modelName,
             firmwareVersion: envelope.device.firmwareVersion?.nonemptyTrimmed,
-            supportsTokenAuthentication: envelope.device.tokenAuthSupport?.lowercased() == "true"
+            supportsTokenAuthentication: envelope.device.tokenAuthSupport?.lowercased() == "true",
+            networkConnection: networkConnection,
+            macAddress: macAddress
         )
     }
 }
@@ -108,6 +149,8 @@ private struct SamsungDeviceInfoEnvelope: Decodable {
         let modelName: String
         let firmwareVersion: String?
         let tokenAuthSupport: String?
+        let networkType: String?
+        let wifiMac: String?
 
         enum CodingKeys: String, CodingKey {
             case id
@@ -115,6 +158,8 @@ private struct SamsungDeviceInfoEnvelope: Decodable {
             case modelName
             case firmwareVersion
             case tokenAuthSupport = "TokenAuthSupport"
+            case networkType
+            case wifiMac
         }
     }
 }

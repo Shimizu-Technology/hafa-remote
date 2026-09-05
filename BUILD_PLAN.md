@@ -3,7 +3,7 @@
 
 **Version:** 0.1  
 **Last updated:** September 5, 2026
-**Current status:** HR-001 and HR-003 through HR-005 are merged; HR-002 has a successful Q70AA proof but its screen-recording evidence remains; HR-006 text input and truthful power behavior plus HR-015 release engineering are merged; HR-007 automatic discovery is in final review; power-on and broader hardware acceptance remain pending
+**Current status:** HR-001, HR-003 through HR-005, HR-006 text input, and HR-007 automatic discovery are merged; the App Store Connect record is reserved; HR-006 conditional Wake-on-LAN and HR-015 release engineering are in progress; physical wake and broader hardware acceptance remain pending
 **Current execution frontier:** Automatic-discovery merge, Q70AA network visibility and acceptance, and internal TestFlight
 
 ## Delivery targets
@@ -34,7 +34,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** None
 
-- [x] Create a private `hafa-remote` GitHub repository under Shimizu Technology.
+- [x] Create the public `hafa-remote` GitHub repository under Shimizu Technology with `main` protected by required pull requests and blocked deletion/non-fast-forward updates.
 - [x] Create the SwiftUI iPhone app, unit-test target, and UI-test target in the existing Shimizu Apple developer team.
 - [x] Set product name to **Hafa Remote**, bundle ID to `com.shimizutechnology.hafaremote`, Swift 6 language mode, and minimum iOS 18.4.
 - [x] Add `AGENTS.md`, `README.md`, `PRD.md`, `BUILD_PLAN.md`, `.gitignore`, and `scripts/gate.sh`.
@@ -113,8 +113,8 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 - [x] Implement native keyboard presentation and Samsung text-entry behavior.
 - [x] Detect and explain screens that do not accept text.
-- [ ] Capture or enter the TV MAC address without putting it in logs or screenshots.
-- [ ] Implement Wake-on-LAN behind a capability flag and user-initiated power action.
+- [x] Capture a valid wireless TV MAC automatically without putting it in logs or screenshots.
+- [x] Implement unicast Wake-on-LAN behind a capability flag and user-initiated power action; keep broadcast gated on Apple's restricted entitlement.
 - [ ] Test power-off and wake repeatedly with the relevant Samsung network/power settings enabled.
 - [ ] Exercise the complete three-day gate in `PRD.md` and record results.
 - [ ] Make an explicit decision: stop, redesign the protocol layer, or proceed to personal alpha.
@@ -249,7 +249,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** App Store go decision
 
-- [ ] Confirm **Hafa Remote** availability directly in App Store Connect.
+- [x] Confirm **Hafa Remote** availability directly in App Store Connect and reserve Apple ID `6808899369`.
 - [ ] Complete a basic trademark/confusion review and document the result.
 - [ ] Register the final bundle ID, app record, SKU, category, age rating, and territories.
 - [ ] Finalize subtitle, keywords, support URL, privacy-policy URL, copyright, and contact information.

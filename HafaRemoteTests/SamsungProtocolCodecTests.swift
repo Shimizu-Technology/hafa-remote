@@ -243,6 +243,45 @@ struct SamsungProtocolCodecTests {
         #expect(info.reportedDeviceID == "synthetic-duid")
     }
 
+    @Test("Device parser captures a valid wireless MAC for later wake")
+    func parsesWirelessWakeAddress() throws {
+        let response = Data(
+            #"{"device":{"id":"synthetic-device-id","modelName":"TEST_MODEL_2021","TokenAuthSupport":"true","networkType":"wireless","wifiMac":"02:00:5e:10:00:01"}}"#
+                .utf8
+        )
+
+        let info = try SamsungDeviceInfoParser.parse(response)
+
+        #expect(info.macAddress?.persistedValue == "02:00:5E:10:00:01")
+        #expect(info.networkConnection == .wireless)
+    }
+
+    @Test("Device parser does not use the Wi-Fi MAC when the TV reports a wired connection")
+    func ignoresWirelessAddressForWiredTV() throws {
+        let response = Data(
+            #"{"device":{"id":"synthetic-device-id","modelName":"TEST_MODEL_2021","TokenAuthSupport":"true","networkType":"wired","wifiMac":"02:00:5e:10:00:01"}}"#
+                .utf8
+        )
+
+        let info = try SamsungDeviceInfoParser.parse(response)
+
+        #expect(info.macAddress == nil)
+        #expect(info.networkConnection == .wired)
+    }
+
+    @Test("Device parser requires an explicit wireless connection before using a wake MAC")
+    func ignoresWirelessAddressWhenNetworkTypeIsUnavailable() throws {
+        let response = Data(
+            #"{"device":{"id":"synthetic-device-id","modelName":"TEST_MODEL_2021","TokenAuthSupport":"true","wifiMac":"02:00:5e:10:00:01"}}"#
+                .utf8
+        )
+
+        let info = try SamsungDeviceInfoParser.parse(response)
+
+        #expect(info.macAddress == nil)
+        #expect(info.networkConnection == .unavailable)
+    }
+
     @Test("Device parser rejects responses without a stable identifier")
     func rejectsMissingDeviceIdentifiers() {
         let responses = [

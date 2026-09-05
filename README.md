@@ -4,7 +4,7 @@ Hafa Remote is a native iPhone remote for compatible Samsung Tizen TVs on the sa
 
 ## Status
 
-The native SwiftUI personal alpha includes secure Samsung pairing, automatic nearby-TV discovery, connection recovery, the complete MVP remote, text entry, persistence, and release checks. Manual IP entry remains available only as a troubleshooting fallback. Physical Q70AA acceptance and internal TestFlight delivery are the active release gates.
+The native SwiftUI personal alpha includes secure Samsung pairing, automatic nearby-TV discovery, connection recovery, the complete MVP remote, text entry, persistence, conditional Wake-on-LAN for saved Wi-Fi TVs, and release checks. Manual IP entry remains available only as a troubleshooting fallback. Physical Q70AA wake acceptance and internal TestFlight delivery are the active release gates.
 
 ## Documents
 
@@ -30,7 +30,7 @@ The canonical verification command is:
 
 Simulator checks prove interface and deterministic state behavior. Pairing, TV certificate trust, command delivery, and power behavior require a physical iPhone and Samsung TV.
 
-The hosted macOS workflow is manual because this private GitHub Free organization does not use paid Actions minutes. Every PR must record a passing local gate and an exact-head CodeRabbit approval before merge. The same workflow can still be dispatched manually when hosted minutes are available.
+The repository is public so its hosted macOS workflow can run on pull requests without paid private-repository Actions minutes. GitHub's active `Protect Main` ruleset enforces pull-request-only changes and blocks force-pushes and branch deletion. Before merging, the maintainer separately verifies a passing hosted workflow, a passing local gate, exact-head CodeRabbit approval, and zero unresolved review threads.
 
 ## Distribution boundary
 
