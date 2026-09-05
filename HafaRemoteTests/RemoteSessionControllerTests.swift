@@ -1852,7 +1852,9 @@ private func waitUntil(
     _ condition: @escaping @Sendable () async -> Bool,
     sourceLocation: SourceLocation = #_sourceLocation
 ) async {
-    for _ in 0..<1_000 {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: .seconds(2))
+    while clock.now < deadline {
         if await condition() { return }
         await Task.yield()
     }

@@ -335,4 +335,91 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
             await broker.cancel()
         }
     }
+
+    actor VizioPairingRepairUIFixtureDriver: RemoteSessionDriving {
+        private struct PendingPairing {
+            let id: UUID
+            let target: TVConnectionTarget
+            let continuation: CheckedContinuation<ConnectedTV, Error>
+        }
+
+        nonisolated var brand: TVBrand { .vizio }
+        private var pendingPairing: PendingPairing?
+
+        func connect(
+            addressText: String,
+            onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+        ) async throws -> ConnectedTV {
+            try await connect(
+                to: TVConnectionTarget(
+                    brand: .vizio,
+                    reportedDeviceID: "synthetic-vizio-serial",
+                    address: try PrivateIPv4Address(addressText),
+                    controlPort: 7345
+                ),
+                onWaitingForApproval: onWaitingForApproval
+            )
+        }
+
+        func connect(
+            to target: TVConnectionTarget,
+            onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+        ) async throws -> ConnectedTV {
+            let id = UUID()
+            await onWaitingForApproval()
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    guard !Task.isCancelled else {
+                        continuation.resume(throwing: CancellationError())
+                        return
+                    }
+                    pendingPairing?.continuation.resume(throwing: CancellationError())
+                    pendingPairing = PendingPairing(
+                        id: id,
+                        target: target,
+                        continuation: continuation
+                    )
+                }
+            } onCancel: { [weak self] in
+                Task {
+                    await self?.cancelPairing(id: id)
+                }
+            }
+        }
+
+        func submitPairingCode(_ code: String) throws {
+            guard let pairing = pendingPairing else {
+                throw MultiBrandSessionDriverError.pairingCodeNotExpected
+            }
+            pendingPairing = nil
+            guard code == "1234" else {
+                pairing.continuation.resume(throwing: VizioPairingCoordinatorError.pinRejected)
+                return
+            }
+            pairing.continuation.resume(
+                returning: ConnectedTV(
+                    brand: .vizio,
+                    reportedDeviceID: pairing.target.reportedDeviceID,
+                    address: pairing.target.address,
+                    controlPort: pairing.target.controlPort,
+                    modelName: "Vizio SmartCast",
+                    firmwareVersion: "1.0"
+                )
+            )
+        }
+
+        func send(_ command: RemoteCommand) {}
+        func forget(addressText: String) {}
+
+        func disconnect() {
+            pendingPairing?.continuation.resume(throwing: CancellationError())
+            pendingPairing = nil
+        }
+
+        private func cancelPairing(id: UUID) {
+            guard pendingPairing?.id == id else { return }
+            pendingPairing?.continuation.resume(throwing: CancellationError())
+            pendingPairing = nil
+        }
+    }
 #endif

@@ -90,7 +90,7 @@ struct HafaRemoteApp: App {
             _session = State(
                 initialValue: RemoteSessionStore(
                     controller: RemoteSessionController(
-                        driver: VizioPairingUIFixtureDriver(),
+                        driver: VizioPairingRepairUIFixtureDriver(),
                         initialState: .savedPairingRejected
                     )
                 )
