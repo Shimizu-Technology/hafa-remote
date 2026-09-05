@@ -3,7 +3,7 @@
 
 **Version:** 0.1  
 **Last updated:** September 5, 2026
-**Current status:** HR-001, HR-003 through HR-005, HR-006 text input, HR-007 automatic discovery, and HR-015 release engineering are merged; the App Store Connect record is reserved; HR-006 conditional Wake-on-LAN is in progress; physical wake and broader hardware acceptance remain pending
+**Current status:** HR-001, HR-003 through HR-005, HR-006 text input, and HR-007 automatic discovery are merged; the App Store Connect record is reserved; HR-006 conditional Wake-on-LAN and HR-015 release engineering are in progress; physical wake and broader hardware acceptance remain pending
 **Current execution frontier:** Automatic-discovery merge, Q70AA network visibility and acceptance, and internal TestFlight
 
 ## Delivery targets

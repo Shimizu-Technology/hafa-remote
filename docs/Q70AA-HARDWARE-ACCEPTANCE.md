@@ -94,7 +94,7 @@ simulator on the same LAN or a connected iPhone.
 - [ ] Pairing tokens, network identifiers, and certificate fingerprints are absent from ordinary app logs.
 - [ ] A valid wireless MAC is captured automatically without appearing in logs or screenshots.
 - [ ] Power on succeeds immediately, after one minute, and after 30 minutes of standby.
-- [ ] The TV is treated as awake only after the secure connection is restored.
+- [ ] The TV is treated as awake only when an explicitly wireless secure reconnection reports the same stored wireless MAC within the 30-second wake window; wired, missing-MAC, changed-MAC, and later reconnects remain unverified.
 - [x] No multicast entitlement or broadcast sender is included.
 - Notes: This build starts with Apple-permitted UDP unicast Wake-on-LAN. Apple
   requires the multicast networking entitlement before a broadcast fallback can
