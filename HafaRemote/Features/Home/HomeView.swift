@@ -158,7 +158,9 @@ struct HomeView: View {
     }
 
     private var restoringState: some View {
-        ZStack {
+        let presentation = SavedTVRestorationPresentation(state: session.state)
+
+        return ZStack {
             HafaTheme.canvas
                 .ignoresSafeArea()
 
@@ -167,9 +169,16 @@ struct HomeView: View {
                     .controlSize(.large)
                     .tint(HafaTheme.accent)
 
-                Text("Connecting to your TV…")
+                Text(presentation.title)
                     .font(.headline)
                     .foregroundStyle(.white)
+
+                if let instruction = presentation.instruction {
+                    Text(instruction)
+                        .font(.body)
+                        .foregroundStyle(HafaTheme.secondaryText)
+                        .multilineTextAlignment(.center)
+                }
 
                 if let savedTV = savedTVs.first {
                     Text(savedTV.displayName)
@@ -246,6 +255,21 @@ struct HomeView: View {
         } catch {
             persistenceWarning =
                 "The TV is connected, but Hafa Remote could not remember it for the next launch."
+        }
+    }
+}
+
+struct SavedTVRestorationPresentation: Equatable {
+    let title: String
+    let instruction: String?
+
+    init(state: RemoteSessionState) {
+        if case .pairing = state {
+            title = "Approve Hafa Remote on your TV"
+            instruction = "Choose Allow on the Samsung TV to finish connecting."
+        } else {
+            title = "Connecting to your TV…"
+            instruction = nil
         }
     }
 }
