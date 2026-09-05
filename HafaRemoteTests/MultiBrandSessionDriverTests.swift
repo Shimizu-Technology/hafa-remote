@@ -230,6 +230,24 @@ struct MultiBrandSessionDriverTests {
         #expect(await sony.forgottenDeviceIDs.isEmpty)
     }
 
+    @Test("Vizio pairing removal requires a stable reported identity")
+    @MainActor
+    func vizioForgetRequiresStableIdentity() async {
+        let samsung = MultiBrandSamsungFixture()
+        let sony = MultiBrandSonyFixture()
+        let vizio = MultiBrandVizioFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony, vizio: vizio)
+
+        await #expect(throws: MultiBrandSessionDriverError.missingStableIdentity) {
+            try await driver.forget(
+                addressText: "192.168.10.52",
+                reportedDeviceID: nil,
+                brand: .vizio
+            )
+        }
+        #expect(await vizio.forgottenDeviceIDs.isEmpty)
+    }
+
     @Test("Cancelling a pending Sony code request releases its continuation")
     func cancelsPairingCodeWait() async {
         let broker = PairingCodeBroker()
