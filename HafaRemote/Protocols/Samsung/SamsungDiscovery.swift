@@ -294,7 +294,7 @@ final class SamsungBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
         validationTasks[serviceID] = ValidationOperation(id: operationID, task: task)
     }
 
-    private static func privateIPv4Address(from service: NetService) -> PrivateIPv4Address? {
+    static func privateIPv4Address(from service: NetService) -> PrivateIPv4Address? {
         for addressData in service.addresses ?? [] {
             let rawAddress: String? = addressData.withUnsafeBytes { buffer in
                 guard

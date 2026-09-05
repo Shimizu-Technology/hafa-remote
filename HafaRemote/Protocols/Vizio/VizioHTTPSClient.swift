@@ -24,6 +24,10 @@ actor VizioHTTPSClient: VizioHTTPClienting {
     private var authToken: String?
     private var isDisconnected = false
 
+    nonisolated static func supports(controlPort: UInt16) -> Bool {
+        allowedPorts.contains(controlPort)
+    }
+
     init(
         address: PrivateIPv4Address,
         port: UInt16,
@@ -33,7 +37,7 @@ actor VizioHTTPSClient: VizioHTTPClienting {
         resourceTimeout: TimeInterval = 15,
         configuration suppliedConfiguration: URLSessionConfiguration? = nil
     ) throws {
-        guard Self.allowedPorts.contains(port) else {
+        guard Self.supports(controlPort: port) else {
             throw VizioHTTPSClientError.invalidEndpoint
         }
         self.address = address
