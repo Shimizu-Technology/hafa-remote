@@ -74,4 +74,22 @@ struct SavedTVTests {
         #expect(saved.firmwareVersion == "1002")
         #expect(saved.lastUsedAt == Date(timeIntervalSince1970: 300))
     }
+
+    @Test("An empty initial restore is not retried after the first TV is paired")
+    func doesNotRestoreAgainWhenSavedTVsPopulate() {
+        var gate = InitialSavedTVRestoreGate()
+
+        #expect(gate.claimAddress(from: []) == nil)
+
+        let newlyPairedTV = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.20"
+        )
+
+        #expect(gate.claimAddress(from: [newlyPairedTV]) == nil)
+        #expect(gate.didAttempt)
+    }
 }

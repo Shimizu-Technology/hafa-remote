@@ -10,7 +10,7 @@ struct HomeView: View {
     @State private var networkMonitor = LocalNetworkMonitor()
     @State private var isShowingSetup = false
     @State private var scenePhaseEvents = ScenePhaseEvents()
-    @State private var didAttemptInitialRestore = false
+    @State private var initialRestoreGate = InitialSavedTVRestoreGate()
     @State private var isRestoringSavedTV = false
     @State private var persistenceWarning: String?
 
@@ -214,10 +214,7 @@ struct HomeView: View {
     }
 
     private func restoreLastUsedTVIfNeeded() async {
-        guard !didAttemptInitialRestore else { return }
-        guard let savedTV = savedTVs.first else { return }
-        didAttemptInitialRestore = true
-        guard let address = savedTV.validatedAddress else { return }
+        guard let address = initialRestoreGate.claimAddress(from: savedTVs) else { return }
         isRestoringSavedTV = true
         defer { isRestoringSavedTV = false }
         await session.connect(to: address.rawValue)
@@ -252,6 +249,16 @@ struct HomeView: View {
             persistenceWarning =
                 "The TV is connected, but Hafa Remote could not remember it for the next launch."
         }
+    }
+}
+
+struct InitialSavedTVRestoreGate {
+    private(set) var didAttempt = false
+
+    mutating func claimAddress(from savedTVs: [SavedTV]) -> PrivateIPv4Address? {
+        guard !didAttempt else { return nil }
+        didAttempt = true
+        return savedTVs.first?.validatedAddress
     }
 }
 
