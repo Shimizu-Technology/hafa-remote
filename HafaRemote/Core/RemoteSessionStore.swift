@@ -16,11 +16,16 @@ final class RemoteSessionStore {
 
     init(
         controller: RemoteSessionController,
+        initialState: RemoteSessionState = .idle,
         connectionWaitClock: any RemoteSessionClock = ContinuousRemoteSessionClock(),
         beforeProjectingState: @escaping @Sendable (RemoteSessionState) async -> Void = { _ in }
     ) {
         self.controller = controller
         self.connectionWaitClock = connectionWaitClock
+        state = initialState
+        if case .connected(let tv) = initialState {
+            lastConnectedTV = tv
+        }
         stateSubscription.install(
             Task { [weak self, controller] in
                 let states = await controller.states()

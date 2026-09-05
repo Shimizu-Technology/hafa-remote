@@ -113,9 +113,31 @@ struct HafaRemoteApp: App {
     private struct SavedTVSwitchingUITestHarness: View {
         @Environment(\.modelContext) private var modelContext
         @State private var didSeed = false
-        @State private var session = RemoteSessionStore(
-            controller: RemoteSessionController(driver: SavedTVSwitchingUIFixtureDriver())
-        )
+        @State private var session: RemoteSessionStore
+
+        init() {
+            guard let address = try? PrivateIPv4Address("192.168.10.20") else {
+                preconditionFailure("The fixed UI-test address must remain valid")
+            }
+            let television = ConnectedTV(
+                brand: .samsung,
+                reportedDeviceID: "fixture-samsung",
+                address: address,
+                controlPort: 8_002,
+                modelName: "Q70AA",
+                firmwareVersion: "1.0"
+            )
+            let initialState = RemoteSessionState.connected(television)
+            _session = State(
+                initialValue: RemoteSessionStore(
+                    controller: RemoteSessionController(
+                        driver: SavedTVSwitchingUIFixtureDriver(),
+                        initialState: initialState
+                    ),
+                    initialState: initialState
+                )
+            )
+        }
 
         var body: some View {
             Group {
@@ -157,14 +179,6 @@ struct HafaRemoteApp: App {
                 } else {
                     initialTV =
                         existing.first(where: { $0.displayName == "Living Room TV" }) ?? existing[0]
-                }
-                if let target = initialTV.connectionTarget {
-                    await session.connect(to: target)
-                    let clock = ContinuousClock()
-                    let deadline = clock.now.advanced(by: .seconds(2))
-                    while session.connectedTV == nil, clock.now < deadline {
-                        try? await Task.sleep(for: .milliseconds(10))
-                    }
                 }
                 didSeed = true
             }

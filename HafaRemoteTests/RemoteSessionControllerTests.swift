@@ -4,6 +4,27 @@ import Testing
 @testable import HafaRemote
 
 struct RemoteSessionControllerTests {
+    @MainActor
+    @Test("The observable store exposes its matching initial state synchronously")
+    func storeProjectsMatchingInitialStateSynchronously() throws {
+        let television = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "fixture-samsung",
+            model: "Q70AA"
+        )
+        let initialState = RemoteSessionState.connected(television)
+        let driver = MockRemoteSessionDriver(outcomes: [])
+
+        let store = RemoteSessionStore(
+            controller: RemoteSessionController(driver: driver, initialState: initialState),
+            initialState: initialState
+        )
+
+        #expect(store.state == initialState)
+        #expect(store.connectedTV == television)
+        #expect(store.lastConnectedTV == television)
+    }
+
     @Test("A Sony discovery never enters the Samsung session driver")
     func rejectsTargetForDifferentDriverBrand() async throws {
         let address = try PrivateIPv4Address("192.168.10.20")
