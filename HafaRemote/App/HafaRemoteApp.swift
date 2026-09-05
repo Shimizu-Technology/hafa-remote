@@ -128,19 +128,19 @@ struct HafaRemoteApp: App {
             .task {
                 guard !didSeed else { return }
                 let existing = (try? modelContext.fetch(FetchDescriptor<SavedTV>())) ?? []
+                let initialTV: SavedTV
                 if existing.isEmpty {
-                    modelContext.insert(
-                        SavedTV(
-                            brand: .samsung,
-                            reportedDeviceID: "fixture-samsung",
-                            displayName: "Living Room TV",
-                            modelName: "Q70AA",
-                            firmwareVersion: "1.0",
-                            lastKnownAddress: "192.168.10.20",
-                            controlPort: 8_002,
-                            lastUsedAt: Date(timeIntervalSince1970: 200)
-                        )
+                    initialTV = SavedTV(
+                        brand: .samsung,
+                        reportedDeviceID: "fixture-samsung",
+                        displayName: "Living Room TV",
+                        modelName: "Q70AA",
+                        firmwareVersion: "1.0",
+                        lastKnownAddress: "192.168.10.20",
+                        controlPort: 8_002,
+                        lastUsedAt: Date(timeIntervalSince1970: 200)
                     )
+                    modelContext.insert(initialTV)
                     modelContext.insert(
                         SavedTV(
                             brand: .sony,
@@ -154,6 +154,17 @@ struct HafaRemoteApp: App {
                         )
                     )
                     try? modelContext.save()
+                } else {
+                    initialTV =
+                        existing.first(where: { $0.displayName == "Living Room TV" }) ?? existing[0]
+                }
+                if let target = initialTV.connectionTarget {
+                    await session.connect(to: target)
+                    let clock = ContinuousClock()
+                    let deadline = clock.now.advanced(by: .seconds(2))
+                    while session.connectedTV == nil, clock.now < deadline {
+                        try? await Task.sleep(for: .milliseconds(10))
+                    }
                 }
                 didSeed = true
             }
