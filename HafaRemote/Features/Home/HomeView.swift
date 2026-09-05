@@ -257,7 +257,7 @@ struct HomeView: View {
         for tv: ConnectedTV,
         savedTV: SavedTV?
     ) -> TVMACAddress? {
-        guard tv.brand == .samsung, tv.networkConnection != .wired else { return nil }
+        guard tv.isEligibleForSamsungWake else { return nil }
         return tv.macAddress ?? savedTV?.validatedMACAddress
     }
 

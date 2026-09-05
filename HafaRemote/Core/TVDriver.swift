@@ -110,6 +110,10 @@ struct ConnectedTV: Equatable, Sendable {
     var stableDeviceKey: String {
         "\(brand.rawValue):\(reportedDeviceID)"
     }
+
+    var isEligibleForSamsungWake: Bool {
+        brand == .samsung && networkConnection == .wireless
+    }
 }
 
 typealias SamsungNetworkConnection = TVNetworkConnection

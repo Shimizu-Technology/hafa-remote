@@ -113,6 +113,42 @@ struct SavedTVTests {
             Set(savedTVs.map(\.stableDeviceKey)) == Set([samsung.stableDeviceKey, vizio.stableDeviceKey]))
     }
 
+    @Test("Samsung wake requires an explicitly wireless connection")
+    func scopesSamsungWakeToConfirmedWirelessConnections() throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let unavailable = ConnectedTV(
+            brand: .samsung,
+            reportedDeviceID: "synthetic-device-id",
+            address: address,
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            networkConnection: .unavailable,
+            macAddress: try TVMACAddress("02:00:5E:10:00:01")
+        )
+        let wireless = ConnectedTV(
+            brand: .samsung,
+            reportedDeviceID: "synthetic-device-id",
+            address: address,
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            networkConnection: .wireless,
+            macAddress: try TVMACAddress("02:00:5E:10:00:01")
+        )
+        let otherBrand = ConnectedTV(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-device-id",
+            address: address,
+            modelName: "V-Series",
+            firmwareVersion: nil,
+            networkConnection: .wireless,
+            macAddress: try TVMACAddress("02:00:5E:10:00:01")
+        )
+
+        #expect(!unavailable.isEligibleForSamsungWake)
+        #expect(wireless.isEligibleForSamsungWake)
+        #expect(!otherBrand.isEligibleForSamsungWake)
+    }
+
     @Test("An invalid persisted host is never reused for a connection")
     func rejectsInvalidPersistedAddress() {
         let saved = SavedTV(

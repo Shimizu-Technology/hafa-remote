@@ -252,7 +252,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Acceptance evidence:** Someone outside the project can read the materials, pair a TV, and know how to report a failure safely.
 
-### HR-014 — Test across Samsung hardware
+### HR-014 — Test across every advertised brand
 
 **Blockers:** HR-013
 

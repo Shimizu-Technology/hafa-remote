@@ -45,19 +45,95 @@ enum SamsungPairingCredentialError: Error, Equatable, Sendable {
     case invalidCertificateFingerprint
 }
 
+/// Brand-scoped identity used as the Keychain account boundary for one Samsung TV.
+struct SamsungPairingCredentialIdentity: Equatable, Hashable, Sendable,
+    CustomStringConvertible
+{
+    let reportedDeviceID: String
+
+    init(reportedDeviceID: String) throws {
+        let normalized = reportedDeviceID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty,
+            normalized.utf8.count <= 512,
+            normalized.unicodeScalars.allSatisfy({
+                !CharacterSet.controlCharacters.contains($0)
+            })
+        else {
+            throw SamsungPairingCredentialIdentityError.invalidReportedDeviceID
+        }
+        self.reportedDeviceID = normalized
+    }
+
+    var stableDeviceKey: String {
+        "\(TVBrand.samsung.rawValue):\(reportedDeviceID)"
+    }
+
+    var description: String {
+        "SamsungPairingCredentialIdentity(redacted)"
+    }
+}
+
+enum SamsungPairingCredentialIdentityError: LocalizedError, Equatable, Sendable {
+    case invalidReportedDeviceID
+
+    var errorDescription: String? {
+        "The TV did not provide a usable identity for secure pairing."
+    }
+}
+
 /// Persistence boundary for TV credentials. Implementations must never use ordinary preferences.
 protocol SamsungPairingCredentialStoring: Sendable {
-    func credential(for address: PrivateIPv4Address) async throws -> SamsungPairingCredential?
-    func save(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) async throws
-    func removeCredential(for address: PrivateIPv4Address) async throws
+    func credential(
+        for identity: SamsungPairingCredentialIdentity,
+        migratingLegacyCredentialFor address: PrivateIPv4Address
+    ) async throws -> SamsungPairingCredential?
+    func save(
+        _ credential: SamsungPairingCredential,
+        for identity: SamsungPairingCredentialIdentity
+    ) async throws
+    func removeCredential(
+        for identity: SamsungPairingCredentialIdentity,
+        legacyAddress: PrivateIPv4Address
+    ) async throws
 }
 
 /// Stores pairing tokens and certificate pins in this device's data-protection Keychain.
 actor KeychainSamsungPairingCredentialStore: SamsungPairingCredentialStoring {
     private let service = "com.shimizutechnology.hafaremote.samsung-pairing"
 
-    func credential(for address: PrivateIPv4Address) throws -> SamsungPairingCredential? {
-        var query = baseQuery(for: address)
+    func credential(
+        for identity: SamsungPairingCredentialIdentity,
+        migratingLegacyCredentialFor address: PrivateIPv4Address
+    ) throws -> SamsungPairingCredential? {
+        if let credential = try readCredential(accountMaterial: identity.stableDeviceKey) {
+            return credential
+        }
+        guard let legacyCredential = try readCredential(accountMaterial: address.rawValue) else {
+            return nil
+        }
+
+        try save(legacyCredential, for: identity)
+        try deleteCredential(accountMaterial: address.rawValue)
+        return legacyCredential
+    }
+
+    func save(
+        _ credential: SamsungPairingCredential,
+        for identity: SamsungPairingCredentialIdentity
+    ) throws {
+        try write(credential, accountMaterial: identity.stableDeviceKey)
+    }
+
+    func removeCredential(
+        for identity: SamsungPairingCredentialIdentity,
+        legacyAddress: PrivateIPv4Address
+    ) throws {
+        try deleteCredential(accountMaterial: identity.stableDeviceKey)
+        try deleteCredential(accountMaterial: legacyAddress.rawValue)
+    }
+
+    private func readCredential(accountMaterial: String) throws -> SamsungPairingCredential? {
+        var query = baseQuery(accountMaterial: accountMaterial)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -77,7 +153,7 @@ actor KeychainSamsungPairingCredentialStore: SamsungPairingCredentialStoring {
         }
     }
 
-    func save(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) throws {
+    private func write(_ credential: SamsungPairingCredential, accountMaterial: String) throws {
         let encoded: Data
         do {
             encoded = try JSONEncoder().encode(credential)
@@ -85,7 +161,7 @@ actor KeychainSamsungPairingCredentialStore: SamsungPairingCredentialStoring {
             throw SamsungKeychainError.encodingFailed
         }
 
-        let query = baseQuery(for: address)
+        let query = baseQuery(accountMaterial: accountMaterial)
         let attributes = [kSecValueData as String: encoded]
         let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
         if updateStatus == errSecSuccess {
@@ -104,24 +180,24 @@ actor KeychainSamsungPairingCredentialStore: SamsungPairingCredentialStoring {
         }
     }
 
-    func removeCredential(for address: PrivateIPv4Address) throws {
-        let status = SecItemDelete(baseQuery(for: address) as CFDictionary)
+    private func deleteCredential(accountMaterial: String) throws {
+        let status = SecItemDelete(baseQuery(accountMaterial: accountMaterial) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw SamsungKeychainError.deleteFailed(status)
         }
     }
 
-    private func baseQuery(for address: PrivateIPv4Address) -> [String: Any] {
+    private func baseQuery(accountMaterial: String) -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: accountIdentifier(for: address),
+            kSecAttrAccount as String: accountIdentifier(for: accountMaterial),
             kSecUseDataProtectionKeychain as String: true,
         ]
     }
 
-    private func accountIdentifier(for address: PrivateIPv4Address) -> String {
-        SHA256.hash(data: Data(address.rawValue.utf8))
+    private func accountIdentifier(for accountMaterial: String) -> String {
+        SHA256.hash(data: Data(accountMaterial.utf8))
             .map { String(format: "%02x", $0) }
             .joined()
     }

@@ -232,12 +232,12 @@ README.md
 
 ### Core types
 
-- `TVDriver`: connect, disconnect, send semantic command, send text, wake, and expose capabilities without leaking protocol keys into UI code
+- `TVDriver`: send semantic commands, send text, and disconnect without leaking protocol keys into UI code; brand-specific session coordinators own discovery, pairing, connection, wake, and capability evaluation
 - `TVBrand` and brand-scoped stable identity: prevent credential or command crossover between televisions that report similar identifiers
 - `RemoteCommand`: semantic commands such as `.move(.up)`, `.select`, `.volume(.up)`, and `.powerOff`
 - `TVCapability`: navigation, playback, volume, mute, text input, power off, and wake
 - `RemoteSessionState`: the explicit connection states defined above
-- `SavedTV`: stable local ID, reported Samsung identifier when available, display name, room, model, last-known host, optional MAC address, last-seen time, capabilities, and trust metadata
+- `SavedTV`: stable local ID, reported device identifier when available, display name, room, model, last-known host, optional MAC address, last-seen time, capabilities, and trust metadata
 - `PairingTokenStore`: Keychain-only access keyed by the stable local device ID
 
 The UI must never send raw protocol keys directly. Only the active brand driver maps semantic commands to its television protocol.
@@ -355,7 +355,7 @@ Before inviting external testers:
 
 Do not submit until:
 
-- Shimizu Technology has written Samsung permission/partner terms covering distribution of this control behavior, or a qualified attorney has documented why the planned use is permitted. If neither is available, stop at personal/internal distribution.
+- Shimizu Technology has written permission, applicable partner terms, or a qualified legal basis covering every brand-specific control protocol distributed in the binary. If any brand remains unresolved, exclude that driver from the distributed build or stop at personal/internal distribution.
 - Testing covers every advertised brand, at least three model years overall, and at least three home networks; one household unit is evidence for that exact model, not a universal compatibility claim.
 - Pairing and reconnection results are recorded for each model/firmware combination.
 - Each advertised model group completes a 500-command soak with at least 99% observed delivery, zero duplicate commands, and no stuck repeat state.
