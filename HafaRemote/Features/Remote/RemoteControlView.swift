@@ -249,6 +249,7 @@ struct RemoteControlView: View {
             .buttonStyle(.borderedProminent)
             .tint(HafaTheme.accent)
             .foregroundStyle(HafaTheme.canvas)
+            .disabled(isWakingTV)
             .accessibilityIdentifier("retryConnectionButton")
 
             HStack {

@@ -1214,10 +1214,10 @@ private actor SuspendedRemoteSessionDriver: RemoteSessionDriving {
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV {
         let id = UUID()
-        connectionStartsContinuation.yield()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 continuations[id] = continuation
+                connectionStartsContinuation.yield()
             }
         } onCancel: { [weak self] in
             Task {
