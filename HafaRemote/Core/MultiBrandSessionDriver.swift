@@ -446,7 +446,10 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
             to target: TVConnectionTarget,
             onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
         ) async throws -> ConnectedTV {
-            ConnectedTV(
+            if target.brand == .sony {
+                try await Task.sleep(for: .seconds(3))
+            }
+            return ConnectedTV(
                 brand: target.brand,
                 reportedDeviceID: target.reportedDeviceID,
                 address: target.address,

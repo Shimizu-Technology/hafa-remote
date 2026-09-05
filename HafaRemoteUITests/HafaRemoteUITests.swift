@@ -195,6 +195,8 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(sideDoorTV.waitForExistence(timeout: 2))
         sideDoorTV.tap()
 
+        expectation(for: NSPredicate(format: "label == 'Connecting'"), evaluatedWith: status)
+        waitForExpectations(timeout: 2)
         XCTAssertTrue(app.staticTexts["Side Door TV"].waitForExistence(timeout: 5))
         expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
         waitForExpectations(timeout: 15)
