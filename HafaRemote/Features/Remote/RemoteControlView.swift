@@ -427,7 +427,7 @@ struct RemoteControlView: View {
 
     private var recoveryMessage: String {
         if isPoweringOnTV {
-            "Power on sent. Hafa Remote is waiting for the TV to reconnect."
+            "Connecting to the TV and completing power on."
         } else if canPowerOnTV {
             "The TV is offline. Use the power button to turn it on, or retry the connection."
         } else {
