@@ -27,6 +27,14 @@ enum TVNetworkConnection: Equatable, Sendable {
     case wired
 }
 
+/// A discovery result reduced to the fields a brand driver needs to start a session.
+struct TVConnectionTarget: Equatable, Sendable {
+    let brand: TVBrand
+    let reportedDeviceID: String
+    let address: PrivateIPv4Address
+    let controlPort: UInt16?
+}
+
 /// A validated hardware address that is never rendered or logged verbatim.
 struct TVMACAddress: Equatable, Hashable, Sendable, CustomStringConvertible {
     let octets: [UInt8]

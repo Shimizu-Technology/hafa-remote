@@ -7,7 +7,7 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \SavedTV.lastUsedAt, order: .reverse) private var savedTVs: [SavedTV]
     @State private var session: RemoteSessionStore
-    @State private var discovery: SamsungDiscoveryStore
+    @State private var discovery: TVDiscoveryStore
     @State private var networkMonitor = LocalNetworkMonitor()
     @State private var isShowingSetup = false
     @State private var scenePhaseEvents = ScenePhaseEvents()
@@ -19,7 +19,7 @@ struct HomeView: View {
 
     init(
         session: RemoteSessionStore = RemoteSessionStore(),
-        discovery: SamsungDiscoveryStore = SamsungDiscoveryStore(),
+        discovery: TVDiscoveryStore = TVDiscoveryStore(),
         wakeService: any SamsungTVWaking = SamsungWakeOnLANService()
     ) {
         _session = State(initialValue: session)
@@ -68,7 +68,7 @@ struct HomeView: View {
         }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $isShowingSetup) {
-            SamsungSetupView(
+            TVSetupView(
                 session: session,
                 initialAddress:
                     session.lastConnectedTV?.address.rawValue
@@ -146,7 +146,7 @@ struct HomeView: View {
                                 .multilineTextAlignment(.center)
 
                             Text(
-                                "Connect a Samsung TV on this Wi-Fi network. No account, ads, or subscription."
+                                "Connect a supported TV on this Wi-Fi network. No account, ads, or subscription."
                             )
                             .font(.body)
                             .foregroundStyle(HafaTheme.secondaryText)
@@ -156,7 +156,7 @@ struct HomeView: View {
                         Button {
                             isShowingSetup = true
                         } label: {
-                            Label("Add Samsung TV", systemImage: "plus")
+                            Label("Add TV", systemImage: "plus")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
                                 .frame(minHeight: 52)
@@ -164,7 +164,7 @@ struct HomeView: View {
                         .buttonStyle(.borderedProminent)
                         .tint(HafaTheme.accent)
                         .foregroundStyle(HafaTheme.canvas)
-                        .accessibilityIdentifier("addSamsungTVButton")
+                        .accessibilityIdentifier("addTVButton")
                         .disabled(restoration.isRestoring)
 
                         Spacer(minLength: 24)
@@ -373,7 +373,7 @@ struct SavedTVRestorationPresentation: Equatable {
     init(state: RemoteSessionState) {
         if case .pairing = state {
             title = "Approve Hafa Remote on your TV"
-            instruction = "Choose Allow on the Samsung TV to finish connecting."
+            instruction = "Follow the approval prompt on your TV to finish connecting."
         } else {
             title = "Connecting to your TV…"
             instruction = nil

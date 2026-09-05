@@ -15,12 +15,12 @@ final class HafaRemoteUITests: XCTestCase {
 
         XCTAssertTrue(app.navigationBars["Hafa Remote"].waitForExistence(timeout: 5))
 
-        let addButton = app.buttons["addSamsungTVButton"]
+        let addButton = app.buttons["addTVButton"]
         XCTAssertTrue(addButton.waitForExistence(timeout: 5))
         XCTAssertTrue(addButton.isHittable)
         addButton.tap()
 
-        XCTAssertTrue(app.navigationBars["Add Samsung TV"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.navigationBars["Add TV"].waitForExistence(timeout: 2))
         XCTAssertFalse(app.textFields["tvIPAddressField"].exists)
 
         let discoveredTV = app.buttons["discoveredTVButton"]
@@ -49,11 +49,11 @@ final class HafaRemoteUITests: XCTestCase {
         app.launchArguments.append("-ui-testing-discovery-retry")
         app.launch()
 
-        let addButton = app.buttons["addSamsungTVButton"]
+        let addButton = app.buttons["addTVButton"]
         XCTAssertTrue(addButton.waitForExistence(timeout: 5))
         addButton.tap()
 
-        XCTAssertTrue(app.staticTexts["No Samsung TVs found"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["No supported TVs found"].waitForExistence(timeout: 2))
         let scanAgain = app.buttons["scanAgainButton"]
         XCTAssertTrue(scanAgain.waitForExistence(timeout: 2))
         XCTAssertTrue(scanAgain.isHittable)
@@ -92,7 +92,7 @@ final class HafaRemoteUITests: XCTestCase {
 
             app.launch()
 
-            let addButton = app.buttons["addSamsungTVButton"]
+            let addButton = app.buttons["addTVButton"]
             if addButton.waitForExistence(timeout: 5) {
                 addButton.tap()
             } else {
@@ -108,7 +108,7 @@ final class HafaRemoteUITests: XCTestCase {
             }
 
             // XCTest invokes interruption monitors on the next interaction if iOS presents a prompt.
-            app.navigationBars["Add Samsung TV"].tap()
+            app.navigationBars["Add TV"].tap()
             let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
             let localNetworkAllow = springboard.buttons["Allow"].firstMatch
             if localNetworkAllow.waitForExistence(timeout: 3) {

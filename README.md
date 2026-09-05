@@ -1,10 +1,10 @@
 # Hafa Remote
 
-Hafa Remote is a native iPhone remote for compatible Samsung Tizen TVs on the same local network. The product is intentionally local-first: no account, backend, advertising, tracking, or subscription.
+Hafa Remote is a native iPhone remote for compatible smart TVs on the same local network. Samsung is implemented; Sony and Vizio household support is in active development. The product is intentionally local-first: no account, backend, advertising, tracking, or subscription.
 
 ## Status
 
-The native SwiftUI personal alpha includes secure Samsung pairing, automatic nearby-TV discovery, connection recovery, the complete MVP remote, text entry, persistence, conditional Wake-on-LAN for saved Wi-Fi TVs, and release checks. Manual IP entry remains available only as a troubleshooting fallback. Physical Q70AA wake acceptance and internal TestFlight delivery are the active release gates.
+The native SwiftUI personal alpha includes secure Samsung pairing, automatic nearby-TV discovery, connection recovery, the complete MVP remote, text entry, persistence, conditional Wake-on-LAN for saved Wi-Fi TVs, and release checks. The current implementation is being generalized into one automatic Add TV flow before Sony and Vizio control are enabled. Manual IP entry remains available only as a troubleshooting fallback.
 
 ## Documents
 

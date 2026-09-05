@@ -1,13 +1,13 @@
 import SwiftUI
 import UIKit
 
-struct SamsungSetupView: View {
+struct TVSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
-    @State private var discovery: SamsungDiscoveryStore
+    @State private var discovery: TVDiscoveryStore
     @State private var address = ""
-    @State private var selectedTV: DiscoveredSamsungTV?
+    @State private var selectedTV: DiscoveredTV?
     @State private var isShowingManualSetup = false
     @State private var isForgettingPairing = false
     @State private var connectionTaskID: UUID?
@@ -23,7 +23,7 @@ struct SamsungSetupView: View {
         session: RemoteSessionStore,
         initialAddress: String = "",
         initialReportedDeviceID: String? = nil,
-        discovery: SamsungDiscoveryStore = SamsungDiscoveryStore()
+        discovery: TVDiscoveryStore = TVDiscoveryStore()
     ) {
         self.session = session
         self.initialAddress = initialAddress
@@ -39,7 +39,7 @@ struct SamsungSetupView: View {
                 connectionStatusSection
                 manualSetupSection
             }
-            .navigationTitle("Add Samsung TV")
+            .navigationTitle("Add TV")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -76,8 +76,7 @@ struct SamsungSetupView: View {
             }
             .onChange(of: discovery.televisions.count) { _, count in
                 guard count > 0 else { return }
-                let announcement =
-                    count == 1 ? "Found one Samsung TV." : "Found \(count) Samsung TVs."
+                let announcement = count == 1 ? "Found one TV." : "Found \(count) TVs."
                 UIAccessibility.post(notification: .announcement, argument: announcement)
             }
             .onChange(of: session.state) { _, state in
@@ -105,7 +104,7 @@ struct SamsungSetupView: View {
                         .accessibilityHidden(true)
 
                     VStack(spacing: 6) {
-                        Text("Looking for Samsung TVs…")
+                        Text("Looking for TVs…")
                             .font(.headline)
                         Text("Keep your TV on and connected to the same home Wi-Fi as this iPhone.")
                             .font(.subheadline)
@@ -115,7 +114,7 @@ struct SamsungSetupView: View {
 
                     ProgressView()
                         .tint(HafaTheme.accent)
-                        .accessibilityLabel("Searching for nearby Samsung TVs")
+                        .accessibilityLabel("Searching for nearby TVs")
                         .accessibilityIdentifier("tvDiscoveryProgress")
                 }
                 .frame(maxWidth: .infinity)
@@ -143,7 +142,7 @@ struct SamsungSetupView: View {
                                 Text(television.displayName)
                                     .font(.body.weight(.semibold))
                                     .foregroundStyle(.primary)
-                                Text(television.modelName)
+                                Text("\(television.brand.displayName) · \(television.modelName)")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -160,7 +159,9 @@ struct SamsungSetupView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(isBusy)
-                    .accessibilityLabel("\(television.displayName), \(television.modelName)")
+                    .accessibilityLabel(
+                        "\(television.displayName), \(television.brand.displayName), \(television.modelName)"
+                    )
                     .accessibilityHint("Connects Hafa Remote to this TV")
                     .accessibilityIdentifier("discoveredTVButton")
                 }
@@ -173,7 +174,7 @@ struct SamsungSetupView: View {
         case .noResults:
             Section {
                 VStack(alignment: .leading, spacing: 14) {
-                    Label("No Samsung TVs found", systemImage: "tv.slash")
+                    Label("No supported TVs found", systemImage: "tv.slash")
                         .font(.headline)
 
                     Text("Check that the TV is on and that neither device is using a guest Wi-Fi network.")
@@ -241,7 +242,7 @@ struct SamsungSetupView: View {
             EmptyView()
         case .connecting:
             Section {
-                Label("Connecting to \(selectedTV?.displayName ?? "Samsung TV")…", systemImage: "wifi")
+                Label("Connecting to \(selectedTV?.displayName ?? "TV")…", systemImage: "wifi")
             }
         case .pairing:
             Section {
@@ -387,17 +388,30 @@ struct SamsungSetupView: View {
         }
     }
 
-    private func connect(to television: DiscoveredSamsungTV) {
+    private func connect(to television: DiscoveredTV) {
         selectedTV = television
         address = television.address.rawValue
         discovery.stop()
-        connectUsingCurrentAddress()
+        connect(to: television.connectionTarget)
     }
 
     private func connectManually() {
         selectedTV = nil
         discovery.stop()
         connectUsingCurrentAddress()
+    }
+
+    private func connect(to target: TVConnectionTarget) {
+        let operationID = UUID()
+        connectionTaskID = nil
+        connectionTask?.cancel()
+        connectionTaskID = operationID
+        connectionTask = Task {
+            await session.connect(to: target)
+            guard connectionTaskID == operationID else { return }
+            connectionTaskID = nil
+            connectionTask = nil
+        }
     }
 
     private func connectUsingCurrentAddress() {
@@ -455,10 +469,10 @@ struct SamsungSetupView: View {
         }
     }
 
-    private func discoveryAnnouncement(for state: SamsungDiscoveryState) -> String? {
+    private func discoveryAnnouncement(for state: TVDiscoveryState) -> String? {
         switch state {
         case .noResults:
-            return "No Samsung TVs were found."
+            return "No supported TVs were found."
         case .permissionDenied:
             return "Local Network access is off."
         case .failed:
@@ -493,5 +507,5 @@ struct SamsungSetupView: View {
 }
 
 #Preview {
-    SamsungSetupView(session: RemoteSessionStore())
+    TVSetupView(session: RemoteSessionStore())
 }

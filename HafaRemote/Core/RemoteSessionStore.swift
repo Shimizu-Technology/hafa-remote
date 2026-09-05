@@ -63,6 +63,12 @@ final class RemoteSessionStore {
         await controller.connect(to: addressText)
     }
 
+    func connect(to target: TVConnectionTarget) async {
+        projectionRevision &+= 1
+        acceptsConnectedTVUpdates = true
+        await controller.connect(to: target)
+    }
+
     /// Starts one connection sequence and waits for its eventual connected state.
     func connectAndWait(
         to addressText: String,
