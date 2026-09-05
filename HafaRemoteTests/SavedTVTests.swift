@@ -103,6 +103,31 @@ struct SavedTVTests {
         #expect(saved.macAddress == "02:00:5E:10:00:01")
     }
 
+    @Test("An explicit wired reconnect clears stale wireless wake metadata")
+    func clearsMACWhenReconnectIsWired() throws {
+        let saved = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.20",
+            macAddress: "02:00:5E:10:00:01",
+            wakeWasVerified: true
+        )
+        let reconnectedTV = PairedSamsungTV(
+            reportedDeviceID: "synthetic-device-id",
+            address: try PrivateIPv4Address("192.168.10.42"),
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            networkConnection: .wired
+        )
+
+        saved.recordConnection(to: reconnectedTV)
+
+        #expect(saved.macAddress == nil)
+        #expect(!saved.wakeWasVerified)
+    }
+
     @MainActor
     @Test("An empty initial restore is not retried after the first TV is paired")
     func doesNotRestoreAgainWhenSavedTVsPopulate() async {

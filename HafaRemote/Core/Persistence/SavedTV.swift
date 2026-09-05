@@ -56,8 +56,14 @@ final class SavedTV: CustomStringConvertible {
         modelName = tv.modelName
         firmwareVersion = tv.firmwareVersion
         lastKnownAddress = tv.address.rawValue
-        if let macAddress = tv.macAddress {
-            self.macAddress = macAddress.persistedValue
+        switch tv.networkConnection {
+        case .wired:
+            macAddress = nil
+            wakeWasVerified = false
+        case .wireless, .unavailable:
+            if let macAddress = tv.macAddress {
+                self.macAddress = macAddress.persistedValue
+            }
         }
         lastSeenAt = date
         lastUsedAt = date

@@ -1,5 +1,11 @@
 import Foundation
 
+enum SamsungNetworkConnection: Equatable, Sendable {
+    case unavailable
+    case wireless
+    case wired
+}
+
 /// Capability details read from a Samsung TV before pairing.
 /// The optional MAC is protected local metadata and must never be logged.
 struct SamsungDeviceInfo: Equatable, Sendable {
@@ -7,6 +13,7 @@ struct SamsungDeviceInfo: Equatable, Sendable {
     let modelName: String
     let firmwareVersion: String?
     let supportsTokenAuthentication: Bool
+    let networkConnection: SamsungNetworkConnection
     let macAddress: SamsungMACAddress?
 
     init(
@@ -14,12 +21,14 @@ struct SamsungDeviceInfo: Equatable, Sendable {
         modelName: String,
         firmwareVersion: String?,
         supportsTokenAuthentication: Bool,
+        networkConnection: SamsungNetworkConnection = .unavailable,
         macAddress: SamsungMACAddress? = nil
     ) {
         self.reportedDeviceID = reportedDeviceID
         self.modelName = modelName
         self.firmwareVersion = firmwareVersion
         self.supportsTokenAuthentication = supportsTokenAuthentication
+        self.networkConnection = networkConnection
         self.macAddress = macAddress
     }
 }
@@ -106,14 +115,17 @@ enum SamsungDeviceInfoParser {
             throw SamsungDeviceInfoError.invalidResponse
         }
 
-        let networkType = envelope.device.networkType?.nonemptyTrimmed?.lowercased()
-        let usesWirelessNetwork =
-            networkType == nil
-            || networkType == "wireless"
-            || networkType == "wifi"
-            || networkType == "wi-fi"
+        let networkConnection =
+            switch envelope.device.networkType?.nonemptyTrimmed?.lowercased() {
+            case "wired", "ethernet":
+                SamsungNetworkConnection.wired
+            case "wireless", "wifi", "wi-fi":
+                SamsungNetworkConnection.wireless
+            default:
+                SamsungNetworkConnection.unavailable
+            }
         let macAddress =
-            usesWirelessNetwork
+            networkConnection != .wired
             ? envelope.device.wifiMac?.nonemptyTrimmed.flatMap { try? SamsungMACAddress($0) }
             : nil
 
@@ -122,6 +134,7 @@ enum SamsungDeviceInfoParser {
             modelName: modelName,
             firmwareVersion: envelope.device.firmwareVersion?.nonemptyTrimmed,
             supportsTokenAuthentication: envelope.device.tokenAuthSupport?.lowercased() == "true",
+            networkConnection: networkConnection,
             macAddress: macAddress
         )
     }

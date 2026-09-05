@@ -257,7 +257,8 @@ struct HomeView: View {
         for tv: PairedSamsungTV,
         savedTV: SavedTV?
     ) -> SamsungMACAddress? {
-        tv.macAddress ?? savedTV?.validatedMACAddress
+        guard tv.networkConnection != .wired else { return nil }
+        return tv.macAddress ?? savedTV?.validatedMACAddress
     }
 
     private func wake(_ tv: PairedSamsungTV, savedTV: SavedTV?) async throws {

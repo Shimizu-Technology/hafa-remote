@@ -253,6 +253,7 @@ struct SamsungProtocolCodecTests {
         let info = try SamsungDeviceInfoParser.parse(response)
 
         #expect(info.macAddress?.persistedValue == "02:00:5E:10:00:01")
+        #expect(info.networkConnection == .wireless)
     }
 
     @Test("Device parser does not use the Wi-Fi MAC when the TV reports a wired connection")
@@ -265,6 +266,7 @@ struct SamsungProtocolCodecTests {
         let info = try SamsungDeviceInfoParser.parse(response)
 
         #expect(info.macAddress == nil)
+        #expect(info.networkConnection == .wired)
     }
 
     @Test("Device parser rejects responses without a stable identifier")
