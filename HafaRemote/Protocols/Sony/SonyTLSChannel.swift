@@ -15,6 +15,7 @@ enum SonyTLSChannelError: Error, Equatable, Sendable {
     case certificateChanged
     case invalidCertificate
     case connectionClosed
+    case timedOut
 }
 
 enum SonyTLSTrustDecision: Equatable, Sendable {
@@ -60,7 +61,53 @@ enum SonyCertificateDisplayName {
         ).trimmingCharacters(in: .whitespacesAndNewlines)
         let components = cleaned.split(separator: "/", omittingEmptySubsequences: true)
         let deviceName = components.count > 1 ? String(components[components.count - 2]) : cleaned
-        return deviceName.isEmpty ? "Sony / Google TV" : String(deviceName.prefix(80))
+        let redacted = deviceName.replacingOccurrences(
+            of: "(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}",
+            with: "",
+            options: .regularExpression
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        return redacted.isEmpty ? "Sony / Google TV" : String(redacted.prefix(80))
+    }
+}
+
+struct SonyTLSMessageBuffer: Sendable {
+    private var decoder = SonyDelimitedMessageDecoder()
+    private var queuedMessages: [Data] = []
+
+    mutating func next() -> Data? {
+        queuedMessages.isEmpty ? nil : queuedMessages.removeFirst()
+    }
+
+    mutating func append(_ chunk: Data) throws -> Data? {
+        let messages = try decoder.append(chunk)
+        guard let first = messages.first else { return nil }
+        queuedMessages.append(contentsOf: messages.dropFirst())
+        return first
+    }
+
+    mutating func reset() {
+        decoder = SonyDelimitedMessageDecoder()
+        queuedMessages = []
+    }
+}
+
+enum SonyTLSConnectionDeadline {
+    static func run<Value: Sendable>(
+        timeout: Duration,
+        operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        try await withThrowingTaskGroup(of: Value.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                throw SonyTLSChannelError.timedOut
+            }
+            defer { group.cancelAll() }
+            guard let result = try await group.next() else {
+                throw SonyTLSChannelError.connectionClosed
+            }
+            return result
+        }
     }
 }
 
@@ -87,10 +134,11 @@ final class SonyClientIdentityReference: @unchecked Sendable {
 
 /// Owns one framed mutual-TLS connection to an Android TV Remote Service endpoint.
 actor SonyTLSChannel: SonyTLSChanneling {
+    private static let connectionTimeout: Duration = .seconds(10)
+
     private let queue = DispatchQueue(label: "com.shimizutechnology.hafaremote.sony-tls")
     private var connection: NWConnection?
-    private var decoder = SonyDelimitedMessageDecoder()
-    private var queuedMessages: [Data] = []
+    private var messageBuffer = SonyTLSMessageBuffer()
 
     func connect(
         address: PrivateIPv4Address,
@@ -99,8 +147,7 @@ actor SonyTLSChannel: SonyTLSChanneling {
         trustMode: SonyTLSTrustMode
     ) async throws -> SonyTLSPeer {
         disconnect()
-        decoder = SonyDelimitedMessageDecoder()
-        queuedMessages = []
+        messageBuffer.reset()
 
         let tlsOptions = NWProtocolTLS.Options()
         guard let localIdentity = sec_identity_create(identity.value) else {
@@ -127,7 +174,9 @@ actor SonyTLSChannel: SonyTLSChanneling {
         guard let networkPort = NWEndpoint.Port(rawValue: port) else {
             throw SonyTLSChannelError.unavailable
         }
-        let parameters = NWParameters(tls: tlsOptions, tcp: NWProtocolTCP.Options())
+        let tcpOptions = NWProtocolTCP.Options()
+        tcpOptions.connectionTimeout = 10
+        let parameters = NWParameters(tls: tlsOptions, tcp: tcpOptions)
         parameters.requiredInterfaceType = .wifi
         let connection = NWConnection(
             host: NWEndpoint.Host(address.rawValue),
@@ -137,7 +186,9 @@ actor SonyTLSChannel: SonyTLSChanneling {
         self.connection = connection
 
         do {
-            try await waitUntilReady(connection)
+            try await SonyTLSConnectionDeadline.run(timeout: Self.connectionTimeout) {
+                try await self.waitUntilReady(connection)
+            }
             guard self.connection === connection else {
                 throw SonyTLSChannelError.connectionClosed
             }
@@ -182,17 +233,12 @@ actor SonyTLSChannel: SonyTLSChanneling {
     }
 
     func receive() async throws -> Data {
-        if !queuedMessages.isEmpty {
-            return queuedMessages.removeFirst()
-        }
+        if let queued = messageBuffer.next() { return queued }
         guard let connection else { throw SonyTLSChannelError.connectionClosed }
 
         while true {
             let chunk = try await receiveChunk(on: connection)
-            let messages = try decoder.append(chunk)
-            guard let first = messages.first else { continue }
-            queuedMessages.append(contentsOf: messages.dropFirst())
-            return first
+            if let message = try messageBuffer.append(chunk) { return message }
         }
     }
 
@@ -200,8 +246,7 @@ actor SonyTLSChannel: SonyTLSChanneling {
         connection?.stateUpdateHandler = nil
         connection?.cancel()
         connection = nil
-        decoder = SonyDelimitedMessageDecoder()
-        queuedMessages = []
+        messageBuffer.reset()
     }
 
     private func waitUntilReady(_ connection: NWConnection) async throws {

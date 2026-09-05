@@ -46,33 +46,29 @@ protocol SonyPairingCredentialStoring: Sendable {
     func remove(reportedDeviceID: String) async throws
 }
 
-actor KeychainSonyPairingCredentialStore: SonyPairingCredentialStoring {
+protocol SonyPairingCredentialKeychain: Sendable {
+    func data(for account: String) throws -> Data?
+    func save(_ data: Data, for account: String) throws
+    func remove(account: String) throws
+}
+
+struct SystemSonyPairingCredentialKeychain: SonyPairingCredentialKeychain {
     private let service = "com.shimizutechnology.hafaremote.sony.pairing"
 
-    func credential(for certificateSHA256: Data) throws -> SonyPairingCredential? {
-        let candidate = try SonyPairingCredential(certificateSHA256: certificateSHA256)
+    func data(for account: String) throws -> Data? {
         var result: CFTypeRef?
         let status = SecItemCopyMatching(
-            query(account: candidate.reportedDeviceID, returnData: true) as CFDictionary,
+            query(account: account, returnData: true) as CFDictionary,
             &result
         )
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = result as? Data else {
             throw SonyKeychainError.readFailed(status)
         }
-        guard let credential = try? JSONDecoder().decode(SonyPairingCredential.self, from: data),
-            credential == candidate
-        else {
-            throw SonyKeychainError.invalidStoredCredential
-        }
-        return credential
+        return data
     }
 
-    func save(_ credential: SonyPairingCredential) throws {
-        guard let data = try? JSONEncoder().encode(credential) else {
-            throw SonyKeychainError.encodingFailed
-        }
-        let account = credential.reportedDeviceID
+    func save(_ data: Data, for account: String) throws {
         let baseQuery = query(account: account, returnData: false)
         let attributes = [kSecValueData as String: data]
         let updateStatus = SecItemUpdate(baseQuery as CFDictionary, attributes as CFDictionary)
@@ -90,11 +86,8 @@ actor KeychainSonyPairingCredentialStore: SonyPairingCredentialStoring {
         }
     }
 
-    func remove(reportedDeviceID: String) throws {
-        let credential = try SonyPairingCredential(reportedDeviceID: reportedDeviceID)
-        let status = SecItemDelete(
-            query(account: credential.reportedDeviceID, returnData: false) as CFDictionary
-        )
+    func remove(account: String) throws {
+        let status = SecItemDelete(query(account: account, returnData: false) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw SonyKeychainError.deleteFailed(status)
         }
@@ -112,6 +105,37 @@ actor KeychainSonyPairingCredentialStore: SonyPairingCredentialStoring {
             query[kSecMatchLimit as String] = kSecMatchLimitOne
         }
         return query
+    }
+}
+
+actor KeychainSonyPairingCredentialStore: SonyPairingCredentialStoring {
+    private let keychain: any SonyPairingCredentialKeychain
+
+    init(keychain: any SonyPairingCredentialKeychain = SystemSonyPairingCredentialKeychain()) {
+        self.keychain = keychain
+    }
+
+    func credential(for certificateSHA256: Data) throws -> SonyPairingCredential? {
+        let candidate = try SonyPairingCredential(certificateSHA256: certificateSHA256)
+        guard let data = try keychain.data(for: candidate.reportedDeviceID) else { return nil }
+        guard let credential = try? JSONDecoder().decode(SonyPairingCredential.self, from: data),
+            credential == candidate
+        else {
+            throw SonyKeychainError.invalidStoredCredential
+        }
+        return credential
+    }
+
+    func save(_ credential: SonyPairingCredential) throws {
+        guard let data = try? JSONEncoder().encode(credential) else {
+            throw SonyKeychainError.encodingFailed
+        }
+        try keychain.save(data, for: credential.reportedDeviceID)
+    }
+
+    func remove(reportedDeviceID: String) throws {
+        let credential = try SonyPairingCredential(reportedDeviceID: reportedDeviceID)
+        try keychain.remove(account: credential.reportedDeviceID)
     }
 }
 
