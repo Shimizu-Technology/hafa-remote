@@ -111,7 +111,7 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertFalse(powerOff.isEnabled)
 
         let retry = app.buttons["retryConnectionButton"]
-        XCTAssertTrue(retry.exists)
+        XCTAssertTrue(retry.waitForExistence(timeout: 2))
         retry.tap()
         let commandOutput = app.staticTexts["lastRemoteCommand"]
         let retryRecorded = expectation(
