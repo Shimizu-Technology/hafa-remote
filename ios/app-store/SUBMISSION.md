@@ -6,7 +6,7 @@
 - Next TestFlight build: `1`
 - Bundle ID: `com.shimizutechnology.hafaremote`
 - Apple team: `4T358A5S74`
-- Minimum OS: iOS 18.0
+- Minimum OS: iOS 18.4
 - Platforms: iPhone only
 - Category: Utilities
 - Price: Free; no in-app purchases or subscriptions
@@ -46,9 +46,14 @@ a backend, advertising, support upload, or any new SDK is added.
 Do not submit for external TestFlight or public review until all of these are
 complete:
 
-- Samsung distribution authorization or focused legal review is recorded.
+- Shimizu Technology has written Samsung permission or partner terms covering distribution of
+  this control behavior, or a qualified attorney has documented why the planned use is permitted.
 - The physical Q70AA pairing, command, relaunch, text, and lifecycle evidence is complete.
-- Multiple supported models pass the documented hardware matrix.
+- Testing includes at least five Samsung TVs, three model years, and three home networks.
+- Each advertised model group passes a 500-command soak with at least 99% observed delivery, zero
+  duplicate commands, and no stuck repeat state.
+- Each advertised model group passes at least 20 foreground reconnect cycles, with at least 19
+  reconnecting without re-pairing and normally within two seconds on healthy Wi-Fi.
 - Support and privacy pages are live at the exact metadata URLs.
 - Current App Store screenshots and an offline reviewer demo are ready.
 - App Privacy, age rating, content rights, contact, and trader answers are

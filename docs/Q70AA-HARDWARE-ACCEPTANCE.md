@@ -10,6 +10,10 @@ fingerprints, Wi-Fi names, or typed private content.
 - TV firmware:
 - iPhone model:
 - iOS version:
+- App version:
+- Build number:
+- Release commit:
+- Validated archive application identifier:
 - Network condition: same private non-guest Wi-Fi
 
 ## HR-002 pairing proof
