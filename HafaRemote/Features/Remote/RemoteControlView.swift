@@ -56,8 +56,7 @@ struct RemoteControlView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .preferredColorScheme(.dark)
         .onChange(of: isConnected) { wasConnected, isConnected in
-            if isConnected {
-                isPoweringOnTV = false
+            if isConnected, !isPoweringOnTV {
                 powerOnFailureMessage = nil
             }
             guard wasConnected, !isConnected else { return }
@@ -150,8 +149,10 @@ struct RemoteControlView: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(isConnected ? .red : HafaTheme.accent)
-                .disabled(!isConnected && (!canPowerOnTV || isPoweringOnTV))
-                .accessibilityLabel(isConnected ? "Power off TV" : "Turn on TV")
+                .disabled(isPoweringOnTV || (!isConnected && !canPowerOnTV))
+                .accessibilityLabel(
+                    isPoweringOnTV ? "Turning on TV" : (isConnected ? "Power off TV" : "Turn on TV")
+                )
                 .accessibilityHint(powerAccessibilityHint)
                 .accessibilityIdentifier(isConnected ? "remote-powerOff" : "remote-powerOn")
             }
