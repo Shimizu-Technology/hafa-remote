@@ -100,7 +100,6 @@ struct HomeView: View {
         }
         .onChange(of: session.state) { _, state in
             guard case .connected(let tv) = state else { return }
-            selection.markConnected(tv.stableDeviceKey)
             saveConnectedTV(tv)
         }
         .onChange(of: networkMonitor.isReachable) { _, isReachable in
@@ -221,13 +220,10 @@ struct HomeView: View {
     }
 
     private var statusLabel: String {
-        guard isPresentedTVConnected else {
-            if selection.isSwitching { return "Connecting" }
-            return "Offline"
-        }
+        if selection.isSwitching { return "Connecting" }
         return switch session.state {
         case .connected:
-            "Connected"
+            isPresentedTVConnected ? "Connected" : "Offline"
         case .pairing:
             "Pairing"
         case .connecting:
@@ -284,15 +280,17 @@ struct HomeView: View {
     private var tvPicker: some View {
         Menu {
             ForEach(savedTVs, id: \.stableDeviceKey) { savedTV in
+                let isSelected = savedTV.stableDeviceKey == selection.selectedDeviceKey
                 Button {
                     select(savedTV)
                 } label: {
-                    if savedTV.stableDeviceKey == selection.selectedDeviceKey {
+                    if isSelected {
                         Label(savedTV.displayName, systemImage: "checkmark")
                     } else {
                         Text(savedTV.displayName)
                     }
                 }
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
                 .accessibilityIdentifier("savedTV-\(savedTV.stableDeviceKey)")
             }
 

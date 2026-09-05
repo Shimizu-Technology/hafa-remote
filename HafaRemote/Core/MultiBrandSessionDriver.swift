@@ -458,6 +458,7 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
 
         func submitPairingCode(_ code: String) async throws {}
         func send(_ command: RemoteCommand) async throws {}
+        func sendText(_ input: RemoteTextInput) async throws {}
         func forget(addressText: String) async throws {}
         func disconnect() async {}
     }

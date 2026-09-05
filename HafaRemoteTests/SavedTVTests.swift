@@ -602,6 +602,7 @@ struct SavedTVTests {
     @Test("Selecting another TV immediately changes identity and cancels the stale switch")
     func latestTVSelectionWins() async throws {
         let selection = SavedTVSelectionCoordinator()
+        let gate = SelectionCancellationGate()
         let first = TVConnectionTarget(
             brand: .samsung,
             reportedDeviceID: "first",
@@ -620,11 +621,13 @@ struct SavedTVTests {
             deviceKey: "samsung:first",
             target: first,
             disconnect: {
-                try? await Task.sleep(for: .seconds(30))
+                await gate.suspendUntilCancelled()
             },
             connect: { connectedTargets.append($0) }
         )
         #expect(selection.selectedDeviceKey == "samsung:first")
+        await waitForSelectionState { await gate.didStart }
+        #expect(await gate.didStart)
 
         selection.select(
             deviceKey: "sony:second",
@@ -633,9 +636,10 @@ struct SavedTVTests {
             connect: { connectedTargets.append($0) }
         )
 
-        for _ in 0..<100 where connectedTargets != [second] {
-            await Task.yield()
-        }
+        await waitForSelectionState { await gate.didFinish }
+        await waitForSelectionState { connectedTargets == [second] && !selection.isSwitching }
+        #expect(await gate.didFinish)
+        #expect(connectedTargets == [second])
         #expect(selection.selectedDeviceKey == "sony:second")
         #expect(!selection.isSwitching)
     }
@@ -643,6 +647,45 @@ struct SavedTVTests {
 
 private enum RestorationTestError: Error {
     case failed
+}
+
+private actor SelectionCancellationGate {
+    private(set) var didStart = false
+    private(set) var didFinish = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func suspendUntilCancelled() async {
+        didStart = true
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard !Task.isCancelled else {
+                    didFinish = true
+                    continuation.resume()
+                    return
+                }
+                self.continuation = continuation
+            }
+        } onCancel: {
+            Task { await self.finish() }
+        }
+    }
+
+    private func finish() {
+        guard !didFinish else { return }
+        didFinish = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+@MainActor
+private func waitForSelectionState(_ condition: @escaping @MainActor () async -> Bool) async {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: .seconds(2))
+    while clock.now < deadline {
+        if await condition() { return }
+        await Task.yield()
+    }
 }
 
 private actor RestorationConnectionGate {
