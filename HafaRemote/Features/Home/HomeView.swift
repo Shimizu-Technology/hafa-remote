@@ -13,7 +13,7 @@ struct HomeView: View {
     @State private var scenePhaseEvents = ScenePhaseEvents()
     @State private var restoration = SavedTVRestorationCoordinator()
     @State private var selection = SavedTVSelectionCoordinator()
-    @State private var persistenceWarning: String?
+    @State private var alert: HomeAlert?
     @State private var pendingWakeAttempt: PendingWakeAttempt?
 
     private let wakeService: any SamsungTVWaking
@@ -84,15 +84,15 @@ struct HomeView: View {
             )
         }
         .alert(
-            "TV Not Saved",
+            alert?.title ?? "Hafa Remote",
             isPresented: Binding(
-                get: { persistenceWarning != nil },
-                set: { if !$0 { persistenceWarning = nil } }
+                get: { alert != nil },
+                set: { if !$0 { alert = nil } }
             )
         ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text(persistenceWarning ?? "")
+            Text(alert?.message ?? "")
         }
         .task(id: savedTVs.first?.persistentModelID) {
             backfillLegacySavedTVsIfNeeded()
@@ -313,8 +313,11 @@ struct HomeView: View {
 
     private func select(_ savedTV: SavedTV) {
         guard let target = savedTV.connectionTarget else {
-            persistenceWarning =
-                "Hafa Remote no longer has a valid network address for \(savedTV.displayName). Add it again while the TV is on."
+            alert = HomeAlert(
+                title: "Can't Connect",
+                message:
+                    "Hafa Remote no longer has a valid network address for \(savedTV.displayName). Add it again while the TV is on."
+            )
             return
         }
         guard savedTV.stableDeviceKey != selection.selectedDeviceKey || !isPresentedTVConnected
@@ -423,8 +426,11 @@ struct HomeView: View {
         do {
             try modelContext.save()
         } catch {
-            persistenceWarning =
-                "The TV is connected, but Hafa Remote could not remember it for the next launch."
+            alert = HomeAlert(
+                title: "TV Not Saved",
+                message:
+                    "The TV is connected, but Hafa Remote could not remember it for the next launch."
+            )
         }
     }
 
@@ -435,10 +441,18 @@ struct HomeView: View {
         do {
             try modelContext.save()
         } catch {
-            persistenceWarning =
-                "Hafa Remote could not finish updating a saved TV. Reconnect it to keep it available."
+            alert = HomeAlert(
+                title: "TV Not Saved",
+                message:
+                    "Hafa Remote could not finish updating a saved TV. Reconnect it to keep it available."
+            )
         }
     }
+}
+
+private struct HomeAlert {
+    let title: String
+    let message: String
 }
 
 enum TVSelectionError: Error {

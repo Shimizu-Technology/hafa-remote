@@ -713,6 +713,7 @@ private func waitForSelectionState(_ condition: @escaping @MainActor () async ->
         if await condition() { return }
         await Task.yield()
     }
+    Issue.record("Timed out waiting for the expected selection state")
 }
 
 private actor RestorationConnectionGate {
