@@ -2,9 +2,9 @@
 ## Build Plan
 
 **Version:** 0.1  
-**Last updated:** September 4, 2026  
-**Current status:** HR-001 implemented and awaiting review
-**Current execution frontier:** HR-001 review, followed by HR-002
+**Last updated:** September 5, 2026
+**Current status:** HR-001 and HR-003 through HR-005 are merged; HR-002 has a successful Q70AA proof but its screen-recording evidence remains; HR-006 text input and truthful power behavior plus HR-015 release engineering are merged; HR-007 automatic discovery is in final review; power-on and broader hardware acceptance remain pending
+**Current execution frontier:** Automatic-discovery merge, Q70AA network visibility and acceptance, and internal TestFlight
 
 ## Delivery targets
 
@@ -48,14 +48,14 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** HR-001
 
-- [ ] Add the local-network purpose string and a development-only manual IP field.
-- [ ] Fetch and parse the TV's non-secret device-information response.
-- [ ] Implement the Samsung secure WebSocket handshake behind `SamsungCommandTransport`.
-- [ ] Put the app name in the protocol handshake without leaking user or device details.
-- [ ] Trigger the television approval prompt and parse the pairing token.
-- [ ] Store the token in Keychain and reconnect with it after app relaunch.
-- [ ] Send one semantic `.select` command through `TVDriver`; do not expose Samsung key strings to the UI.
-- [ ] Record the Q70AA model, firmware, iOS version, pairing result, certificate behavior, and connection timing in a local hardware-test fixture/document without household IP/MAC/token values.
+- [x] Add the local-network purpose string and a development-only manual IP field.
+- [x] Fetch and parse the TV's non-secret device-information response.
+- [x] Implement the Samsung secure WebSocket handshake behind `SamsungCommandTransport`.
+- [x] Put the app name in the protocol handshake without leaking user or device details.
+- [x] Trigger the television approval prompt and parse the pairing token.
+- [x] Store the token in Keychain and reconnect with it after app relaunch.
+- [x] Send one semantic `.select` command through `TVDriver`; do not expose Samsung key strings to the UI.
+- [x] Record the Q70AA model, iOS version, pairing result, certificate behavior, and connection timing in a local hardware-test fixture/document without household IP/MAC/token values. Firmware remains intentionally blank until it can be captured without adding it to discovery or logs.
 
 **Acceptance evidence:** A screen recording shows first pairing, TV approval, one command, app force-quit, relaunch, and reconnection without another approval prompt.
 
@@ -65,12 +65,12 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** HR-002
 
-- [ ] Implement `RemoteSessionState` with idle, pairing, connecting, connected, reconnecting, offline, denied, unsupported, and failed states.
-- [ ] Own WebSocket state and command serialization inside an actor.
-- [ ] Add timeouts and cancellation for pair, connect, disconnect, and send paths.
-- [ ] Ensure only one connection attempt and one active TV session can exist.
-- [ ] Add bounded foreground-only reconnect with immediate retry on meaningful network-path changes.
-- [ ] Create a mock driver and deterministic clock so every transition is testable without a TV.
+- [x] Implement `RemoteSessionState` with idle, pairing, connecting, connected, reconnecting, offline, denied, unsupported, and failed states.
+- [x] Own WebSocket state and command serialization inside an actor.
+- [x] Add timeouts and cancellation for pair, connect, disconnect, and send paths.
+- [x] Ensure only one connection attempt and one active TV session can exist.
+- [x] Add bounded foreground-only reconnect with immediate retry on meaningful network-path changes.
+- [x] Create a mock driver and deterministic clock so every transition is testable without a TV.
 
 **Acceptance evidence:** State-transition and cancellation tests pass, including rapid foreground/background and TV-switch scenarios.
 
@@ -82,11 +82,11 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** HR-003
 
-- [ ] Create the remote screen with TV name, connection state, power, D-pad/select, home/back, playback, volume, mute, and keyboard controls.
-- [ ] Implement semantic Samsung mappings for D-pad, select, home, back, play/pause, rewind, fast-forward, volume up/down, mute, and power off.
-- [ ] Disable unsupported or unavailable controls instead of sending speculative commands.
-- [ ] Add pressed states, haptics, and button-repeat behavior with serialized writes and safe rate limits.
-- [ ] Add unit tests proving every semantic control maps to exactly the intended Samsung command.
+- [x] Create the remote screen with TV name, connection state, power, D-pad/select, home/back, playback, volume, mute, and keyboard controls.
+- [x] Implement semantic Samsung mappings for D-pad, select, home, back, play/pause, rewind, fast-forward, volume up/down, mute, and power off.
+- [x] Disable unsupported or unavailable controls instead of sending speculative commands.
+- [x] Add pressed states, haptics, and button-repeat behavior with serialized writes and safe rate limits.
+- [x] Add unit tests proving every semantic control maps to exactly the intended Samsung command.
 
 **Acceptance evidence:** Every required control is exercised on the Q70AA, with a fifty-command soak and no crash, stuck direction, or corrupted session.
 
@@ -96,12 +96,12 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** HR-004
 
-- [ ] Add `SavedTV` persistence in SwiftData and Keychain-backed pairing credentials.
-- [ ] Reconnect to the last-used TV at foreground activation.
-- [ ] Handle app background, phone lock, app force-quit, TV restart, Wi-Fi loss, and token invalidation.
-- [ ] Use `NWPathMonitor` only as a network hint; verify the actual TV connection before showing connected.
-- [ ] Add recovery actions for retry, find TV, re-pair, and iOS local-network Settings.
-- [ ] Redact addresses, identifiers, pairing tokens, and typed text from logs.
+- [x] Add `SavedTV` persistence in SwiftData and Keychain-backed pairing credentials.
+- [x] Reconnect to the last-used TV at foreground activation.
+- [x] Handle app background, phone lock, app force-quit, TV restart, Wi-Fi loss, and token invalidation.
+- [x] Use `NWPathMonitor` only as a network hint; verify the actual TV connection before showing connected.
+- [x] Add recovery actions for retry, find TV, re-pair, and iOS local-network Settings.
+- [x] Redact addresses, identifiers, pairing tokens, and typed text from logs.
 
 **Acceptance evidence:** Complete ten lock/background cycles, a TV reboot, an app relaunch, and a Wi-Fi transition. At least nine of ten healthy-network cycles reconnect without re-pairing, normally within two seconds.
 
@@ -111,8 +111,8 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** HR-005
 
-- [ ] Implement native keyboard presentation and Samsung text-entry behavior.
-- [ ] Detect and explain screens that do not accept text.
+- [x] Implement native keyboard presentation and Samsung text-entry behavior.
+- [x] Detect and explain screens that do not accept text.
 - [ ] Capture or enter the TV MAC address without putting it in logs or screenshots.
 - [ ] Implement Wake-on-LAN behind a capability flag and user-initiated power action.
 - [ ] Test power-off and wake repeatedly with the relevant Samsung network/power settings enabled.
@@ -127,12 +127,12 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** HR-006 go decision; Apple multicast-entitlement path understood
 
-- [ ] Identify which Samsung discovery mechanism works across target TVs without subnet scanning.
-- [ ] Request Apple's multicast entitlement if SSDP/broadcast is required.
-- [ ] Trigger discovery only after explanatory UI and a user action.
-- [ ] Deduplicate responses using reported device identity, not IP address alone.
-- [ ] Retain manual IP pairing under troubleshooting.
-- [ ] Handle local-network denial, guest Wi-Fi, client isolation, no results, duplicate names, and non-Samsung devices.
+- [x] Identify which Samsung discovery mechanism works across target TVs without subnet scanning.
+- [x] Confirm that Bonjour discovery does not require Apple's restricted multicast entitlement; retain that gate for future Wake-on-LAN only.
+- [x] Trigger discovery after the explanatory empty state and the user's Add Samsung TV action.
+- [x] Deduplicate responses using reported device identity, not IP address alone.
+- [x] Retain manual IP pairing under troubleshooting.
+- [x] Handle local-network denial, guest Wi-Fi, client isolation, no results, duplicate names, and non-Samsung devices.
 
 **Acceptance evidence:** A new installation finds and pairs the Q70AA without entering an IP; denied permission and no-result paths are understandable.
 
@@ -314,7 +314,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 | Samsung changes or withholds the local protocol | HR-002 and multi-model beta | Isolate driver, document evidence, avoid universal claims | Stop public release if behavior is not defensible |
 | Samsung does not authorize third-party distribution | HR-012 | Seek partner guidance or qualified legal review before external distribution | Keep the app personal/internal; do not submit publicly |
 | Self-signed device TLS encourages insecure handling | HR-002 security review | Per-device, user-initiated trust; no global bypass | P0 blocker |
-| iOS multicast entitlement is denied or delayed | HR-007 | Apply early; keep manual-IP recovery | Discovery may block public-quality release |
+| A target TV does not advertise Samsung Bonjour | HR-007 and hardware matrix | Keep manual-IP recovery and test discovery on every supported model | Exclude models that cannot meet zero-entry setup quality |
 | Wake-on-LAN varies by TV/router/settings | HR-006 and HR-014 | Capability gate and honest messaging | Never market guaranteed power-on |
 | Background suspension causes stale sessions | HR-005 | Foreground reconnect; no background-mode abuse | P1 blocker if recovery is unreliable |
 | DHCP changes break saved TVs | HR-008 | Stable device identity and rediscovery | P1 blocker for household use |
@@ -324,4 +324,4 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Immediate next action
 
-Start **HR-001** in a new repository/worktree. Do not begin visual polish or automatic discovery until **HR-002** proves secure pairing, token persistence, and one command on the Q70AA.
+Finish the Q70AA automatic-discovery and secure-pairing acceptance journey, then merge the reviewed PR stack in order and upload a fresh build from `main` to internal TestFlight.

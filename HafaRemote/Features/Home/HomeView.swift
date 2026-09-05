@@ -7,14 +7,19 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \SavedTV.lastUsedAt, order: .reverse) private var savedTVs: [SavedTV]
     @State private var session: RemoteSessionStore
+    @State private var discovery: SamsungDiscoveryStore
     @State private var networkMonitor = LocalNetworkMonitor()
     @State private var isShowingSetup = false
     @State private var scenePhaseEvents = ScenePhaseEvents()
     @State private var restoration = SavedTVRestorationCoordinator()
     @State private var persistenceWarning: String?
 
-    init(session: RemoteSessionStore = RemoteSessionStore()) {
+    init(
+        session: RemoteSessionStore = RemoteSessionStore(),
+        discovery: SamsungDiscoveryStore = SamsungDiscoveryStore()
+    ) {
         _session = State(initialValue: session)
+        _discovery = State(initialValue: discovery)
     }
 
     var body: some View {
@@ -58,7 +63,8 @@ struct HomeView: View {
                 initialAddress:
                     session.lastConnectedTV?.address.rawValue
                     ?? savedTVs.first?.lastKnownAddress
-                    ?? ""
+                    ?? "",
+                discovery: discovery
             )
         }
         .alert(

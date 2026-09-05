@@ -109,8 +109,8 @@ The main session state machine must represent at least:
 ### First launch and pairing
 
 1. Hafa Remote explains that the iPhone and TV must be on the same non-guest Wi-Fi network.
-2. The user taps **Find TVs**; this user action triggers the iOS local-network permission request.
-3. The app searches for candidate Samsung devices and shows model/name information when available.
+2. The user taps **Add Samsung TV**; the setup sheet immediately searches and this user action triggers the iOS local-network permission request.
+3. The app shows verified Samsung devices with their reported name and model when available.
 4. The user chooses a TV.
 5. The app establishes a secure local connection and asks the user to approve Hafa Remote on the television.
 6. The TV returns or recognizes a pairing token; Hafa Remote stores it in Keychain.
@@ -173,7 +173,7 @@ The main session state machine must represent at least:
 |---|---|---|
 | UI | SwiftUI | Native iPhone interface and accessibility |
 | Language | Swift 6 language mode | Concurrency safety for socket/session state |
-| Minimum OS | iOS 18.0 | Modern SwiftUI, Observation, SwiftData, and current Shimizu iOS baseline |
+| Minimum OS | iOS 18.4 | Modern SwiftUI, Observation, SwiftData, and current Shimizu iOS baseline |
 | Networking | Network.framework | Apple-native TCP, UDP, WebSocket/TLS, and path monitoring |
 | Device metadata | SwiftData | Small local collection of saved TVs |
 | Secrets | Keychain Services | Pairing tokens never enter SwiftData, logs, or backups unintentionally |
@@ -244,7 +244,7 @@ The UI must never send Samsung key strings directly. Only `SamsungLocalDriver` m
 
 - Use user-initiated local-network access with `NSLocalNetworkUsageDescription`.
 - Declare only Bonjour service types actually used.
-- If SSDP discovery or Wake-on-LAN requires multicast/broadcast access, request Apple's multicast entitlement early and keep manual IP pairing available for development.
+- Bonjour discovery uses only Samsung's declared `_samsungmsf._tcp` service. If future Wake-on-LAN requires broadcast access, request Apple's multicast entitlement before adding it; keep manual address pairing as a troubleshooting fallback.
 - Use a narrow local-network transport policy; do not enable arbitrary network loads globally.
 - Restrict connections to local/link-local targets and reject redirects or unexpected internet hosts.
 - Isolate Samsung's device-certificate handling. Trust must be tied to an explicit pairing action and saved device; do not install a global accept-all TLS policy.
@@ -413,7 +413,7 @@ These do not block the protocol spike:
 - Final App Store subtitle and keywords
 - Whether a later one-time Supporter purchase is worth adding
 - The exact Samsung model/firmware compatibility claims, which must come from testing
-- Whether Apple grants the multicast entitlement needed for automatic discovery and Wake-on-LAN
+- Whether Apple grants the multicast entitlement needed for future Wake-on-LAN
 - Whether Samsung will authorize public use of its local-control protocol; this is the largest release blocker
 
 ## Reference material

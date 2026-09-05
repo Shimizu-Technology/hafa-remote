@@ -70,6 +70,7 @@ xcodebuild \
   -derivedDataPath "$derived_data" \
   -resultBundlePath "$result_bundle" \
   -parallel-testing-enabled NO \
+  -skip-testing:HafaRemoteUITests/HafaRemoteUITests/testHardwareDiscoveryFindsSamsungTV \
   -quiet \
   test \
   CODE_SIGNING_ALLOWED=NO

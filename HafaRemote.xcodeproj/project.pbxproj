@@ -24,6 +24,8 @@
 		5C0C08C13F47A1E0A1C4EF91 /* SamsungTrustDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05F87DEC2C03FC39EAECAB38 /* SamsungTrustDelegate.swift */; };
 		65327337DFAF7AE7486FCF1C /* PrivateIPv4AddressTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4CE3DE630561FAEADF1D468 /* PrivateIPv4AddressTests.swift */; };
 		66EA7DA266631F013C97D50E /* SamsungProtocolCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD21C56485650437D59630CC /* SamsungProtocolCodec.swift */; };
+		7A7000010000000000000001 /* SamsungDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A7000110000000000000001 /* SamsungDiscovery.swift */; };
+		7A7000020000000000000002 /* SamsungDiscoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A7000120000000000000002 /* SamsungDiscoveryTests.swift */; };
 		6B5E4B64AE4B8C217F1BBE92 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9C450D22C7D445E62710FF5D /* Foundation.framework */; };
 		6C519C628890A5AF91F135B9 /* HafaTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 621127FDEF5F6BE4013D7C65 /* HafaTheme.swift */; };
 		76ECF14B14B88E8DEC927833 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 314331F56B7422E857B20532 /* Assets.xcassets */; };
@@ -83,6 +85,8 @@
 		621127FDEF5F6BE4013D7C65 /* HafaTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HafaTheme.swift; path = DesignSystem/HafaTheme.swift; sourceTree = "<group>"; };
 		79D1230B04BD184CAC360802 /* SamsungProtocolCodecTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungProtocolCodecTests.swift; sourceTree = "<group>"; };
 		7FD1515BC189F740FA4DE7A3 /* SamsungDeviceInfo.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDeviceInfo.swift; sourceTree = "<group>"; };
+		7A7000110000000000000001 /* SamsungDiscovery.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDiscovery.swift; sourceTree = "<group>"; };
+		7A7000120000000000000002 /* SamsungDiscoveryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDiscoveryTests.swift; sourceTree = "<group>"; };
 		9660B0481989B57E29327545 /* SamsungCommandTransport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungCommandTransport.swift; sourceTree = "<group>"; };
 		9C450D22C7D445E62710FF5D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		BF2140DF03D411A6556C98D5 /* HafaRemoteUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HafaRemoteUITests.swift; sourceTree = "<group>"; };
@@ -128,6 +132,7 @@
 			isa = PBXGroup;
 			children = (
 				D90C5FC34ABBF76738E4A178 /* PrivateIPv4Address.swift */,
+				7A7000110000000000000001 /* SamsungDiscovery.swift */,
 				D8FBB69EF7BB0B53E30FF7A1 /* SamsungPairingCredential.swift */,
 				7FD1515BC189F740FA4DE7A3 /* SamsungDeviceInfo.swift */,
 				FD21C56485650437D59630CC /* SamsungProtocolCodec.swift */,
@@ -210,6 +215,7 @@
 			isa = PBXGroup;
 			children = (
 				470B5BF9F811323D35B6050E /* HafaRemoteTests.swift */,
+				7A7000120000000000000002 /* SamsungDiscoveryTests.swift */,
 				C4CE3DE630561FAEADF1D468 /* PrivateIPv4AddressTests.swift */,
 				79D1230B04BD184CAC360802 /* SamsungProtocolCodecTests.swift */,
 				11CFB329B0E5168B6E0EC74E /* SamsungPairingCoordinatorTests.swift */,
@@ -433,6 +439,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D4C49D71FFB313E977E0A762 /* HafaRemoteTests.swift in Sources */,
+				7A7000020000000000000002 /* SamsungDiscoveryTests.swift in Sources */,
 				65327337DFAF7AE7486FCF1C /* PrivateIPv4AddressTests.swift in Sources */,
 				493B87F071515609FB01C5D6 /* SamsungProtocolCodecTests.swift in Sources */,
 				C7EAE220E972FBE92AD2F6E5 /* SamsungPairingCoordinatorTests.swift in Sources */,
@@ -468,6 +475,7 @@
 				11DFB409FF879A160B1AB3C4 /* PrivateIPv4Address.swift in Sources */,
 				3802FE2339022BC3629CF923 /* SamsungPairingCredential.swift in Sources */,
 				854D9E6D373AC5EC05814B57 /* SamsungDeviceInfo.swift in Sources */,
+				7A7000010000000000000001 /* SamsungDiscovery.swift in Sources */,
 				66EA7DA266631F013C97D50E /* SamsungProtocolCodec.swift in Sources */,
 				5C0C08C13F47A1E0A1C4EF91 /* SamsungTrustDelegate.swift in Sources */,
 				3A58178774479925FA7D5AF6 /* SamsungCommandTransport.swift in Sources */,

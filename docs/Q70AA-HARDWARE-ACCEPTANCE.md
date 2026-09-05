@@ -5,11 +5,11 @@ fingerprints, Wi-Fi names, or typed private content.
 
 ## Test environment
 
-- Date:
+- Date: September 5, 2026
 - TV model: Samsung Q70AA
 - TV firmware:
-- iPhone model:
-- iOS version:
+- iPhone model: iPhone 15 Pro Max; iPhone 17 Pro simulator used for the separate discovery check
+- iOS version: 18.7.8 on iPhone; 26.5 on simulator
 - App version:
 - Build number:
 - Release commit:
@@ -18,12 +18,43 @@ fingerprints, Wi-Fi names, or typed private content.
 
 ## HR-002 pairing proof
 
-- [ ] First launch reached the TV approval prompt.
-- [ ] Choosing Allow completed secure pairing.
-- [ ] Select changed the focused TV item.
-- [ ] Force-quit and relaunch reconnected without another approval prompt.
-- Connection time:
-- Notes:
+Repeat the automated discovery check with the iPhone and TV awake on the same Wi-Fi:
+
+```bash
+xcodebuild test \
+  -project HafaRemote.xcodeproj \
+  -scheme HafaRemote \
+  -destination 'platform=iOS,id=<IPHONE_UDID>' \
+  -only-testing:HafaRemoteUITests/HafaRemoteUITests/testHardwareDiscoveryFindsSamsungTV
+```
+
+The test grants the expected Local Network prompt and fails unless a verified Samsung TV row
+appears within 15 seconds. On a connected iPhone it continues through physical approval, sends
+Select, relaunches the app, and requires the saved pairing to reconnect. The deterministic gate
+explicitly skips it because it requires the household TV; run it separately against either a
+simulator on the same LAN or a connected iPhone.
+
+- [x] Add Samsung TV found the Q70AA without entering an address.
+- [x] The discovered row showed a useful TV name and model.
+- [x] First launch reached the TV approval flow.
+- [x] Choosing Allow completed secure pairing.
+- [x] The physical iPhone sent Select over the active Q70AA connection.
+- [ ] A tester visually confirmed the focused TV item changed after Select.
+- [x] Force-quit and relaunch reconnected without another approval prompt.
+- Connection time: 5.6 seconds from tapping the discovered Q70AA to the Connected remote.
+- Notes: The selected physical-device UI test passed in 25.5 seconds. It granted the expected
+  Local Network permission, discovered the Q70AA, paired, sent Select, terminated Hafa Remote,
+  relaunched it, and required Connected state again. The result bundle is kept locally and the
+  committed record omits device identifiers and household network details.
+
+## HR-007 discovery recovery
+
+- [ ] Scan Again finds the Q70AA after a no-result search.
+- [ ] Turning the TV off removes it from a fresh search without showing a stale result.
+- [x] Manual address entry is hidden under TV not showing up?.
+- [x] Discovery requires no multicast entitlement and performs no subnet scan.
+- Notes: The hardware-backed UI test discovered and verified the powered-on Q70AA in 7.188
+  seconds from the simulator on the same LAN. No household network identifier was recorded.
 
 ## HR-004 control soak
 

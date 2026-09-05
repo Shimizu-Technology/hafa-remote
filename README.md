@@ -4,7 +4,7 @@ Hafa Remote is a native iPhone remote for compatible Samsung Tizen TVs on the sa
 
 ## Status
 
-The native SwiftUI foundation is in place. The next implementation milestone is a manual-IP proof against Leon's Samsung Q70AA before automatic discovery, Wake-on-LAN, or public distribution work begins.
+The native SwiftUI personal alpha includes secure Samsung pairing, automatic nearby-TV discovery, connection recovery, the complete MVP remote, text entry, persistence, and release checks. Manual IP entry remains available only as a troubleshooting fallback. Physical Q70AA acceptance and internal TestFlight delivery are the active release gates.
 
 ## Documents
 
