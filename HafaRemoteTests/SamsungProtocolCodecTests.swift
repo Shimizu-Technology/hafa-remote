@@ -269,6 +269,19 @@ struct SamsungProtocolCodecTests {
         #expect(info.networkConnection == .wired)
     }
 
+    @Test("Device parser requires an explicit wireless connection before using a wake MAC")
+    func ignoresWirelessAddressWhenNetworkTypeIsUnavailable() throws {
+        let response = Data(
+            #"{"device":{"id":"synthetic-device-id","modelName":"TEST_MODEL_2021","TokenAuthSupport":"true","wifiMac":"02:00:5e:10:00:01"}}"#
+                .utf8
+        )
+
+        let info = try SamsungDeviceInfoParser.parse(response)
+
+        #expect(info.macAddress == nil)
+        #expect(info.networkConnection == .unavailable)
+    }
+
     @Test("Device parser rejects responses without a stable identifier")
     func rejectsMissingDeviceIdentifiers() {
         let responses = [

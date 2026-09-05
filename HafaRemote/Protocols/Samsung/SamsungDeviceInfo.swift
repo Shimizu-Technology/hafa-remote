@@ -125,7 +125,7 @@ enum SamsungDeviceInfoParser {
                 SamsungNetworkConnection.unavailable
             }
         let macAddress =
-            networkConnection != .wired
+            networkConnection == .wireless
             ? envelope.device.wifiMac?.nonemptyTrimmed.flatMap { try? SamsungMACAddress($0) }
             : nil
 
