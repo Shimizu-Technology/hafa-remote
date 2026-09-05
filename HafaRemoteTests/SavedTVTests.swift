@@ -75,12 +75,11 @@ struct SavedTVTests {
         #expect(saved.lastUsedAt == Date(timeIntervalSince1970: 300))
     }
 
+    @MainActor
     @Test("An empty initial restore is not retried after the first TV is paired")
-    func doesNotRestoreAgainWhenSavedTVsPopulate() {
-        var gate = InitialSavedTVRestoreGate()
-
-        #expect(gate.claimAddress(from: []) == nil)
-
+    func doesNotRestoreAgainWhenSavedTVsPopulate() async {
+        let restoration = SavedTVRestorationCoordinator()
+        var connectionAttempts = 0
         let newlyPairedTV = SavedTV(
             reportedDeviceID: "synthetic-device-id",
             displayName: "Living Room",
@@ -89,7 +88,132 @@ struct SavedTVTests {
             lastKnownAddress: "192.168.10.20"
         )
 
-        #expect(gate.claimAddress(from: [newlyPairedTV]) == nil)
-        #expect(gate.didAttempt)
+        await restoration.restore(from: []) { _ in
+            connectionAttempts += 1
+        }
+        await restoration.restore(from: [newlyPairedTV]) { _ in
+            connectionAttempts += 1
+        }
+
+        #expect(connectionAttempts == 0)
+        #expect(!restoration.isRestoring)
+    }
+
+    @MainActor
+    @Test("A valid saved TV restores exactly once and exposes progress")
+    func restoresValidSavedTVExactlyOnce() async {
+        let restoration = SavedTVRestorationCoordinator()
+        let gate = RestorationConnectionGate()
+        let savedTV = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.20"
+        )
+        let task = Task { @MainActor in
+            await restoration.restore(from: [savedTV]) { address in
+                await gate.wait(at: address)
+            }
+        }
+
+        let address = await gate.nextAddress()
+        #expect(address == (try? PrivateIPv4Address("192.168.10.20")))
+        #expect(restoration.isRestoring)
+
+        await gate.resume()
+        await task.value
+        #expect(!restoration.isRestoring)
+
+        await restoration.restore(from: [savedTV]) { _ in
+            Issue.record("The one-shot restoration attempted a second connection")
+        }
+        #expect(await gate.connectionCount == 1)
+    }
+
+    @MainActor
+    @Test("A failed saved TV connection clears restoration progress")
+    func clearsProgressAfterFailure() async {
+        let restoration = SavedTVRestorationCoordinator()
+        let savedTV = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.20"
+        )
+
+        await restoration.restore(from: [savedTV]) { _ in
+            throw RestorationTestError.failed
+        }
+
+        #expect(!restoration.isRestoring)
+    }
+
+    @MainActor
+    @Test("Cancelling saved TV restoration clears progress")
+    func clearsProgressAfterCancellation() async {
+        let restoration = SavedTVRestorationCoordinator()
+        let gate = RestorationConnectionGate()
+        let savedTV = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.20"
+        )
+        let task = Task { @MainActor in
+            await restoration.restore(from: [savedTV]) { address in
+                await gate.waitUntilCancelled(at: address)
+            }
+        }
+
+        _ = await gate.nextAddress()
+        #expect(restoration.isRestoring)
+        task.cancel()
+        await task.value
+
+        #expect(!restoration.isRestoring)
+    }
+}
+
+private enum RestorationTestError: Error {
+    case failed
+}
+
+private actor RestorationConnectionGate {
+    private var count = 0
+    private let addresses: AsyncStream<PrivateIPv4Address>
+    private let addressContinuation: AsyncStream<PrivateIPv4Address>.Continuation
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+    init() {
+        (addresses, addressContinuation) = AsyncStream.makeStream()
+    }
+
+    var connectionCount: Int { count }
+
+    func nextAddress() async -> PrivateIPv4Address? {
+        var iterator = addresses.makeAsyncIterator()
+        return await iterator.next()
+    }
+
+    func wait(at address: PrivateIPv4Address) async {
+        count += 1
+        addressContinuation.yield(address)
+        await withCheckedContinuation { continuation in
+            releaseContinuation = continuation
+        }
+    }
+
+    func waitUntilCancelled(at address: PrivateIPv4Address) async {
+        count += 1
+        addressContinuation.yield(address)
+        try? await Task.sleep(for: .seconds(30))
+    }
+
+    func resume() {
+        releaseContinuation?.resume()
+        releaseContinuation = nil
     }
 }

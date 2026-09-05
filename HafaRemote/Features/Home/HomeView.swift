@@ -10,8 +10,7 @@ struct HomeView: View {
     @State private var networkMonitor = LocalNetworkMonitor()
     @State private var isShowingSetup = false
     @State private var scenePhaseEvents = ScenePhaseEvents()
-    @State private var initialRestoreGate = InitialSavedTVRestoreGate()
-    @State private var isRestoringSavedTV = false
+    @State private var restoration = SavedTVRestorationCoordinator()
     @State private var persistenceWarning: String?
 
     init(session: RemoteSessionStore = RemoteSessionStore()) {
@@ -44,7 +43,7 @@ struct HomeView: View {
                         .accessibilityIdentifier("changeTVButton")
                     }
                 }
-            } else if isRestoringSavedTV {
+            } else if restoration.isRestoring {
                 restoringState
             } else {
                 emptyState
@@ -144,7 +143,7 @@ struct HomeView: View {
                         .tint(HafaTheme.accent)
                         .foregroundStyle(HafaTheme.canvas)
                         .accessibilityIdentifier("addSamsungTVButton")
-                        .disabled(isRestoringSavedTV)
+                        .disabled(restoration.isRestoring)
 
                         Spacer(minLength: 24)
                     }
@@ -214,10 +213,9 @@ struct HomeView: View {
     }
 
     private func restoreLastUsedTVIfNeeded() async {
-        guard let address = initialRestoreGate.claimAddress(from: savedTVs) else { return }
-        isRestoringSavedTV = true
-        defer { isRestoringSavedTV = false }
-        await session.connect(to: address.rawValue)
+        await restoration.restore(from: savedTVs) { address in
+            await session.connect(to: address.rawValue)
+        }
     }
 
     private func displayName(for tv: PairedSamsungTV) -> String {
@@ -252,13 +250,23 @@ struct HomeView: View {
     }
 }
 
-struct InitialSavedTVRestoreGate {
-    private(set) var didAttempt = false
+@MainActor
+@Observable
+final class SavedTVRestorationCoordinator {
+    private(set) var isRestoring = false
+    private var didAttempt = false
 
-    mutating func claimAddress(from savedTVs: [SavedTV]) -> PrivateIPv4Address? {
-        guard !didAttempt else { return nil }
+    func restore(
+        from savedTVs: [SavedTV],
+        connect: @MainActor (PrivateIPv4Address) async throws -> Void
+    ) async {
+        guard !didAttempt else { return }
         didAttempt = true
-        return savedTVs.first?.validatedAddress
+        guard let address = savedTVs.first?.validatedAddress else { return }
+
+        isRestoring = true
+        defer { isRestoring = false }
+        try? await connect(address)
     }
 }
 
