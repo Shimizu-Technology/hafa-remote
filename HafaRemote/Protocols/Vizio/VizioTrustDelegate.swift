@@ -74,10 +74,14 @@ struct VizioTrustPolicy: Sendable {
 
 final class VizioTrustDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
     private let lock = NSLock()
+    private let expectedHost: String
+    private let expectedPort: Int
     private var policy: VizioTrustPolicy
     private var storedFailure: VizioTrustFailure?
 
     init(address: PrivateIPv4Address, port: UInt16, mode: VizioTrustMode) {
+        expectedHost = address.rawValue
+        expectedPort = Int(port)
         policy = VizioTrustPolicy(address: address, port: port, mode: mode)
     }
 
@@ -137,5 +141,22 @@ final class VizioTrustDelegate: NSObject, URLSessionDelegate, @unchecked Sendabl
             return
         }
         completionHandler(.useCredential, URLCredential(trust: trust))
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        guard request.url?.scheme == "https",
+            request.url?.host == expectedHost,
+            request.url?.port == expectedPort
+        else {
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
     }
 }

@@ -17,6 +17,13 @@ struct VizioRemoteKey: Equatable, Sendable {
     let code: Int
 }
 
+struct VizioDeviceInfo: Equatable, Sendable {
+    let reportedDeviceID: String
+    let displayName: String
+    let modelName: String
+    let firmwareVersion: String?
+}
+
 enum VizioPairingState: Equatable, Sendable {
     case idle
     case awaitingPIN(VizioPairingChallenge)
@@ -156,6 +163,28 @@ enum VizioProtocolCodec {
         try requireSuccess(decode(VizioStatusOnlyResponse.self, from: data).status)
     }
 
+    static func deviceInfo(from data: Data) throws -> VizioDeviceInfo {
+        let response = try decode(VizioDeviceInfoResponse.self, from: data)
+        try requireSuccess(response.status)
+        let reportedDeviceID = try validatedText(response.item.serialNumber, maximumBytes: 512)
+        let displayName = try validatedText(response.item.castName, maximumBytes: 80)
+        let modelName = try validatedText(response.item.modelName, maximumBytes: 80)
+        let firmware = response.item.firmwareVersion?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let firmware,
+            firmware.utf8.count > 80
+                || firmware.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+        {
+            throw VizioProtocolError.invalidResponse
+        }
+        return VizioDeviceInfo(
+            reportedDeviceID: reportedDeviceID,
+            displayName: displayName,
+            modelName: modelName,
+            firmwareVersion: firmware.flatMap { $0.isEmpty ? nil : $0 }
+        )
+    }
+
     private static func requireSuccess(_ status: VizioStatus) throws {
         guard status.result.caseInsensitiveCompare("SUCCESS") == .orderedSame else {
             throw VizioProtocolError.rejected(String(status.result.prefix(80)))
@@ -176,6 +205,17 @@ enum VizioProtocolCodec {
         } catch {
             throw VizioProtocolError.invalidResponse
         }
+    }
+
+    private static func validatedText(_ value: String, maximumBytes: Int) throws -> String {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty,
+            normalized.utf8.count <= maximumBytes,
+            !normalized.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+        else {
+            throw VizioProtocolError.invalidResponse
+        }
+        return normalized
     }
 }
 
@@ -268,6 +308,30 @@ private struct VizioPairingTokenResponse: Decodable {
 
         enum CodingKeys: String, CodingKey {
             case authToken = "AUTH_TOKEN"
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case status = "STATUS"
+        case item = "ITEM"
+    }
+}
+
+private struct VizioDeviceInfoResponse: Decodable {
+    let status: VizioStatus
+    let item: Item
+
+    struct Item: Decodable {
+        let serialNumber: String
+        let castName: String
+        let modelName: String
+        let firmwareVersion: String?
+
+        enum CodingKeys: String, CodingKey {
+            case serialNumber = "SERIAL_NUMBER"
+            case castName = "CAST_NAME"
+            case modelName = "MODEL_NAME"
+            case firmwareVersion = "VERSION"
         }
     }
 

@@ -41,6 +41,10 @@
 		C11000000000000000000002 /* VizioPairingCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12000000000000000000002 /* VizioPairingCredential.swift */; };
 		C11000000000000000000003 /* VizioTrustDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12000000000000000000003 /* VizioTrustDelegate.swift */; };
 		C11000000000000000000004 /* VizioProtocolCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12000000000000000000004 /* VizioProtocolCodecTests.swift */; };
+		C11000000000000000000005 /* VizioPairingCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12000000000000000000005 /* VizioPairingCredentialStore.swift */; };
+		C11000000000000000000006 /* VizioHTTPSClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12000000000000000000006 /* VizioHTTPSClient.swift */; };
+		C11000000000000000000007 /* VizioPairingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12000000000000000000007 /* VizioPairingCoordinator.swift */; };
+		C11000000000000000000008 /* VizioPairingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12000000000000000000008 /* VizioPairingCoordinatorTests.swift */; };
 		8F86632B2E9ADC46C98BFB1C /* TVDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44405F91DE5FC74EFF634D3 /* TVDriver.swift */; };
 		9CABF29420764B69CE52ED09 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9C450D22C7D445E62710FF5D /* Foundation.framework */; };
 		AF670AF8B9F1EB53EEAF349B /* HafaRemoteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F11E2A820EC89F7AD933554 /* HafaRemoteApp.swift */; };
@@ -105,6 +109,10 @@
 		C12000000000000000000002 /* VizioPairingCredential.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VizioPairingCredential.swift; sourceTree = "<group>"; };
 		C12000000000000000000003 /* VizioTrustDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VizioTrustDelegate.swift; sourceTree = "<group>"; };
 		C12000000000000000000004 /* VizioProtocolCodecTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VizioProtocolCodecTests.swift; sourceTree = "<group>"; };
+		C12000000000000000000005 /* VizioPairingCredentialStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VizioPairingCredentialStore.swift; sourceTree = "<group>"; };
+		C12000000000000000000006 /* VizioHTTPSClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VizioHTTPSClient.swift; sourceTree = "<group>"; };
+		C12000000000000000000007 /* VizioPairingCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VizioPairingCoordinator.swift; sourceTree = "<group>"; };
+		C12000000000000000000008 /* VizioPairingCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VizioPairingCoordinatorTests.swift; sourceTree = "<group>"; };
 		7A7000110000000000000001 /* SamsungDiscovery.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDiscovery.swift; sourceTree = "<group>"; };
 		7A7000120000000000000002 /* SamsungDiscoveryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDiscoveryTests.swift; sourceTree = "<group>"; };
 		9660B0481989B57E29327545 /* SamsungCommandTransport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungCommandTransport.swift; sourceTree = "<group>"; };
@@ -192,6 +200,9 @@
 				C12000000000000000000001 /* VizioProtocolCodec.swift */,
 				C12000000000000000000002 /* VizioPairingCredential.swift */,
 				C12000000000000000000003 /* VizioTrustDelegate.swift */,
+				C12000000000000000000005 /* VizioPairingCredentialStore.swift */,
+				C12000000000000000000006 /* VizioHTTPSClient.swift */,
+				C12000000000000000000007 /* VizioPairingCoordinator.swift */,
 			);
 			name = Vizio;
 			path = Vizio;
@@ -269,6 +280,7 @@
 				B12000000000000000000004 /* SonyClientIdentityTests.swift */,
 				B12000000000000000000002 /* SonyProtocolCodecTests.swift */,
 				C12000000000000000000004 /* VizioProtocolCodecTests.swift */,
+				C12000000000000000000008 /* VizioPairingCoordinatorTests.swift */,
 			);
 			name = HafaRemoteTests;
 			path = HafaRemoteTests;
@@ -497,6 +509,7 @@
 				B11000000000000000000004 /* SonyClientIdentityTests.swift in Sources */,
 				B11000000000000000000002 /* SonyProtocolCodecTests.swift in Sources */,
 				C11000000000000000000004 /* VizioProtocolCodecTests.swift in Sources */,
+				C11000000000000000000008 /* VizioPairingCoordinatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -538,6 +551,9 @@
 				C11000000000000000000001 /* VizioProtocolCodec.swift in Sources */,
 				C11000000000000000000002 /* VizioPairingCredential.swift in Sources */,
 				C11000000000000000000003 /* VizioTrustDelegate.swift in Sources */,
+				C11000000000000000000005 /* VizioPairingCredentialStore.swift in Sources */,
+				C11000000000000000000006 /* VizioHTTPSClient.swift in Sources */,
+				C11000000000000000000007 /* VizioPairingCoordinator.swift in Sources */,
 				2D3D3C2CF9409A3568772E68 /* SamsungSetupView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
