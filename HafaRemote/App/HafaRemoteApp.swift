@@ -150,9 +150,11 @@ struct HafaRemoteApp: App {
             .task {
                 guard !didSeed else { return }
                 let existing = (try? modelContext.fetch(FetchDescriptor<SavedTV>())) ?? []
-                let initialTV: SavedTV
-                if existing.isEmpty {
-                    initialTV = SavedTV(
+                for savedTV in existing {
+                    modelContext.delete(savedTV)
+                }
+                modelContext.insert(
+                    SavedTV(
                         brand: .samsung,
                         reportedDeviceID: "fixture-samsung",
                         displayName: "Living Room TV",
@@ -162,24 +164,20 @@ struct HafaRemoteApp: App {
                         controlPort: 8_002,
                         lastUsedAt: Date(timeIntervalSince1970: 200)
                     )
-                    modelContext.insert(initialTV)
-                    modelContext.insert(
-                        SavedTV(
-                            brand: .sony,
-                            reportedDeviceID: "fixture-sony",
-                            displayName: "Side Door TV",
-                            modelName: "Sony BRAVIA",
-                            firmwareVersion: "1.0",
-                            lastKnownAddress: "192.168.10.21",
-                            controlPort: 6_466,
-                            lastUsedAt: Date(timeIntervalSince1970: 100)
-                        )
+                )
+                modelContext.insert(
+                    SavedTV(
+                        brand: .sony,
+                        reportedDeviceID: "fixture-sony",
+                        displayName: "Side Door TV",
+                        modelName: "Sony BRAVIA",
+                        firmwareVersion: "1.0",
+                        lastKnownAddress: "192.168.10.21",
+                        controlPort: 6_466,
+                        lastUsedAt: Date(timeIntervalSince1970: 100)
                     )
-                    try? modelContext.save()
-                } else {
-                    initialTV =
-                        existing.first(where: { $0.displayName == "Living Room TV" }) ?? existing[0]
-                }
+                )
+                try? modelContext.save()
                 didSeed = true
             }
         }
