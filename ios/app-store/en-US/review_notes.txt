@@ -1,0 +1,9 @@
+Hafa Remote controls compatible Samsung TVs over the local network. No account or test credentials are required.
+
+To exercise the live flow, connect the review iPhone and a compatible Samsung TV to the same Wi-Fi network. Open the app, choose Add Samsung TV, enter the private IPv4 address shown under the TV's Network Status, and choose Allow on the TV when prompted. The app will then open the remote.
+
+The app uses the TV's secure WebSocket control channel on local port 8002 and pins the certificate after physical approval. The initial capability lookup uses local HTTP only; arbitrary internet loads are disabled. Pairing credentials remain in Keychain. The app has no backend, analytics, ads, tracking, or in-app purchases.
+
+Power off requires confirmation. Power on is intentionally unavailable because wake behavior has not been approved and verified across the supported hardware set. Text input requires a text field to be focused on the TV and may be ignored by individual TV apps or secure screens.
+
+Review path: use a compatible Samsung TV with the live flow above. This build is intended for internal TestFlight and will not be submitted for public App Review until a demonstration video or in-build offline demonstration is available for reviewers without compatible hardware.
