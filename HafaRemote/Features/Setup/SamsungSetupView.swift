@@ -5,6 +5,7 @@ struct SamsungSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var address = ""
     @State private var isForgettingPairing = false
+    @State private var connectionTask: Task<Void, Never>?
     @State private var repairTask: Task<Void, Never>?
     let session: RemoteSessionStore
 
@@ -35,12 +36,19 @@ struct SamsungSetupView: View {
                     }
 
                     Button {
-                        Task {
-                            await session.connect(to: address)
+                        connectionTask?.cancel()
+                        let requestedAddress = address
+                        connectionTask = Task {
+                            await session.connect(to: requestedAddress)
+                            connectionTask = nil
                         }
                     } label: {
                         HStack {
-                            Text(isBusy ? "Connecting…" : "Connect to TV")
+                            Text(
+                                isForgettingPairing
+                                    ? "Removing saved pairing…"
+                                    : isBusy ? "Connecting…" : "Connect to TV"
+                            )
                             Spacer()
                             if isBusy {
                                 ProgressView()
@@ -73,6 +81,8 @@ struct SamsungSetupView: View {
                 }
             }
             .onDisappear {
+                connectionTask?.cancel()
+                connectionTask = nil
                 repairTask?.cancel()
                 repairTask = nil
                 guard !session.canSendCommands else { return }

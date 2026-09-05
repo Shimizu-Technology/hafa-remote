@@ -184,8 +184,8 @@ struct RemoteSessionControllerTests {
         )
     }
 
-    @Test("A stalled pairing removal times out and releases a waiting connection")
-    func pairingRemovalTimeoutReleasesWaiters() async throws {
+    @Test("A stalled pairing removal bounds waiters without overlapping destructive work")
+    func pairingRemovalTimeoutKeepsDestructiveWorkSerialized() async throws {
         let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
         let clock = ManualRemoteSessionClock()
         let driver = ControlledPairingRemovalDriver(tv: tv)
@@ -203,19 +203,47 @@ struct RemoteSessionControllerTests {
             try await session.forgetPairing(for: tv.address.rawValue)
         }
         _ = await forgetStarts.next()
-        let reconnecting = Task {
-            await session.connect(to: tv.address.rawValue)
-        }
 
         await resume(clock: clock, duration: .seconds(4))
         await #expect(throws: RemoteSessionControllerError.timedOut(.forgetPairing)) {
             try await forgetting.value
         }
+
+        let retryingRemoval = Task {
+            try await session.forgetPairing(for: tv.address.rawValue)
+        }
+        let reconnecting = Task {
+            await session.connect(to: tv.address.rawValue)
+        }
+        await waitUntil {
+            await clock.pendingSleeps.filter { $0 == .seconds(4) }.count == 2
+        }
+        await resume(clock: clock, duration: .seconds(4))
+        await resume(clock: clock, duration: .seconds(4))
+        await #expect(throws: RemoteSessionControllerError.timedOut(.forgetPairing)) {
+            try await retryingRemoval.value
+        }
         await reconnecting.value
 
-        #expect(await session.state == .connected(tv))
-        #expect(await driver.callLog == ["forget-start", "connect"])
+        #expect(await session.state == .failed(.timedOut(.forgetPairing)))
+        #expect(await driver.callLog == ["forget-start"])
         await driver.completeForget()
+        await waitUntil { await driver.callLog == ["forget-start", "forget-finish"] }
+
+        let successfulRetry = Task {
+            try await session.forgetPairing(for: tv.address.rawValue)
+        }
+        _ = await forgetStarts.next()
+        await driver.completeForget()
+        try await successfulRetry.value
+
+        await session.connect(to: tv.address.rawValue)
+        #expect(await session.state == .connected(tv))
+        #expect(
+            await driver.callLog == [
+                "forget-start", "forget-finish", "forget-start", "forget-finish", "connect",
+            ]
+        )
     }
 
     @Test("Cancelling pairing removal releases a waiting connection without stale failure")
@@ -458,6 +486,24 @@ struct RemoteSessionControllerTests {
         await connection.value
 
         #expect(await session.state == .offline)
+        #expect(await driver.cancelledConnectionCount == 1)
+    }
+
+    @Test("Dismissing setup cancels its connection before disconnecting the session")
+    func setupDismissalCannotRestoreASuspendedConnection() async {
+        let driver = SuspendedRemoteSessionDriver()
+        let session = RemoteSessionController(driver: driver)
+        let connection = Task {
+            await session.connect(to: "192.168.10.20")
+        }
+        var starts = driver.connectionStarts.makeAsyncIterator()
+        _ = await starts.next()
+
+        connection.cancel()
+        await session.disconnect()
+        await connection.value
+
+        #expect(await session.state == .idle)
         #expect(await driver.cancelledConnectionCount == 1)
     }
 

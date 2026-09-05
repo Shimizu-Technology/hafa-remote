@@ -77,7 +77,7 @@ actor RemoteSessionController {
     private var connectionID: UUID?
     private var connectionTask: Task<PairedSamsungTV, Error>?
     private var pairingRemovalID: UUID?
-    private var pairingRemovalWaiters: [CheckedContinuation<Void, Never>] = []
+    private var pairingRemovalWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var reconnectTask: Task<Void, Never>?
     private var commandTasks: [UUID: Task<Void, Error>] = [:]
     private var stateContinuations: [UUID: AsyncStream<RemoteSessionState>.Continuation] = [:]
@@ -106,7 +106,14 @@ actor RemoteSessionController {
     }
 
     func connect(to addressText: String) async {
-        await waitForPairingRemoval()
+        do {
+            try await waitForPairingRemoval()
+        } catch is CancellationError {
+            return
+        } catch {
+            transition(to: .failed(.timedOut(.forgetPairing)))
+            return
+        }
         guard !Task.isCancelled else { return }
         generation = UUID()
         let requestedGeneration = generation
@@ -189,13 +196,10 @@ actor RemoteSessionController {
     }
 
     func forgetPairing(for addressText: String) async throws {
-        await waitForPairingRemoval()
+        try await waitForPairingRemoval()
         try Task.checkCancellation()
         let removalID = UUID()
         pairingRemovalID = removalID
-        defer {
-            finishPairingRemoval(id: removalID)
-        }
 
         generation = UUID()
         let removalGeneration = generation
@@ -208,24 +212,37 @@ actor RemoteSessionController {
         let driver = driver
         let clock = clock
         let timeout = configuration.pairingRemovalTimeout
-        let task = Task {
-            try await RemoteSessionTimeout.run(
-                operation: .forgetPairing,
-                timeout: timeout,
-                clock: clock
-            ) {
-                try await driver.forget(addressText: addressText)
-            }
+        let driverTask = Task {
+            try await driver.forget(addressText: addressText)
         }
-        let result = await withTaskCancellationHandler {
-            await task.result
-        } onCancel: {
-            task.cancel()
+        Task { [weak self] in
+            _ = await driverTask.result
+            await self?.finishPairingRemoval(id: removalID)
         }
+
         do {
-            try result.get()
+            try await withTaskCancellationHandler {
+                try await RemoteSessionTimeout.run(
+                    operation: .forgetPairing,
+                    timeout: timeout,
+                    clock: clock
+                ) {
+                    try await driverTask.value
+                }
+            } onCancel: {
+                driverTask.cancel()
+            }
+            finishPairingRemoval(id: removalID)
             try Task.checkCancellation()
         } catch {
+            let removalIsStillRunning =
+                Task.isCancelled || error is CancellationError
+                || error as? RemoteSessionControllerError == .timedOut(.forgetPairing)
+            if removalIsStillRunning {
+                driverTask.cancel()
+            } else {
+                finishPairingRemoval(id: removalID)
+            }
             if generation == removalGeneration,
                 !Task.isCancelled,
                 !(error is CancellationError)
@@ -243,18 +260,46 @@ actor RemoteSessionController {
         }
     }
 
-    private func waitForPairingRemoval() async {
+    private func waitForPairingRemoval() async throws {
         while pairingRemovalID != nil {
-            await withCheckedContinuation { continuation in
-                pairingRemovalWaiters.append(continuation)
+            let clock = clock
+            let timeout = configuration.pairingRemovalTimeout
+            try await RemoteSessionTimeout.run(
+                operation: .forgetPairing,
+                timeout: timeout,
+                clock: clock
+            ) { [weak self] in
+                await self?.waitForActivePairingRemoval()
             }
         }
+    }
+
+    private func waitForActivePairingRemoval() async {
+        let waiterID = UUID()
+        let owner = self
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if pairingRemovalID == nil || Task.isCancelled {
+                    continuation.resume()
+                } else {
+                    pairingRemovalWaiters[waiterID] = continuation
+                }
+            }
+        } onCancel: {
+            Task {
+                await owner.cancelPairingRemovalWaiter(id: waiterID)
+            }
+        }
+    }
+
+    private func cancelPairingRemovalWaiter(id: UUID) {
+        pairingRemovalWaiters.removeValue(forKey: id)?.resume()
     }
 
     private func finishPairingRemoval(id: UUID) {
         guard pairingRemovalID == id else { return }
         pairingRemovalID = nil
-        let waiters = pairingRemovalWaiters
+        let waiters = pairingRemovalWaiters.values
         pairingRemovalWaiters.removeAll()
         for waiter in waiters {
             waiter.resume()
