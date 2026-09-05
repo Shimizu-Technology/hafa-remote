@@ -76,54 +76,56 @@ final class HafaRemoteUITests: XCTestCase {
     /// Runs separately from the deterministic gate against the powered-on household TV.
     @MainActor
     func testHardwareDiscoveryFindsSamsungTV() throws {
-        let app = XCUIApplication()
-        let permissionMonitor = addUIInterruptionMonitor(
-            withDescription: "Local Network permission"
-        ) { alert in
-            let allowButton = alert.buttons["Allow"]
-            guard allowButton.exists else { return false }
-            allowButton.tap()
-            return true
-        }
-        defer { removeUIInterruptionMonitor(permissionMonitor) }
+        #if targetEnvironment(simulator)
+            throw XCTSkip("Requires an iPhone and a powered-on Samsung TV on the same Wi-Fi network.")
+        #else
+            let app = XCUIApplication()
+            let permissionMonitor = addUIInterruptionMonitor(
+                withDescription: "Local Network permission"
+            ) { alert in
+                let allowButton = alert.buttons["Allow"]
+                guard allowButton.exists else { return false }
+                allowButton.tap()
+                return true
+            }
+            defer { removeUIInterruptionMonitor(permissionMonitor) }
 
-        app.launch()
+            app.launch()
 
-        let addButton = app.buttons["addSamsungTVButton"]
-        if addButton.waitForExistence(timeout: 5) {
-            addButton.tap()
-        } else {
-            let existingConnection = app.staticTexts["remoteConnectionStatus"]
+            let addButton = app.buttons["addSamsungTVButton"]
+            if addButton.waitForExistence(timeout: 5) {
+                addButton.tap()
+            } else {
+                let existingConnection = app.staticTexts["remoteConnectionStatus"]
+                XCTAssertTrue(
+                    existingConnection.waitForExistence(timeout: 10),
+                    "Expected either first-run setup or an already paired Q70AA."
+                )
+                XCTAssertEqual(existingConnection.label, "Connected")
+                let changeTV = app.buttons["changeTVButton"]
+                XCTAssertTrue(changeTV.waitForExistence(timeout: 5))
+                changeTV.tap()
+            }
+
+            // XCTest invokes interruption monitors on the next interaction if iOS presents a prompt.
+            app.navigationBars["Add Samsung TV"].tap()
+            let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+            let localNetworkAllow = springboard.buttons["Allow"].firstMatch
+            if localNetworkAllow.waitForExistence(timeout: 3) {
+                localNetworkAllow.tap()
+            }
+
+            let discoveredTV = app.buttons["discoveredTVButton"]
             XCTAssertTrue(
-                existingConnection.waitForExistence(timeout: 10),
-                "Expected either first-run setup or an already paired Q70AA."
+                discoveredTV.waitForExistence(timeout: 15),
+                "Expected a verified Samsung TV advertised over the local network."
             )
-            XCTAssertEqual(existingConnection.label, "Connected")
-            let changeTV = app.buttons["changeTVButton"]
-            XCTAssertTrue(changeTV.waitForExistence(timeout: 5))
-            changeTV.tap()
-        }
+            XCTAssertTrue(discoveredTV.isHittable)
+            XCTAssertTrue(
+                discoveredTV.label.localizedCaseInsensitiveContains("Q70AA"),
+                "Expected the household Q70AA model to be recognizable in the discovery row."
+            )
 
-        // XCTest invokes interruption monitors on the next interaction if iOS presents a prompt.
-        app.navigationBars["Add Samsung TV"].tap()
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let localNetworkAllow = springboard.buttons["Allow"].firstMatch
-        if localNetworkAllow.waitForExistence(timeout: 3) {
-            localNetworkAllow.tap()
-        }
-
-        let discoveredTV = app.buttons["discoveredTVButton"]
-        XCTAssertTrue(
-            discoveredTV.waitForExistence(timeout: 15),
-            "Expected a verified Samsung TV advertised over the local network."
-        )
-        XCTAssertTrue(discoveredTV.isHittable)
-        XCTAssertTrue(
-            discoveredTV.label.localizedCaseInsensitiveContains("Q70AA"),
-            "Expected the household Q70AA model to be recognizable in the discovery row."
-        )
-
-        #if !targetEnvironment(simulator)
             discoveredTV.tap()
 
             let connectionStatus = app.staticTexts["remoteConnectionStatus"]
