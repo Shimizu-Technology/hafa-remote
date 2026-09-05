@@ -8,6 +8,8 @@ struct TVSetupView: View {
     @State private var discovery: TVDiscoveryStore
     @State private var address = ""
     @State private var selectedTV: DiscoveredTV?
+    @State private var selectedBrand: TVBrand?
+    @State private var selectedTarget: TVConnectionTarget?
     @State private var isShowingManualSetup = false
     @State private var isForgettingPairing = false
     @State private var connectionTaskID: UUID?
@@ -23,17 +25,23 @@ struct TVSetupView: View {
     let session: RemoteSessionStore
     let initialAddress: String
     let initialReportedDeviceID: String?
+    let initialTarget: TVConnectionTarget?
 
     init(
         session: RemoteSessionStore,
         initialAddress: String = "",
         initialReportedDeviceID: String? = nil,
+        initialTarget: TVConnectionTarget? = nil,
         discovery: TVDiscoveryStore = TVDiscoveryStore()
     ) {
         self.session = session
-        self.initialAddress = initialAddress
-        self.initialReportedDeviceID = initialReportedDeviceID
-        _address = State(initialValue: initialAddress)
+        self.initialTarget = initialTarget
+        self.initialAddress = initialTarget?.address.rawValue ?? initialAddress
+        self.initialReportedDeviceID =
+            initialTarget?.reportedDeviceID ?? initialReportedDeviceID
+        _address = State(initialValue: initialTarget?.address.rawValue ?? initialAddress)
+        _selectedBrand = State(initialValue: initialTarget?.brand)
+        _selectedTarget = State(initialValue: initialTarget)
         _discovery = State(initialValue: discovery)
     }
 
@@ -259,7 +267,7 @@ struct TVSetupView: View {
             }
         case .pairing:
             Section {
-                if let brand = selectedTV?.brand, brand == .sony || brand == .vizio {
+                if let brand = selectedBrand, brand == .sony || brand == .vizio {
                     pairingCodeEntry(for: brand)
                 } else {
                     Label(
@@ -374,7 +382,7 @@ struct TVSetupView: View {
     }
 
     private var pairingDeniedMessage: String {
-        switch selectedTV?.brand {
+        switch selectedBrand {
         case .sony:
             "The Sony pairing code was not accepted. Find the TV and try again."
         case .vizio:
@@ -421,6 +429,8 @@ struct TVSetupView: View {
     private func connect(to television: DiscoveredTV) {
         resetPairingCodeSubmission()
         selectedTV = television
+        selectedBrand = television.brand
+        selectedTarget = television.connectionTarget
         pairingCode = ""
         hasSubmittedPairingCode = false
         address = television.address.rawValue
@@ -431,6 +441,8 @@ struct TVSetupView: View {
     private func connectManually() {
         resetPairingCodeSubmission()
         selectedTV = nil
+        selectedBrand = .samsung
+        selectedTarget = nil
         pairingCode = ""
         hasSubmittedPairingCode = false
         discovery.stop()
@@ -592,14 +604,25 @@ struct TVSetupView: View {
         guard !isForgettingPairing else { return }
         isForgettingPairing = true
         defer { isForgettingPairing = false }
+        let repairTarget = [selectedTarget, initialTarget]
+            .compactMap { $0 }
+            .first(where: { $0.address.rawValue == address })
+        let repairBrand = repairTarget?.brand ?? selectedBrand ?? .samsung
+        selectedBrand = repairBrand
         do {
             try await session.forgetPairing(
                 for: address,
-                reportedDeviceID: address == initialAddress ? initialReportedDeviceID : nil,
-                brand: selectedTV?.brand ?? session.lastConnectedTV?.brand ?? .samsung
+                reportedDeviceID:
+                    repairTarget?.reportedDeviceID
+                    ?? (address == initialAddress ? initialReportedDeviceID : nil),
+                brand: repairBrand
             )
             try Task.checkCancellation()
-            await session.connect(to: address)
+            if let repairTarget {
+                await session.connect(to: repairTarget)
+            } else {
+                await session.connect(to: address)
+            }
         } catch is CancellationError {
             return
         } catch {
@@ -626,7 +649,7 @@ struct TVSetupView: View {
     private func accessibilityAnnouncement(for state: RemoteSessionState) -> String? {
         switch state {
         case .pairing:
-            switch selectedTV?.brand {
+            switch selectedBrand {
             case .sony:
                 "Enter the six-character code shown on your Sony TV."
             case .vizio:

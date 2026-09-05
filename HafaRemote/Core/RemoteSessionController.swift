@@ -115,7 +115,7 @@ enum RemoteSessionControllerError: Error, Equatable, Sendable {
 
 /// Owns the single driver session, lifecycle cancellation, and bounded reconnect policy.
 actor RemoteSessionController {
-    private(set) var state: RemoteSessionState = .idle
+    private(set) var state: RemoteSessionState
 
     private let driver: any RemoteSessionDriving
     private let clock: any RemoteSessionClock
@@ -142,11 +142,13 @@ actor RemoteSessionController {
     init(
         driver: any RemoteSessionDriving,
         clock: any RemoteSessionClock = ContinuousRemoteSessionClock(),
-        configuration: RemoteSessionConfiguration = .production
+        configuration: RemoteSessionConfiguration = .production,
+        initialState: RemoteSessionState = .idle
     ) {
         self.driver = driver
         self.clock = clock
         self.configuration = configuration
+        state = initialState
     }
 
     func states() -> AsyncStream<RemoteSessionState> {
