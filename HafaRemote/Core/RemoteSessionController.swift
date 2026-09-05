@@ -12,7 +12,7 @@ protocol RemoteSessionDriving: TVDriver {
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> ConnectedTV
     func forget(addressText: String) async throws
-    func forget(addressText: String, reportedDeviceID: String?) async throws
+    func forget(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws
     func submitPairingCode(_ code: String) async throws
 }
 
@@ -29,7 +29,7 @@ extension RemoteSessionDriving {
         )
     }
 
-    func forget(addressText: String, reportedDeviceID: String?) async throws {
+    func forget(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws {
         try await forget(addressText: addressText)
     }
 
@@ -83,13 +83,15 @@ struct ContinuousRemoteSessionClock: RemoteSessionClock {
 
 struct RemoteSessionConfiguration: Equatable, Sendable {
     let connectionTimeout: Duration
+    let pairingTimeout: Duration
     let commandTimeout: Duration
     let disconnectTimeout: Duration
     let pairingRemovalTimeout: Duration
     let reconnectDelays: [Duration]
 
     static let production = RemoteSessionConfiguration(
-        connectionTimeout: .seconds(60),
+        connectionTimeout: .seconds(12),
+        pairingTimeout: .seconds(60),
         commandTimeout: .seconds(3),
         disconnectTimeout: .seconds(2),
         pairingRemovalTimeout: .seconds(3),
@@ -300,7 +302,11 @@ actor RemoteSessionController {
         await disconnectDriverWithinLimit()
     }
 
-    func forgetPairing(for addressText: String, reportedDeviceID: String? = nil) async throws {
+    func forgetPairing(
+        for addressText: String,
+        reportedDeviceID: String? = nil,
+        brand: TVBrand = .samsung
+    ) async throws {
         try await waitForPairingRemoval()
         try Task.checkCancellation()
         let removalID = UUID()
@@ -331,7 +337,8 @@ actor RemoteSessionController {
         let driverTask = Task {
             try await driver.forget(
                 addressText: addressText,
-                reportedDeviceID: reportedDeviceID
+                reportedDeviceID: reportedDeviceID,
+                brand: brand
             )
         }
         Task { [weak self] in
@@ -488,15 +495,17 @@ actor RemoteSessionController {
         connectionID = id
         let driver = driver
         let clock = clock
-        let timeout = configuration.connectionTimeout
+        let connectionTimeout = configuration.connectionTimeout
+        let pairingTimeout = configuration.pairingTimeout
         let connectionTarget = connectionTarget
         let task = Task { [weak self] in
-            try await RemoteSessionTimeout.run(
+            try await RemoteSessionTimeout.runWithExtendableDeadline(
                 operation: .connect,
-                timeout: timeout,
+                initialTimeout: connectionTimeout,
                 clock: clock
-            ) {
+            ) { extendDeadline in
                 let onWaitingForApproval: @MainActor @Sendable () async -> Void = {
+                    extendDeadline(pairingTimeout)
                     await self?.setPairingState(
                         generation: requestedGeneration,
                         connectionID: id
@@ -765,6 +774,100 @@ private enum RemoteSessionTimeout {
             timeoutTask.cancel()
             race.resolve(.failure(CancellationError()))
         }
+    }
+
+    static func runWithExtendableDeadline<Value: Sendable>(
+        operation: RemoteSessionOperation,
+        initialTimeout: Duration,
+        clock: any RemoteSessionClock,
+        work:
+            @escaping @Sendable (
+                @escaping @Sendable (Duration) -> Void
+            ) async throws -> Value
+    ) async throws -> Value {
+        let race = RemoteSessionTimeoutRace<Value>()
+        let deadline = RemoteSessionResettableDeadline()
+        let expire: @Sendable () -> Void = {
+            race.resolve(.failure(RemoteSessionControllerError.timedOut(operation)))
+        }
+        deadline.arm(timeout: initialTimeout, clock: clock, onExpire: expire)
+
+        let workTask = Task {
+            do {
+                let value = try await work { timeout in
+                    deadline.arm(timeout: timeout, clock: clock, onExpire: expire)
+                }
+                race.resolve(.success(value))
+            } catch {
+                race.resolve(.failure(error))
+            }
+        }
+
+        defer {
+            workTask.cancel()
+            deadline.cancel()
+        }
+
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                race.install(continuation)
+            }
+        } onCancel: {
+            workTask.cancel()
+            deadline.cancel()
+            race.resolve(.failure(CancellationError()))
+        }
+    }
+}
+
+/// Owns one replaceable deadline without structurally awaiting cancellation-hostile work.
+private final class RemoteSessionResettableDeadline: @unchecked Sendable {
+    private let lock = NSLock()
+    private var generation = 0
+    private var task: Task<Void, Never>?
+
+    deinit {
+        cancel()
+    }
+
+    func arm(
+        timeout: Duration,
+        clock: any RemoteSessionClock,
+        onExpire: @escaping @Sendable () -> Void
+    ) {
+        lock.lock()
+        generation &+= 1
+        let requestedGeneration = generation
+        let previousTask = task
+        task = Task { [weak self] in
+            do {
+                try await clock.sleep(for: timeout)
+                try Task.checkCancellation()
+                guard self?.claimExpiry(generation: requestedGeneration) == true else { return }
+                onExpire()
+            } catch {
+                return
+            }
+        }
+        lock.unlock()
+        previousTask?.cancel()
+    }
+
+    func cancel() {
+        lock.lock()
+        generation &+= 1
+        let task = task
+        self.task = nil
+        lock.unlock()
+        task?.cancel()
+    }
+
+    private func claimExpiry(generation requestedGeneration: Int) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard generation == requestedGeneration else { return false }
+        task = nil
+        return true
     }
 }
 

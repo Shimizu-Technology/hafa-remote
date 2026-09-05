@@ -931,6 +931,40 @@ struct RemoteSessionControllerTests {
         #expect(await driver.cancelledConnectionCount == 1)
     }
 
+    @Test("The longer pairing deadline starts only after the TV requests approval")
+    func pairingExtendsConnectionDeadline() async {
+        let clock = ManualRemoteSessionClock()
+        let driver = SuspendedRemoteSessionDriver(announcesPairing: true)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                connectionTimeout: .seconds(5),
+                pairingTimeout: .seconds(20),
+                reconnectDelays: []
+            )
+        )
+
+        let connection = Task {
+            await session.connect(to: "192.168.10.20")
+        }
+        var starts = driver.connectionStarts.makeAsyncIterator()
+        _ = await starts.next()
+        await waitUntil {
+            let state = await session.state
+            let pendingSleeps = await clock.pendingSleeps
+            return state == .pairing
+                && pendingSleeps.contains(.seconds(20))
+                && !pendingSleeps.contains(.seconds(5))
+        }
+
+        await resume(clock: clock, duration: .seconds(20))
+        await connection.value
+
+        #expect(await session.state == .failed(.timedOut(.connect)))
+        #expect(await driver.cancelledConnectionCount == 1)
+    }
+
     @Test("Cancelling the caller cancels the in-flight connection")
     func callerCancellationStopsConnection() async {
         let driver = SuspendedRemoteSessionDriver()
@@ -1327,10 +1361,12 @@ private actor SuspendedRemoteSessionDriver: RemoteSessionDriving {
     nonisolated let connectionStarts: AsyncStream<Void>
     private let connectionStartsContinuation: AsyncStream<Void>.Continuation
     private var continuations: [UUID: CheckedContinuation<Void, Error>] = [:]
+    private let announcesPairing: Bool
     private(set) var cancelledConnectionCount = 0
     private(set) var connectionStartCount = 0
 
-    init() {
+    init(announcesPairing: Bool = false) {
+        self.announcesPairing = announcesPairing
         let (stream, continuation) = AsyncStream<Void>.makeStream()
         connectionStarts = stream
         connectionStartsContinuation = continuation
@@ -1341,6 +1377,9 @@ private actor SuspendedRemoteSessionDriver: RemoteSessionDriving {
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV {
         connectionStartCount += 1
+        if announcesPairing {
+            await onWaitingForApproval()
+        }
         let id = UUID()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -1775,6 +1814,7 @@ private func testTV(
 
 private func testConfiguration(
     connectionTimeout: Duration = .seconds(10),
+    pairingTimeout: Duration = .seconds(60),
     commandTimeout: Duration = .seconds(2),
     disconnectTimeout: Duration = .seconds(1),
     pairingRemovalTimeout: Duration = .seconds(3),
@@ -1782,6 +1822,7 @@ private func testConfiguration(
 ) -> RemoteSessionConfiguration {
     RemoteSessionConfiguration(
         connectionTimeout: connectionTimeout,
+        pairingTimeout: pairingTimeout,
         commandTimeout: commandTimeout,
         disconnectTimeout: disconnectTimeout,
         pairingRemovalTimeout: pairingRemovalTimeout,

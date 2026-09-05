@@ -133,13 +133,18 @@ final class RemoteSessionStore {
         await controller.disconnect()
     }
 
-    func forgetPairing(for addressText: String, reportedDeviceID: String? = nil) async throws {
+    func forgetPairing(
+        for addressText: String,
+        reportedDeviceID: String? = nil,
+        brand: TVBrand = .samsung
+    ) async throws {
         projectionRevision &+= 1
         acceptsConnectedTVUpdates = false
         lastConnectedTV = nil
         try await controller.forgetPairing(
             for: addressText,
-            reportedDeviceID: reportedDeviceID
+            reportedDeviceID: reportedDeviceID,
+            brand: brand
         )
     }
 

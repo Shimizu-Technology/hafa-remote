@@ -16,14 +16,14 @@ struct MultiBrandSessionDriverTests {
             address: try PrivateIPv4Address("192.168.10.50"),
             controlPort: 6466
         )
-        var didRequestCode = false
+        let requestSignal = PairingRequestSignal()
         let connection = Task {
             try await driver.connect(to: target) {
-                didRequestCode = true
+                await requestSignal.signal()
             }
         }
 
-        while !didRequestCode { await Task.yield() }
+        try await requestSignal.wait()
         try await driver.submitPairingCode("A1B2C3")
         let television = try await connection.value
         try await driver.send(.volumeUp)
@@ -32,6 +32,70 @@ struct MultiBrandSessionDriverTests {
         #expect(await sony.receivedCode == "A1B2C3")
         #expect(await sony.commands == [.volumeUp])
         #expect(await samsung.commands.isEmpty)
+    }
+
+    @Test("A manual Samsung connection cancels a pending Sony code request")
+    @MainActor
+    func manualSamsungConnectionCancelsSonyPairing() async throws {
+        let samsung = MultiBrandSamsungFixture()
+        let sony = MultiBrandSonyFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony)
+        let sonyTarget = TVConnectionTarget(
+            brand: .sony,
+            reportedDeviceID: "synthetic-sony",
+            address: try PrivateIPv4Address("192.168.10.50"),
+            controlPort: 6466
+        )
+        let requestSignal = PairingRequestSignal()
+        let sonyConnection = Task {
+            try await driver.connect(to: sonyTarget) {
+                await requestSignal.signal()
+            }
+        }
+        try await requestSignal.wait()
+
+        _ = try await driver.connect(addressText: "192.168.10.51") {}
+
+        await #expect(throws: CancellationError.self) {
+            try await sonyConnection.value
+        }
+        await #expect(throws: MultiBrandSessionDriverError.pairingCodeNotExpected) {
+            try await driver.submitPairingCode("A1B2C3")
+        }
+    }
+
+    @Test("Pairing removal routes on the saved TV brand after another connection")
+    @MainActor
+    func forgetUsesSavedTVBrand() async throws {
+        let samsung = MultiBrandSamsungFixture()
+        let sony = MultiBrandSonyFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony)
+        let reportedDeviceID = String(repeating: "a", count: 64)
+        let sonyTarget = TVConnectionTarget(
+            brand: .sony,
+            reportedDeviceID: reportedDeviceID,
+            address: try PrivateIPv4Address("192.168.10.50"),
+            controlPort: 6466
+        )
+        let requestSignal = PairingRequestSignal()
+        let sonyConnection = Task {
+            try await driver.connect(to: sonyTarget) {
+                await requestSignal.signal()
+            }
+        }
+        try await requestSignal.wait()
+        try await driver.submitPairingCode("A1B2C3")
+        _ = try await sonyConnection.value
+        _ = try await driver.connect(addressText: "192.168.10.51") {}
+
+        try await driver.forget(
+            addressText: sonyTarget.address.rawValue,
+            reportedDeviceID: reportedDeviceID,
+            brand: .sony
+        )
+
+        #expect(await sony.forgottenDeviceIDs == [reportedDeviceID])
+        #expect(await samsung.forgottenAddresses.isEmpty)
     }
 
     @Test("Samsung selection never exposes its commands to the Sony driver")
@@ -75,6 +139,7 @@ struct MultiBrandSessionDriverTests {
 
 private actor MultiBrandSamsungFixture: SamsungPairingCoordinating {
     private(set) var commands: [RemoteCommand] = []
+    private(set) var forgottenAddresses: [String] = []
 
     func pair(
         addressText: String,
@@ -94,13 +159,16 @@ private actor MultiBrandSamsungFixture: SamsungPairingCoordinating {
         commands.append(command)
     }
 
-    func forget(addressText: String) {}
+    func forget(addressText: String) {
+        forgottenAddresses.append(addressText)
+    }
     func disconnect() {}
 }
 
 private actor MultiBrandSonyFixture: SonyPairingCoordinating {
     private(set) var commands: [RemoteCommand] = []
     private(set) var receivedCode: String?
+    private(set) var forgottenDeviceIDs: [String] = []
 
     func connect(
         to target: TVConnectionTarget,
@@ -121,6 +189,42 @@ private actor MultiBrandSonyFixture: SonyPairingCoordinating {
         commands.append(command)
     }
 
-    func forget(reportedDeviceID: String) {}
+    func forget(reportedDeviceID: String) {
+        forgottenDeviceIDs.append(reportedDeviceID)
+    }
     func disconnect() {}
+}
+
+private actor PairingRequestSignal {
+    private let stream: AsyncStream<Void>
+    private let continuation: AsyncStream<Void>.Continuation
+
+    init() {
+        (stream, continuation) = AsyncStream.makeStream()
+    }
+
+    func signal() {
+        continuation.yield()
+    }
+
+    func wait() async throws {
+        let stream = stream
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                var iterator = stream.makeAsyncIterator()
+                guard await iterator.next() != nil else { throw PairingRequestSignalError.closed }
+            }
+            group.addTask {
+                try await Task.sleep(for: .seconds(1))
+                throw PairingRequestSignalError.timedOut
+            }
+            _ = try await group.next()
+            group.cancelAll()
+        }
+    }
+}
+
+private enum PairingRequestSignalError: Error {
+    case closed
+    case timedOut
 }

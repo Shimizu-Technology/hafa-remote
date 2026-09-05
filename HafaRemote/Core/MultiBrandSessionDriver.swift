@@ -26,6 +26,7 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> ConnectedTV {
+        await sonyPairingCodeBroker.cancel()
         lastAttemptedBrand = .samsung
         activeBrand = nil
         let television = try await samsung.pair(
@@ -99,18 +100,18 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
     }
 
     func forget(addressText: String) async throws {
-        try await forget(addressText: addressText, reportedDeviceID: nil)
+        try await forget(addressText: addressText, reportedDeviceID: nil, brand: .samsung)
     }
 
-    func forget(addressText: String, reportedDeviceID: String?) async throws {
+    func forget(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws {
         await disconnect()
-        switch lastAttemptedBrand {
+        switch brand {
         case .sony:
             guard let reportedDeviceID else {
                 throw MultiBrandSessionDriverError.missingStableIdentity
             }
             try await sony.forget(reportedDeviceID: reportedDeviceID)
-        case .samsung, .vizio, .none:
+        case .samsung, .vizio:
             try await samsung.forget(
                 addressText: addressText,
                 reportedDeviceID: reportedDeviceID

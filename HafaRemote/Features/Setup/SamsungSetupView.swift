@@ -18,6 +18,7 @@ struct TVSetupView: View {
     @State private var pairingCode = ""
     @State private var isSubmittingPairingCode = false
     @State private var hasSubmittedPairingCode = false
+    @State private var pairingCodeSubmissionID: UUID?
     @State private var pairingCodeTask: Task<Void, Never>?
     let session: RemoteSessionStore
     let initialAddress: String
@@ -68,8 +69,7 @@ struct TVSetupView: View {
                 recoveryTask = nil
                 repairTask?.cancel()
                 repairTask = nil
-                pairingCodeTask?.cancel()
-                pairingCodeTask = nil
+                resetPairingCodeSubmission()
                 guard !session.canSendCommands else { return }
                 Task {
                     await session.disconnect(clearRememberedTV: false)
@@ -89,8 +89,8 @@ struct TVSetupView: View {
                 if case .pairing = state {
                     // Preserve entered digits while the Sony handshake is waiting.
                 } else {
+                    resetPairingCodeSubmission()
                     pairingCode = ""
-                    isSubmittingPairingCode = false
                     hasSubmittedPairingCode = false
                 }
                 preparePairingRepairIfNeeded(for: state)
@@ -443,6 +443,7 @@ struct TVSetupView: View {
     }
 
     private func connect(to television: DiscoveredTV) {
+        resetPairingCodeSubmission()
         selectedTV = television
         pairingCode = ""
         hasSubmittedPairingCode = false
@@ -452,6 +453,7 @@ struct TVSetupView: View {
     }
 
     private func connectManually() {
+        resetPairingCodeSubmission()
         selectedTV = nil
         pairingCode = ""
         hasSubmittedPairingCode = false
@@ -519,22 +521,37 @@ struct TVSetupView: View {
         pairingCodeTask?.cancel()
         isSubmittingPairingCode = true
         let submittedCode = pairingCode
+        let operationID = UUID()
+        pairingCodeSubmissionID = operationID
         pairingCodeTask = Task {
+            defer {
+                if pairingCodeSubmissionID == operationID {
+                    pairingCodeSubmissionID = nil
+                    isSubmittingPairingCode = false
+                    pairingCodeTask = nil
+                }
+            }
             do {
                 try await session.submitPairingCode(submittedCode)
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, pairingCodeSubmissionID == operationID else { return }
                 hasSubmittedPairingCode = true
             } catch is CancellationError {
                 return
             } catch {
+                guard pairingCodeSubmissionID == operationID else { return }
                 UIAccessibility.post(
                     notification: .announcement,
                     argument: "The pairing code could not be submitted. Try again."
                 )
             }
-            isSubmittingPairingCode = false
-            pairingCodeTask = nil
         }
+    }
+
+    private func resetPairingCodeSubmission() {
+        pairingCodeSubmissionID = nil
+        pairingCodeTask?.cancel()
+        pairingCodeTask = nil
+        isSubmittingPairingCode = false
     }
 
     private func forgetAndRetry(for address: String) async {
@@ -544,7 +561,8 @@ struct TVSetupView: View {
         do {
             try await session.forgetPairing(
                 for: address,
-                reportedDeviceID: address == initialAddress ? initialReportedDeviceID : nil
+                reportedDeviceID: address == initialAddress ? initialReportedDeviceID : nil,
+                brand: selectedTV?.brand ?? session.lastConnectedTV?.brand ?? .samsung
             )
             try Task.checkCancellation()
             await session.connect(to: address)

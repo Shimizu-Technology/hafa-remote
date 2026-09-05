@@ -489,20 +489,25 @@ struct SavedTVTests {
         let restoration = SavedTVRestorationCoordinator()
         let gate = RestorationConnectionGate()
         let savedTV = SavedTV(
+            brand: .sony,
             reportedDeviceID: "synthetic-device-id",
             displayName: "Living Room",
-            modelName: "Q70AA",
+            modelName: "Sony BRAVIA",
             firmwareVersion: nil,
-            lastKnownAddress: "192.168.10.20"
+            lastKnownAddress: "192.168.10.20",
+            controlPort: 6466
         )
         let task = Task { @MainActor in
             await restoration.restore(from: [savedTV]) { target in
-                await gate.wait(at: target.address)
+                await gate.wait(at: target)
             }
         }
 
-        let address = await gate.nextAddress()
-        #expect(address == (try? PrivateIPv4Address("192.168.10.20")))
+        let target = await gate.nextTarget()
+        #expect(target?.address == (try? PrivateIPv4Address("192.168.10.20")))
+        #expect(target?.brand == .sony)
+        #expect(target?.reportedDeviceID == "synthetic-device-id")
+        #expect(target?.controlPort == 6466)
         #expect(restoration.isRestoring)
 
         await gate.resume()
@@ -548,11 +553,11 @@ struct SavedTVTests {
         )
         let task = Task { @MainActor in
             await restoration.restore(from: [savedTV]) { target in
-                await gate.waitUntilCancelled(at: target.address)
+                await gate.waitUntilCancelled(at: target)
             }
         }
 
-        _ = await gate.nextAddress()
+        _ = await gate.nextTarget()
         #expect(restoration.isRestoring)
         task.cancel()
         await task.value
@@ -578,32 +583,32 @@ private enum RestorationTestError: Error {
 
 private actor RestorationConnectionGate {
     private var count = 0
-    private let addresses: AsyncStream<PrivateIPv4Address>
-    private let addressContinuation: AsyncStream<PrivateIPv4Address>.Continuation
+    private let targets: AsyncStream<TVConnectionTarget>
+    private let targetContinuation: AsyncStream<TVConnectionTarget>.Continuation
     private var releaseContinuation: CheckedContinuation<Void, Never>?
 
     init() {
-        (addresses, addressContinuation) = AsyncStream.makeStream()
+        (targets, targetContinuation) = AsyncStream.makeStream()
     }
 
     var connectionCount: Int { count }
 
-    func nextAddress() async -> PrivateIPv4Address? {
-        var iterator = addresses.makeAsyncIterator()
+    func nextTarget() async -> TVConnectionTarget? {
+        var iterator = targets.makeAsyncIterator()
         return await iterator.next()
     }
 
-    func wait(at address: PrivateIPv4Address) async {
+    func wait(at target: TVConnectionTarget) async {
         count += 1
-        addressContinuation.yield(address)
+        targetContinuation.yield(target)
         await withCheckedContinuation { continuation in
             releaseContinuation = continuation
         }
     }
 
-    func waitUntilCancelled(at address: PrivateIPv4Address) async {
+    func waitUntilCancelled(at target: TVConnectionTarget) async {
         count += 1
-        addressContinuation.yield(address)
+        targetContinuation.yield(target)
         try? await Task.sleep(for: .seconds(30))
     }
 

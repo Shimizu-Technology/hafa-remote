@@ -92,6 +92,7 @@ final class HafaRemoteUITests: XCTestCase {
         let codeField = app.textFields["sonyPairingCodeField"]
         XCTAssertTrue(codeField.waitForExistence(timeout: 2))
         let submit = app.buttons["submitSonyPairingCodeButton"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 2))
         XCTAssertFalse(submit.isEnabled)
 
         codeField.tap()

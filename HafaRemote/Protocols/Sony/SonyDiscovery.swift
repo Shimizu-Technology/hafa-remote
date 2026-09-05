@@ -35,6 +35,8 @@ final class SonyBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
     private var services: [ObjectIdentifier: NetService] = [:]
     private var eventHandler: (@MainActor @Sendable (TVDiscoveryBackendEvent) -> Void)?
 
+    deinit {}
+
     func start(
         eventHandler: @escaping @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void
     ) {
@@ -121,6 +123,8 @@ final class CompositeTVDiscoveryBackend: TVDiscoveryBackend {
     private let backends: [any TVDiscoveryBackend]
     private var terminalStates: [Int: TerminalState] = [:]
     private var eventHandler: (@MainActor @Sendable (TVDiscoveryBackendEvent) -> Void)?
+
+    deinit {}
 
     init(backends: [any TVDiscoveryBackend]) {
         precondition(!backends.isEmpty)
