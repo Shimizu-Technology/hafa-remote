@@ -173,7 +173,7 @@ The main session state machine must represent at least:
 |---|---|---|
 | UI | SwiftUI | Native iPhone interface and accessibility |
 | Language | Swift 6 language mode | Concurrency safety for socket/session state |
-| Minimum OS | iOS 18.0 | Modern SwiftUI, Observation, SwiftData, and current Shimizu iOS baseline |
+| Minimum OS | iOS 18.4 | Modern SwiftUI, Observation, SwiftData, and current Shimizu iOS baseline |
 | Networking | Network.framework | Apple-native TCP, UDP, WebSocket/TLS, and path monitoring |
 | Device metadata | SwiftData | Small local collection of saved TVs |
 | Secrets | Keychain Services | Pairing tokens never enter SwiftData, logs, or backups unintentionally |
