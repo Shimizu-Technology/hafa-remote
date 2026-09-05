@@ -1,14 +1,25 @@
+import SwiftData
 import SwiftUI
 
 /// The iPhone application entry point for Hafa Remote.
 @main
 struct HafaRemoteApp: App {
+    private var usesInMemoryStore: Bool {
+        #if DEBUG
+            ProcessInfo.processInfo.arguments.contains("-ui-testing-in-memory-store")
+        #else
+            false
+        #endif
+    }
+
     /// Builds the app's root scene.
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-                if ProcessInfo.processInfo.arguments.contains("-ui-testing-remote") {
-                    RemoteControlTestHarness()
+                if ProcessInfo.processInfo.arguments.contains("-ui-testing-remote-offline") {
+                    RemoteControlTestHarness(isConnected: false)
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-remote") {
+                    RemoteControlTestHarness(isConnected: true)
                 } else {
                     HomeView()
                 }
@@ -16,5 +27,6 @@ struct HafaRemoteApp: App {
                 HomeView()
             #endif
         }
+        .modelContainer(for: SavedTV.self, inMemory: usesInMemoryStore)
     }
 }

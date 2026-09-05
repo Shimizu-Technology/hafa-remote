@@ -9,7 +9,7 @@ final class HafaRemoteUITests: XCTestCase {
     /// Verifies that the primary empty-state action remains discoverable and opens setup.
     @MainActor
     func testEmptyStateOpensTVSetup() throws {
-        let app = XCUIApplication()
+        let app = makeApplication()
         app.launch()
 
         XCTAssertTrue(app.navigationBars["Hafa Remote"].waitForExistence(timeout: 5))
@@ -81,7 +81,7 @@ final class HafaRemoteUITests: XCTestCase {
     /// The scrollable remote must remain usable at the largest accessibility text size.
     @MainActor
     func testRemoteSupportsLargestDynamicType() throws {
-        let app = XCUIApplication()
+        let app = makeApplication()
         app.launchArguments += [
             "-ui-testing-remote",
             "-UIPreferredContentSizeCategoryName",
@@ -102,11 +102,48 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertFalse(keyboard.isEnabled)
     }
 
+    /// Offline state disables commands while keeping recovery actions obvious and functional.
+    @MainActor
+    func testOfflineRemoteOffersRecoveryWithoutSendingCommands() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-remote-offline")
+        app.launch()
+
+        let select = app.buttons["remote-select"]
+        XCTAssertTrue(select.waitForExistence(timeout: 5))
+        XCTAssertFalse(select.isEnabled)
+        let powerOff = app.buttons["remote-powerOff"]
+        XCTAssertTrue(powerOff.waitForExistence(timeout: 2))
+        XCTAssertFalse(powerOff.isEnabled)
+
+        let retry = app.buttons["retryConnectionButton"]
+        XCTAssertTrue(retry.waitForExistence(timeout: 2))
+        retry.tap()
+        let commandOutput = app.staticTexts["lastRemoteCommand"]
+        let retryRecorded = expectation(
+            for: NSPredicate(format: "label == %@", "retry"),
+            evaluatedWith: commandOutput
+        )
+        wait(for: [retryRecorded], timeout: 2)
+
+        let tvSetup = app.buttons["remoteTVSetupButton"]
+        XCTAssertTrue(tvSetup.isHittable)
+        tvSetup.tap()
+        XCTAssertEqual(app.staticTexts["lastRemoteCommand"].label, "setup")
+    }
+
     @MainActor
     private func launchRemoteHarness() -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = makeApplication()
         app.launchArguments.append("-ui-testing-remote")
         app.launch()
+        return app
+    }
+
+    @MainActor
+    private func makeApplication() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append("-ui-testing-in-memory-store")
         return app
     }
 }

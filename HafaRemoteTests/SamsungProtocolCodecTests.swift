@@ -171,7 +171,7 @@ struct SamsungProtocolCodecTests {
     @Test("Device parser retains only the reviewed capability fields")
     func parsesSafeDeviceInfo() throws {
         let response = Data(
-            #"{"device":{"modelName":" TEST_MODEL_2021 ","firmwareVersion":" 1001.2 ","TokenAuthSupport":"true","wifiMac":"00:00:00:00:00:00","ssid":"synthetic-network"}}"#
+            #"{"device":{"id":" synthetic-device-id ","modelName":" TEST_MODEL_2021 ","firmwareVersion":" 1001.2 ","TokenAuthSupport":"true","wifiMac":"00:00:00:00:00:00","ssid":"synthetic-network"}}"#
                 .utf8
         )
 
@@ -180,11 +180,41 @@ struct SamsungProtocolCodecTests {
         #expect(
             info
                 == SamsungDeviceInfo(
+                    reportedDeviceID: "synthetic-device-id",
                     modelName: "TEST_MODEL_2021",
                     firmwareVersion: "1001.2",
                     supportsTokenAuthentication: true
                 )
         )
+    }
+
+    @Test("Device parser falls back to the Samsung DUID")
+    func parsesDeviceInfoDUIDFallback() throws {
+        let response = Data(
+            #"{"device":{"id":"   ","duid":" synthetic-duid ","modelName":"TEST_MODEL_2021","TokenAuthSupport":"true"}}"#
+                .utf8
+        )
+
+        let info = try SamsungDeviceInfoParser.parse(response)
+
+        #expect(info.reportedDeviceID == "synthetic-duid")
+    }
+
+    @Test("Device parser rejects responses without a stable identifier")
+    func rejectsMissingDeviceIdentifiers() {
+        let responses = [
+            Data(#"{"device":{"modelName":"TEST_MODEL_2021","TokenAuthSupport":"true"}}"#.utf8),
+            Data(
+                #"{"device":{"id":" ","duid":"  ","modelName":"TEST_MODEL_2021","TokenAuthSupport":"true"}}"#
+                    .utf8
+            ),
+        ]
+
+        for response in responses {
+            #expect(throws: SamsungDeviceInfoError.invalidResponse) {
+                try SamsungDeviceInfoParser.parse(response)
+            }
+        }
     }
 
     @Test("Pairing credentials reject control characters and malformed pins")

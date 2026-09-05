@@ -36,6 +36,7 @@ struct SamsungPairingCoordinatorTests {
         let approvalCount = await approvalRecorder.count
 
         #expect(tv.modelName == "TEST_MODEL_2021")
+        #expect(tv.reportedDeviceID == "synthetic-device-id")
         #expect(savedCredential == issuedCredential)
         #expect(approvalCount == 1)
     }
@@ -410,6 +411,7 @@ struct SamsungPairingCoordinatorTests {
 private struct StubSamsungDeviceInfoProvider: SamsungDeviceInfoProviding {
     func fetchDeviceInfo(at address: PrivateIPv4Address) async throws -> SamsungDeviceInfo {
         SamsungDeviceInfo(
+            reportedDeviceID: "synthetic-device-id",
             modelName: "TEST_MODEL_2021",
             firmwareVersion: "1001.2",
             supportsTokenAuthentication: true
@@ -722,6 +724,7 @@ private actor SetupCoordinatorStub: SamsungPairingCoordinating {
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV {
         return PairedSamsungTV(
+            reportedDeviceID: "synthetic-device-id",
             address: try PrivateIPv4Address("192.168.10.20"),
             modelName: "TEST_MODEL_2021",
             firmwareVersion: "1001.2"

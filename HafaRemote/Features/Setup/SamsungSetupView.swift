@@ -11,6 +11,11 @@ struct SamsungSetupView: View {
     @State private var repairTask: Task<Void, Never>?
     let session: RemoteSessionStore
 
+    init(session: RemoteSessionStore, initialAddress: String = "") {
+        self.session = session
+        _address = State(initialValue: initialAddress)
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -103,7 +108,7 @@ struct SamsungSetupView: View {
                 repairTask = nil
                 guard !session.canSendCommands else { return }
                 Task {
-                    await session.disconnect()
+                    await session.disconnect(clearRememberedTV: false)
                 }
             }
             .onAppear {

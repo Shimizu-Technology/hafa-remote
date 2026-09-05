@@ -2,11 +2,15 @@ import SwiftUI
 import UIKit
 
 struct RemoteControlView: View {
+    @Environment(\.openURL) private var openURL
+
     let tvName: String
     let modelName: String
     let statusLabel: String
     let isConnected: Bool
     let action: @MainActor @Sendable (RemoteCommand) async -> Void
+    let retry: @MainActor @Sendable () async -> Void
+    let showTVSetup: @MainActor @Sendable () -> Void
 
     @State private var isConfirmingPowerOff = false
 
@@ -18,6 +22,9 @@ struct RemoteControlView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     remoteHeader
+                    if !isConnected {
+                        recoveryControls
+                    }
                     navigationControls
                     utilityControls
                     volumeControls
@@ -34,6 +41,13 @@ struct RemoteControlView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .preferredColorScheme(.dark)
+        .onChange(of: isConnected) { wasConnected, isConnected in
+            guard wasConnected, !isConnected else { return }
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: "The TV connection is offline. Recovery controls are now available."
+            )
+        }
         .alert(
             "Turn off \(tvName)?",
             isPresented: $isConfirmingPowerOff
@@ -149,6 +163,49 @@ struct RemoteControlView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Navigation controls")
+    }
+
+    private var recoveryControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Controls are paused until the TV reconnects.")
+                .font(.subheadline)
+                .foregroundStyle(HafaTheme.secondaryText)
+
+            Button {
+                Task { @MainActor in
+                    await retry()
+                }
+            } label: {
+                Label("Retry Connection", systemImage: "arrow.clockwise")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 46)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(HafaTheme.accent)
+            .foregroundStyle(HafaTheme.canvas)
+            .accessibilityIdentifier("retryConnectionButton")
+
+            HStack {
+                Button("TV Setup", systemImage: "tv.badge.wifi") {
+                    showTVSetup()
+                }
+                .frame(minHeight: 46)
+                .accessibilityIdentifier("remoteTVSetupButton")
+
+                Spacer()
+
+                Button("iOS Settings", systemImage: "gear") {
+                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                    openURL(url)
+                }
+                .frame(minHeight: 46)
+                .accessibilityIdentifier("openIOSSettingsButton")
+            }
+            .buttonStyle(.bordered)
+        }
+        .padding(16)
+        .background(HafaTheme.surface.opacity(0.76), in: RoundedRectangle(cornerRadius: 22))
     }
 
     private var utilityControls: some View {
@@ -294,6 +351,7 @@ struct RemoteControlView: View {
 #if DEBUG
     struct RemoteControlTestHarness: View {
         @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+        let isConnected: Bool
         @State private var lastCommand = "none"
 
         var body: some View {
@@ -301,10 +359,14 @@ struct RemoteControlView: View {
                 RemoteControlView(
                     tvName: "Living Room TV",
                     modelName: "Q70AA",
-                    statusLabel: "Connected",
-                    isConnected: true
+                    statusLabel: isConnected ? "Connected" : "Offline",
+                    isConnected: isConnected
                 ) { command in
                     lastCommand = command.rawValue
+                } retry: {
+                    lastCommand = "retry"
+                } showTVSetup: {
+                    lastCommand = "setup"
                 }
             }
             .overlay(alignment: .bottomTrailing) {

@@ -7,22 +7,29 @@ import Observation
 final class RemoteSessionStore {
     private(set) var state: RemoteSessionState = .idle
     private(set) var lastConnectedTV: PairedSamsungTV?
+    private var acceptsConnectedTVUpdates = true
+    private var projectionRevision = 0
 
     private let controller: RemoteSessionController
     private let stateSubscription = RemoteSessionStateSubscription()
 
-    init(controller: RemoteSessionController) {
+    init(
+        controller: RemoteSessionController,
+        beforeProjectingState: @escaping @Sendable (RemoteSessionState) async -> Void = { _ in }
+    ) {
         self.controller = controller
         stateSubscription.install(
             Task { [weak self, controller] in
                 let states = await controller.states()
                 for await state in states {
                     guard !Task.isCancelled else { return }
-                    self?.state = state
-                    if case .connected(let tv) = state {
-                        self?.lastConnectedTV = tv
-                    } else if case .idle = state {
-                        self?.lastConnectedTV = nil
+                    let revision = self?.projectionRevision
+                    await beforeProjectingState(state)
+                    guard !Task.isCancelled, let self else { return }
+                    guard revision == self.projectionRevision else { continue }
+                    self.state = state
+                    if case .connected(let tv) = state, self.acceptsConnectedTVUpdates {
+                        self.lastConnectedTV = tv
                     }
                 }
             }
@@ -48,6 +55,8 @@ final class RemoteSessionStore {
     }
 
     func connect(to addressText: String) async {
+        projectionRevision &+= 1
+        acceptsConnectedTVUpdates = true
         await controller.connect(to: addressText)
     }
 
@@ -55,14 +64,20 @@ final class RemoteSessionStore {
         try await controller.send(command)
     }
 
-    func disconnect() async {
+    func disconnect(clearRememberedTV: Bool = true) async {
+        projectionRevision &+= 1
+        acceptsConnectedTVUpdates = false
+        if clearRememberedTV {
+            lastConnectedTV = nil
+        }
         await controller.disconnect()
-        lastConnectedTV = nil
     }
 
     func forgetPairing(for addressText: String) async throws {
-        try await controller.forgetPairing(for: addressText)
+        projectionRevision &+= 1
+        acceptsConnectedTVUpdates = false
         lastConnectedTV = nil
+        try await controller.forgetPairing(for: addressText)
     }
 
     func applicationDidEnterBackground() async {

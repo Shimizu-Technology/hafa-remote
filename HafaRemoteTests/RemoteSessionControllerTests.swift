@@ -7,7 +7,8 @@ struct RemoteSessionControllerTests {
     @MainActor
     @Test("The observable store projects actor state for SwiftUI")
     func storeProjectsSessionState() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let driver = MockRemoteSessionDriver(
             outcomes: [.success(tv: tv, announcesPairing: false)]
         )
@@ -24,7 +25,8 @@ struct RemoteSessionControllerTests {
     @MainActor
     @Test("The observable store clears its remembered TV on disconnect and forget")
     func storeClearsRememberedTV() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let driver = MockRemoteSessionDriver(
             outcomes: [
                 .success(tv: tv, announcesPairing: false),
@@ -46,6 +48,89 @@ struct RemoteSessionControllerTests {
         #expect(store.lastConnectedTV == nil)
     }
 
+    @MainActor
+    @Test("An immediate disconnect rejects a queued connected projection")
+    func immediateDisconnectDoesNotRestoreRememberedTV() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let projectionGate = ControlledStateProjectionGate()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false)]
+        )
+        let store = RemoteSessionStore(
+            controller: RemoteSessionController(driver: driver),
+            beforeProjectingState: { state in
+                await projectionGate.waitBeforeProjection(of: state)
+            }
+        )
+        var connectedProjections = projectionGate.connectedProjections.makeAsyncIterator()
+
+        await store.connect(to: tv.address.rawValue)
+        _ = await connectedProjections.next()
+        await store.disconnect(clearRememberedTV: false)
+        await projectionGate.releaseConnectedProjection()
+        await waitUntil { @MainActor in store.state == .idle }
+
+        #expect(store.lastConnectedTV == nil)
+        #expect(!store.canSendCommands)
+    }
+
+    @MainActor
+    @Test("Reconnect rejects an older connected projection before accepting the new TV")
+    func reconnectRejectsStaleConnectedProjection() async throws {
+        let oldTV = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "OLD_MODEL")
+        let newTV = try testTV(
+            address: "192.168.10.21", reportedDeviceID: "synthetic-tv-b", model: "NEW_MODEL")
+        let projectionGate = ControlledStateProjectionGate()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [
+                .success(tv: oldTV, announcesPairing: false),
+                .success(tv: newTV, announcesPairing: false),
+            ]
+        )
+        let store = RemoteSessionStore(
+            controller: RemoteSessionController(driver: driver),
+            beforeProjectingState: { state in
+                await projectionGate.waitBeforeProjection(of: state)
+            }
+        )
+        var connectedProjections = projectionGate.connectedProjections.makeAsyncIterator()
+
+        await store.connect(to: oldTV.address.rawValue)
+        _ = await connectedProjections.next()
+        await store.disconnect(clearRememberedTV: false)
+        await store.connect(to: newTV.address.rawValue)
+
+        await projectionGate.releaseConnectedProjection()
+        _ = await connectedProjections.next()
+        #expect(store.lastConnectedTV == nil)
+
+        await projectionGate.releaseConnectedProjection()
+        await waitUntil { @MainActor in store.state == .connected(newTV) }
+        #expect(store.lastConnectedTV == newTV)
+    }
+
+    @MainActor
+    @Test("Setup cancellation can close the socket without forgetting the last TV")
+    func storeCanRetainLastTVWhileDisconnecting() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false)]
+        )
+        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+        await store.connect(to: tv.address.rawValue)
+        await waitUntil { @MainActor in store.state == .connected(tv) }
+
+        await store.disconnect(clearRememberedTV: false)
+        await waitUntil { @MainActor in store.state == .idle }
+
+        #expect(store.state == .idle)
+        #expect(store.lastConnectedTV == tv)
+        #expect(!store.canSendCommands)
+    }
+
     @Test("Forgetting pairing clears the session before removing its credential")
     func forgetPairingClearsSession() async throws {
         let driver = MockRemoteSessionDriver(outcomes: [.failure(.denied)])
@@ -60,7 +145,8 @@ struct RemoteSessionControllerTests {
 
     @Test("Forgetting pairing disables commands before credential deletion completes")
     func forgetPairingClosesCommandBoundaryBeforeDeletion() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let driver = SuspendedForgetRemoteSessionDriver(tv: tv)
         let session = RemoteSessionController(driver: driver)
         await session.connect(to: tv.address.rawValue)
@@ -91,7 +177,8 @@ struct RemoteSessionControllerTests {
 
     @Test("A later connection waits for pairing removal to finish")
     func connectionIsSerializedAfterPairingRemoval() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let driver = SuspendedForgetRemoteSessionDriver(tv: tv)
         let session = RemoteSessionController(driver: driver)
         await session.connect(to: tv.address.rawValue)
@@ -115,7 +202,8 @@ struct RemoteSessionControllerTests {
 
     @Test("Pairing removal excludes connections throughout teardown")
     func pairingRemovalExcludesConnectionsDuringTeardown() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let driver = ControlledPairingRemovalDriver(tv: tv)
         let session = RemoteSessionController(driver: driver)
         await session.connect(to: tv.address.rawValue)
@@ -151,7 +239,8 @@ struct RemoteSessionControllerTests {
 
     @Test("Cancelling pairing removal during teardown releases the recovery barrier")
     func cancellationDuringTeardownReleasesPairingRemovalBarrier() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let driver = ControlledPairingRemovalDriver(tv: tv)
         let session = RemoteSessionController(driver: driver)
         await session.connect(to: tv.address.rawValue)
@@ -178,7 +267,8 @@ struct RemoteSessionControllerTests {
 
     @Test("Pairing removal never overlaps a timed-out driver teardown")
     func pairingRemovalStopsWhenTeardownTimesOut() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let clock = ManualRemoteSessionClock()
         let driver = ControlledPairingRemovalDriver(tv: tv)
         let session = RemoteSessionController(
@@ -217,7 +307,8 @@ struct RemoteSessionControllerTests {
 
     @Test("Repeated pairing removal waits for the first teardown and deletion")
     func repeatedPairingRemovalIsSerialized() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let driver = ControlledPairingRemovalDriver(tv: tv)
         let session = RemoteSessionController(driver: driver)
         await session.connect(to: tv.address.rawValue)
@@ -252,7 +343,8 @@ struct RemoteSessionControllerTests {
 
     @Test("A stalled pairing removal bounds waiters without overlapping destructive work")
     func pairingRemovalTimeoutKeepsDestructiveWorkSerialized() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let clock = ManualRemoteSessionClock()
         let driver = ControlledPairingRemovalDriver(tv: tv)
         let session = RemoteSessionController(
@@ -314,7 +406,8 @@ struct RemoteSessionControllerTests {
 
     @Test("Cancelling pairing removal releases a waiting connection without stale failure")
     func cancelledPairingRemovalAllowsRecovery() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let driver = SuspendedForgetRemoteSessionDriver(tv: tv)
         let session = RemoteSessionController(driver: driver)
         await session.connect(to: tv.address.rawValue)
@@ -339,7 +432,8 @@ struct RemoteSessionControllerTests {
 
     @Test("A first connection publishes connecting, pairing, and connected states")
     func initialConnectionPublishesTruthfulStates() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let driver = MockRemoteSessionDriver(
             outcomes: [.success(tv: tv, announcesPairing: true)]
         )
@@ -431,7 +525,8 @@ struct RemoteSessionControllerTests {
 
     @Test("Background pauses retry and foreground reconnects immediately")
     func reconnectIsForegroundOnly() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let clock = ManualRemoteSessionClock()
         let driver = MockRemoteSessionDriver(
             outcomes: [
@@ -460,7 +555,8 @@ struct RemoteSessionControllerTests {
 
     @Test("A meaningful network recovery bypasses the pending delay")
     func networkRecoveryRetriesImmediately() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let clock = ManualRemoteSessionClock()
         let driver = MockRemoteSessionDriver(
             outcomes: [
@@ -489,7 +585,8 @@ struct RemoteSessionControllerTests {
     @Test("Switching TVs cancels the old attempt before starting the new one")
     func rapidTVSwitchKeepsOneSession() async throws {
         let firstAddress = try PrivateIPv4Address("192.168.10.20")
-        let secondTV = try testTV(address: "192.168.10.21", model: "TEST_MODEL_B")
+        let secondTV = try testTV(
+            address: "192.168.10.21", reportedDeviceID: "synthetic-tv-b", model: "TEST_MODEL_B")
         let driver = SwitchingRemoteSessionDriver(
             suspendedAddress: firstAddress,
             successfulTV: secondTV
@@ -515,8 +612,10 @@ struct RemoteSessionControllerTests {
 
     @Test("Reconnect followed by disconnect tears down the latest driver session")
     func reconnectThenDisconnectRunsFreshTeardown() async throws {
-        let firstTV = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
-        let secondTV = try testTV(address: "192.168.10.21", model: "TEST_MODEL_B")
+        let firstTV = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let secondTV = try testTV(
+            address: "192.168.10.21", reportedDeviceID: "synthetic-tv-b", model: "TEST_MODEL_B")
         let driver = MockRemoteSessionDriver(
             outcomes: [
                 .success(tv: firstTV, announcesPairing: false),
@@ -617,7 +716,8 @@ struct RemoteSessionControllerTests {
 
     @Test("Command timeout cancels the write and keeps the failure explicit")
     func commandTimeoutIsEnforced() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let clock = ManualRemoteSessionClock()
         let driver = SuspendedCommandRemoteSessionDriver(tv: tv)
         let session = RemoteSessionController(
@@ -646,7 +746,8 @@ struct RemoteSessionControllerTests {
 
     @Test("Cancelling the caller cancels an in-flight command without losing the session")
     func callerCancellationStopsCommand() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let driver = SuspendedCommandRemoteSessionDriver(tv: tv)
         let session = RemoteSessionController(driver: driver)
         await session.connect(to: tv.address.rawValue)
@@ -667,7 +768,8 @@ struct RemoteSessionControllerTests {
 
     @Test("Concurrent command submissions reach the driver in FIFO order")
     func commandSubmissionsAreSerialized() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let driver = SuspendedCommandRemoteSessionDriver(tv: tv)
         let session = RemoteSessionController(driver: driver)
         await session.connect(to: tv.address.rawValue)
@@ -687,7 +789,8 @@ struct RemoteSessionControllerTests {
 
     @Test("A timed-out command keeps the driver write slot until the write finishes")
     func timedOutCommandCannotOverlapTheNextWrite() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let clock = ManualRemoteSessionClock()
         let driver = StubbornCommandRemoteSessionDriver(tv: tv)
         let session = RemoteSessionController(
@@ -731,7 +834,8 @@ struct RemoteSessionControllerTests {
 
     @Test("Disconnect returns at its deadline and cancels stalled cleanup")
     func disconnectTimeoutIsEnforced() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let clock = ManualRemoteSessionClock()
         let driver = SuspendedDisconnectRemoteSessionDriver(tv: tv)
         let session = RemoteSessionController(
@@ -758,7 +862,8 @@ struct RemoteSessionControllerTests {
 
     @Test("A timed out teardown cannot overlap the next connection")
     func delayedTeardownRemainsSerializedBeforeReconnect() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let clock = ManualRemoteSessionClock()
         let driver = ControlledPairingRemovalDriver(tv: tv)
         let session = RemoteSessionController(
@@ -1235,6 +1340,29 @@ private actor SuspendedDisconnectRemoteSessionDriver: RemoteSessionDriving {
     }
 }
 
+private actor ControlledStateProjectionGate {
+    nonisolated let connectedProjections: AsyncStream<Void>
+    private let connectedProjectionsContinuation: AsyncStream<Void>.Continuation
+    private var connectedProjectionContinuation: CheckedContinuation<Void, Never>?
+
+    init() {
+        (connectedProjections, connectedProjectionsContinuation) = AsyncStream.makeStream()
+    }
+
+    func waitBeforeProjection(of state: RemoteSessionState) async {
+        guard case .connected = state else { return }
+        connectedProjectionsContinuation.yield()
+        await withCheckedContinuation { continuation in
+            connectedProjectionContinuation = continuation
+        }
+    }
+
+    func releaseConnectedProjection() {
+        connectedProjectionContinuation?.resume()
+        connectedProjectionContinuation = nil
+    }
+}
+
 private actor ManualRemoteSessionClock: RemoteSessionClock {
     private struct Sleeper {
         let id: UUID
@@ -1279,8 +1407,13 @@ private actor ManualRemoteSessionClock: RemoteSessionClock {
     }
 }
 
-private func testTV(address: String, model: String) throws -> PairedSamsungTV {
+private func testTV(
+    address: String,
+    reportedDeviceID: String,
+    model: String
+) throws -> PairedSamsungTV {
     PairedSamsungTV(
+        reportedDeviceID: reportedDeviceID,
         address: try PrivateIPv4Address(address),
         modelName: model,
         firmwareVersion: "1001.2"
