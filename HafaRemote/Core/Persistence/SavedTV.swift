@@ -60,7 +60,8 @@ final class SavedTV: CustomStringConvertible {
     }
 
     var validatedControlPort: UInt16? {
-        controlPort.flatMap(UInt16.init(exactly:))
+        guard let controlPort, controlPort > 0 else { return nil }
+        return UInt16(exactly: controlPort)
     }
 
     var validatedMACAddress: TVMACAddress? {
@@ -69,6 +70,15 @@ final class SavedTV: CustomStringConvertible {
 
     var description: String {
         "SavedTV(redacted)"
+    }
+
+    /// Persists the identity fields added after the Samsung-only internal alpha.
+    func backfillLegacyIdentityIfNeeded() {
+        let resolvedBrand = brand
+        brandRawValue = resolvedBrand.rawValue
+        if stableDeviceID == nil {
+            stableDeviceID = "\(resolvedBrand.rawValue):\(reportedDeviceID)"
+        }
     }
 
     func recordConnection(

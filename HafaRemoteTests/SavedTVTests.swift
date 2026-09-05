@@ -61,6 +61,67 @@ struct SavedTVTests {
         #expect(saved.validatedControlPort == nil)
     }
 
+    @MainActor
+    @Test("A legacy-shaped on-disk record receives its stable Samsung identity")
+    func backfillsPersistedLegacyIdentity() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "hafa-remote-legacy-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appending(path: "SavedTV.store")
+        let schema = Schema([SavedTV.self])
+
+        do {
+            let configuration = ModelConfiguration(schema: schema, url: storeURL)
+            let container = try ModelContainer(for: schema, configurations: configuration)
+            let legacyRecord = SavedTV(
+                reportedDeviceID: "legacy-device-id",
+                displayName: "Living Room",
+                modelName: "Q70AA",
+                firmwareVersion: nil,
+                lastKnownAddress: "192.168.10.20"
+            )
+            legacyRecord.stableDeviceID = nil
+            container.mainContext.insert(legacyRecord)
+            try container.mainContext.save()
+        }
+
+        do {
+            let configuration = ModelConfiguration(schema: schema, url: storeURL)
+            let container = try ModelContainer(for: schema, configurations: configuration)
+            let records = try container.mainContext.fetch(FetchDescriptor<SavedTV>())
+            let record = try #require(records.first)
+            #expect(record.stableDeviceID == nil)
+            #expect(record.brand == .samsung)
+            #expect(record.validatedControlPort == nil)
+
+            record.backfillLegacyIdentityIfNeeded()
+            try container.mainContext.save()
+        }
+
+        let configuration = ModelConfiguration(schema: schema, url: storeURL)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let records = try container.mainContext.fetch(FetchDescriptor<SavedTV>())
+        let migrated = try #require(records.first)
+        #expect(migrated.brand == .samsung)
+        #expect(migrated.stableDeviceID == "samsung:legacy-device-id")
+        #expect(migrated.validatedControlPort == nil)
+    }
+
+    @Test("Persisted control port zero is rejected")
+    func rejectsControlPortZero() {
+        let saved = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "TV",
+            modelName: "TEST_MODEL",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.20",
+            controlPort: 0
+        )
+
+        #expect(saved.validatedControlPort == nil)
+    }
+
     @Test("Brand-scoped identity prevents cross-brand device collisions")
     @MainActor
     func scopesIdentityByBrand() throws {
@@ -147,6 +208,31 @@ struct SavedTVTests {
         #expect(!unavailable.isEligibleForSamsungWake)
         #expect(wireless.isEligibleForSamsungWake)
         #expect(!otherBrand.isEligibleForSamsungWake)
+    }
+
+    @Test("A pending wake only matches the same brand-scoped TV identity")
+    func scopesPendingWakeByStableDeviceKey() throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let samsung = ConnectedTV(
+            brand: .samsung,
+            reportedDeviceID: "shared-device-id",
+            address: address,
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            networkConnection: .wireless
+        )
+        let vizio = ConnectedTV(
+            brand: .vizio,
+            reportedDeviceID: "shared-device-id",
+            address: address,
+            modelName: "V-Series",
+            firmwareVersion: nil,
+            networkConnection: .wireless
+        )
+        let attempt = PendingWakeAttempt(stableDeviceKey: samsung.stableDeviceKey)
+
+        #expect(attempt.matches(samsung))
+        #expect(!attempt.matches(vizio))
     }
 
     @Test("An invalid persisted host is never reused for a connection")

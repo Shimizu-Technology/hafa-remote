@@ -89,6 +89,7 @@ struct HomeView: View {
             Text(persistenceWarning ?? "")
         }
         .task(id: savedTVs.first?.persistentModelID) {
+            backfillLegacySavedTVsIfNeeded()
             await restoreLastUsedTVIfNeeded()
         }
         .onChange(of: session.state) { _, state in
@@ -266,7 +267,7 @@ struct HomeView: View {
             throw TVMACAddressError.invalid
         }
 
-        let attempt = PendingWakeAttempt(reportedDeviceID: tv.reportedDeviceID)
+        let attempt = PendingWakeAttempt(stableDeviceKey: tv.stableDeviceKey)
         pendingWakeAttempt = attempt
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(30))
@@ -302,7 +303,7 @@ struct HomeView: View {
 
     private func saveConnectedTV(_ tv: ConnectedTV) {
         let now = Date.now
-        let wakeWasJustVerified = pendingWakeAttempt?.reportedDeviceID == tv.reportedDeviceID
+        let wakeWasJustVerified = pendingWakeAttempt?.matches(tv) == true
         if let saved = savedTVs.first(where: { $0.stableDeviceKey == tv.stableDeviceKey }) {
             saved.recordConnection(
                 to: tv,
@@ -339,11 +340,29 @@ struct HomeView: View {
                 "The TV is connected, but Hafa Remote could not remember it for the next launch."
         }
     }
+
+    private func backfillLegacySavedTVsIfNeeded() {
+        let recordsNeedingBackfill = savedTVs.filter { $0.stableDeviceID == nil }
+        guard !recordsNeedingBackfill.isEmpty else { return }
+        for savedTV in recordsNeedingBackfill {
+            savedTV.backfillLegacyIdentityIfNeeded()
+        }
+        do {
+            try modelContext.save()
+        } catch {
+            persistenceWarning =
+                "Hafa Remote could not finish updating a saved TV. Reconnect it to keep it available."
+        }
+    }
 }
 
-private struct PendingWakeAttempt: Equatable {
+struct PendingWakeAttempt: Equatable {
     let id = UUID()
-    let reportedDeviceID: String
+    let stableDeviceKey: String
+
+    func matches(_ tv: ConnectedTV) -> Bool {
+        stableDeviceKey == tv.stableDeviceKey
+    }
 }
 
 struct SavedTVRestorationPresentation: Equatable {
