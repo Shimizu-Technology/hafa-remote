@@ -5,6 +5,65 @@ import Testing
 @testable import HafaRemote
 
 struct SonyClientIdentityTests {
+    @Test("Identity provisioning reuses valid saved material without mutation")
+    func reusesSavedIdentity() throws {
+        let trace = IdentityProvisioningTrace()
+        let provisioner = SonyClientIdentityProvisioner(
+            loadSavedIdentity: {
+                trace.record("load")
+                return "saved"
+            },
+            removeNamespacedMaterial: { trace.record("remove") },
+            generateIdentity: {
+                trace.record("generate")
+                return "generated"
+            }
+        )
+
+        #expect(try provisioner.identity() == "saved")
+        #expect(trace.events == ["load"])
+    }
+
+    @Test("A certificate without its private key is removed before replacement")
+    func replacesStaleCertificate() throws {
+        let trace = IdentityProvisioningTrace()
+        let provisioner = SonyClientIdentityProvisioner(
+            loadSavedIdentity: { () throws -> String? in
+                trace.record("load")
+                throw SonyClientIdentityError.identityLookupFailed(errSecItemNotFound)
+            },
+            removeNamespacedMaterial: { trace.record("remove") },
+            generateIdentity: {
+                trace.record("generate")
+                return "replacement"
+            }
+        )
+
+        #expect(try provisioner.identity() == "replacement")
+        #expect(trace.events == ["load", "remove", "generate"])
+    }
+
+    @Test("Failed identity generation cleans its namespaced partial material")
+    func cleansAfterFailedGeneration() {
+        let trace = IdentityProvisioningTrace()
+        let provisioner = SonyClientIdentityProvisioner(
+            loadSavedIdentity: {
+                trace.record("load")
+                return Optional<String>.none
+            },
+            removeNamespacedMaterial: { trace.record("remove") },
+            generateIdentity: { () throws -> String in
+                trace.record("generate")
+                throw SonyClientIdentityError.certificateGenerationFailed
+            }
+        )
+
+        #expect(throws: SonyClientIdentityError.certificateGenerationFailed) {
+            try provisioner.identity()
+        }
+        #expect(trace.events == ["load", "remove", "generate", "remove"])
+    }
+
     @Test("Key and certificate queries stay inside the Sony namespace")
     func scopesKeychainQueries() throws {
         let namespace = "com.shimizutechnology.hafaremote.tests.sony"
@@ -107,5 +166,13 @@ struct SonyClientIdentityTests {
     private func externalRepresentation(_ key: SecKey) throws -> Data {
         var error: Unmanaged<CFError>?
         return try #require(SecKeyCopyExternalRepresentation(key, &error) as Data?)
+    }
+}
+
+private final class IdentityProvisioningTrace {
+    private(set) var events: [String] = []
+
+    func record(_ event: String) {
+        events.append(event)
     }
 }

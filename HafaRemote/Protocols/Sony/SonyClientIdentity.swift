@@ -153,6 +153,32 @@ struct SonyClientIdentityKeychainScope: Sendable {
     }
 }
 
+struct SonyClientIdentityProvisioner<Identity> {
+    let loadSavedIdentity: () throws -> Identity?
+    let removeNamespacedMaterial: () throws -> Void
+    let generateIdentity: () throws -> Identity
+
+    func identity() throws -> Identity {
+        do {
+            if let identity = try loadSavedIdentity() {
+                return identity
+            }
+            try removeNamespacedMaterial()
+        } catch SonyClientIdentityError.identityLookupFailed(let status)
+            where status == errSecItemNotFound
+        {
+            try removeNamespacedMaterial()
+        }
+
+        do {
+            return try generateIdentity()
+        } catch {
+            try? removeNamespacedMaterial()
+            throw error
+        }
+    }
+}
+
 final class SonyClientIdentityStore: @unchecked Sendable {
     private let scope: SonyClientIdentityKeychainScope
     private let lock = NSLock()
@@ -164,33 +190,15 @@ final class SonyClientIdentityStore: @unchecked Sendable {
     func identity() throws -> SecIdentity {
         lock.lock()
         defer { lock.unlock() }
-
-        if let certificate = try savedCertificate() {
-            do {
+        let provisioner = SonyClientIdentityProvisioner(
+            loadSavedIdentity: { [self] in
+                guard let certificate = try savedCertificate() else { return nil }
                 return try identity(for: certificate)
-            } catch SonyClientIdentityError.identityLookupFailed(let status)
-                where status == errSecItemNotFound
-            {
-                try removeNamespacedMaterial()
-            }
-        } else {
-            try removeNamespacedMaterial()
-        }
-
-        do {
-            let privateKey = try createPrivateKey()
-            let serial = try secureRandomBytes(count: 16)
-            let certificate = try SonyClientCertificateFactory.make(
-                privateKey: privateKey,
-                commonName: "Hafa Remote",
-                serialNumber: serial
-            )
-            try save(certificate: certificate)
-            return try identity(for: certificate)
-        } catch {
-            try? removeNamespacedMaterial()
-            throw error
-        }
+            },
+            removeNamespacedMaterial: { [self] in try removeNamespacedMaterial() },
+            generateIdentity: { [self] in try generateIdentity() }
+        )
+        return try provisioner.identity()
     }
 
     private func savedCertificate() throws -> SecCertificate? {
@@ -214,6 +222,18 @@ final class SonyClientIdentityStore: @unchecked Sendable {
             throw SonyClientIdentityError.keyGenerationFailed
         }
         return key
+    }
+
+    private func generateIdentity() throws -> SecIdentity {
+        let privateKey = try createPrivateKey()
+        let serial = try secureRandomBytes(count: 16)
+        let certificate = try SonyClientCertificateFactory.make(
+            privateKey: privateKey,
+            commonName: "Hafa Remote",
+            serialNumber: serial
+        )
+        try save(certificate: certificate)
+        return try identity(for: certificate)
     }
 
     private func save(certificate: SecCertificate) throws {
