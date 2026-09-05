@@ -39,7 +39,7 @@ struct RemoteSessionControllerTests {
             clock: clock,
             configuration: testConfiguration(
                 connectionTimeout: .seconds(5),
-                reconnectDelays: [.seconds(1)]
+                reconnectDelays: [.seconds(4)]
             )
         )
         let store = RemoteSessionStore(controller: controller, connectionWaitClock: clock)
@@ -50,7 +50,7 @@ struct RemoteSessionControllerTests {
                 timeout: .seconds(30)
             )
         }
-        await resume(clock: clock, duration: .seconds(1))
+        await resume(clock: clock, duration: .seconds(4))
         let connectedTV = try await connection.value
 
         #expect(connectedTV == tv)
