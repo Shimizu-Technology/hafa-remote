@@ -164,7 +164,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
         let persistedIdentity = try reportedDeviceID.map {
             try SamsungPairingCredentialIdentity(reportedDeviceID: $0)
         }
-        if let identity = persistedIdentity ?? mostRecentIdentityByAddress[address] {
+        if let identity = persistedIdentity {
             try await credentialStore.removeCredential(for: identity, legacyAddress: address)
             mostRecentIdentityByAddress[address] = nil
         } else {
@@ -172,6 +172,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
             // unsafe address-keyed alpha credential. A discovery request is never
             // required to forget locally held authentication material.
             try await credentialStore.removeLegacyCredential(for: address)
+            mostRecentIdentityByAddress[address] = nil
         }
     }
 
