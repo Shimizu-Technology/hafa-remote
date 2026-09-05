@@ -102,6 +102,7 @@ final class HafaRemoteUITests: XCTestCase {
         let connectionStatus = app.staticTexts["remoteConnectionStatus"]
         XCTAssertTrue(connectionStatus.waitForExistence(timeout: 5))
         XCTAssertEqual(connectionStatus.label, "Connected")
+        XCTAssertFalse(app.buttons["remote-keyboard"].exists)
     }
 
     /// Runs separately from the deterministic gate against the powered-on household TV.

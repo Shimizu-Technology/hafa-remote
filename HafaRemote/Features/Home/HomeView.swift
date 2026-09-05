@@ -36,6 +36,7 @@ struct HomeView: View {
                     modelName: tv.modelName,
                     statusLabel: statusLabel,
                     isConnected: session.canSendCommands,
+                    supportsTextInput: tv.brand == .samsung,
                     canWakeTV: wakeMACAddress(for: tv, savedTV: savedTV) != nil,
                     wakeWasVerified: savedTV?.wakeWasVerified ?? false
                 ) { command in

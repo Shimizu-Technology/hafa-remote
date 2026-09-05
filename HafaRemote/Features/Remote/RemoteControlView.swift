@@ -8,6 +8,7 @@ struct RemoteControlView: View {
     let modelName: String
     let statusLabel: String
     let isConnected: Bool
+    let supportsTextInput: Bool
     let canWakeTV: Bool
     let wakeWasVerified: Bool
     let action: @MainActor @Sendable (RemoteCommand) async -> Void
@@ -38,7 +39,9 @@ struct RemoteControlView: View {
                     utilityControls
                     volumeControls
                     playbackControls
-                    keyboardControl
+                    if supportsTextInput {
+                        keyboardControl
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
@@ -483,6 +486,7 @@ struct RemoteControlView: View {
                     modelName: "Q70AA",
                     statusLabel: isConnected ? "Connected" : "Offline",
                     isConnected: isConnected,
+                    supportsTextInput: true,
                     canWakeTV: true,
                     wakeWasVerified: false
                 ) { command in
