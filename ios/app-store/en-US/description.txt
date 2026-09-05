@@ -8,6 +8,7 @@ Everyday controls are close at hand:
 • Home and back
 • Play, pause, rewind, and fast-forward
 • Power off with confirmation
+• Conditional power on for saved Wi-Fi TVs with Power On With Mobile enabled
 • Native iPhone text entry on supported TV screens
 
 Hafa Remote has no account, advertising, tracking, backend, or subscription. Commands stay between your iPhone and the TV on your local network.
@@ -17,6 +18,6 @@ Compatibility and limitations:
 • Your iPhone and TV must be on the same non-guest Wi-Fi network.
 • Initial setup requires approving Hafa Remote on the TV.
 • Some apps and secure fields do not accept remote text.
-• Power on is not currently supported; use the physical remote or the TV's normal power control.
+• Power on sends a local wake signal when the TV provides a usable Wi-Fi hardware address. Availability varies by TV settings and network, and Hafa Remote waits for a real reconnection before treating the TV as on.
 
 Hafa Remote is an independent app by Shimizu Technology. It is not affiliated with, endorsed by, or sponsored by Samsung Electronics.

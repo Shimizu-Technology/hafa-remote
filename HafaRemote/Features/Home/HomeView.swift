@@ -13,27 +13,37 @@ struct HomeView: View {
     @State private var scenePhaseEvents = ScenePhaseEvents()
     @State private var restoration = SavedTVRestorationCoordinator()
     @State private var persistenceWarning: String?
+    @State private var pendingWakeAttempt: PendingWakeAttempt?
+
+    private let wakeService: any SamsungTVWaking
 
     init(
         session: RemoteSessionStore = RemoteSessionStore(),
-        discovery: SamsungDiscoveryStore = SamsungDiscoveryStore()
+        discovery: SamsungDiscoveryStore = SamsungDiscoveryStore(),
+        wakeService: any SamsungTVWaking = SamsungWakeOnLANService()
     ) {
         _session = State(initialValue: session)
         _discovery = State(initialValue: discovery)
+        self.wakeService = wakeService
     }
 
     var body: some View {
         NavigationStack {
             if let tv = session.lastConnectedTV {
+                let savedTV = savedTV(for: tv)
                 RemoteControlView(
                     tvName: displayName(for: tv),
                     modelName: tv.modelName,
                     statusLabel: statusLabel,
-                    isConnected: session.canSendCommands
+                    isConnected: session.canSendCommands,
+                    canWakeTV: wakeMACAddress(for: tv, savedTV: savedTV) != nil,
+                    wakeWasVerified: savedTV?.wakeWasVerified ?? false
                 ) { command in
                     try? await session.send(command)
                 } textAction: { input in
                     try await session.sendText(input)
+                } wakeAction: {
+                    try await wake(tv, savedTV: savedTV)
                 } retry: {
                     await session.connect(to: tv.address.rawValue)
                 } showTVSetup: {
@@ -236,14 +246,53 @@ struct HomeView: View {
     }
 
     private func displayName(for tv: PairedSamsungTV) -> String {
-        savedTVs.first(where: { $0.reportedDeviceID == tv.reportedDeviceID })?.displayName
-            ?? "Samsung TV"
+        savedTV(for: tv)?.displayName ?? "Samsung TV"
+    }
+
+    private func savedTV(for tv: PairedSamsungTV) -> SavedTV? {
+        savedTVs.first(where: { $0.reportedDeviceID == tv.reportedDeviceID })
+    }
+
+    private func wakeMACAddress(
+        for tv: PairedSamsungTV,
+        savedTV: SavedTV?
+    ) -> SamsungMACAddress? {
+        tv.macAddress ?? savedTV?.validatedMACAddress
+    }
+
+    private func wake(_ tv: PairedSamsungTV, savedTV: SavedTV?) async throws {
+        guard let macAddress = wakeMACAddress(for: tv, savedTV: savedTV) else {
+            throw SamsungMACAddressError.invalid
+        }
+
+        let attempt = PendingWakeAttempt(reportedDeviceID: tv.reportedDeviceID)
+        pendingWakeAttempt = attempt
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(30))
+            guard pendingWakeAttempt?.id == attempt.id else { return }
+            pendingWakeAttempt = nil
+        }
+
+        do {
+            try await wakeService.wake(macAddress, at: tv.address)
+            try await Task.sleep(for: .seconds(2))
+            await session.connect(to: tv.address.rawValue)
+        } catch {
+            if pendingWakeAttempt?.id == attempt.id {
+                pendingWakeAttempt = nil
+            }
+            throw error
+        }
     }
 
     private func saveConnectedTV(_ tv: PairedSamsungTV) {
         let now = Date.now
+        let wakeWasJustVerified = pendingWakeAttempt?.reportedDeviceID == tv.reportedDeviceID
         if let saved = savedTVs.first(where: { $0.reportedDeviceID == tv.reportedDeviceID }) {
             saved.recordConnection(to: tv, at: now)
+            if wakeWasJustVerified {
+                saved.wakeWasVerified = true
+            }
         } else {
             modelContext.insert(
                 SavedTV(
@@ -252,10 +301,16 @@ struct HomeView: View {
                     modelName: tv.modelName,
                     firmwareVersion: tv.firmwareVersion,
                     lastKnownAddress: tv.address.rawValue,
+                    macAddress: tv.macAddress?.persistedValue,
+                    wakeWasVerified: wakeWasJustVerified,
                     lastSeenAt: now,
                     lastUsedAt: now
                 )
             )
+        }
+
+        if wakeWasJustVerified {
+            pendingWakeAttempt = nil
         }
 
         do {
@@ -265,6 +320,11 @@ struct HomeView: View {
                 "The TV is connected, but Hafa Remote could not remember it for the next launch."
         }
     }
+}
+
+private struct PendingWakeAttempt: Equatable {
+    let id = UUID()
+    let reportedDeviceID: String
 }
 
 struct SavedTVRestorationPresentation: Equatable {

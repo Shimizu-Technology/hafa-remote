@@ -31,6 +31,8 @@
 		76ECF14B14B88E8DEC927833 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 314331F56B7422E857B20532 /* Assets.xcassets */; };
 		850DB50EE3A8CCE0C6AAF339 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 25EE7FE3555C6B4938A553CE /* PrivacyInfo.xcprivacy */; };
 		854D9E6D373AC5EC05814B57 /* SamsungDeviceInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FD1515BC189F740FA4DE7A3 /* SamsungDeviceInfo.swift */; };
+		A61000000000000000000001 /* SamsungWakeOnLAN.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62000000000000000000001 /* SamsungWakeOnLAN.swift */; };
+		A61000000000000000000002 /* SamsungWakeOnLANTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A62000000000000000000002 /* SamsungWakeOnLANTests.swift */; };
 		8F86632B2E9ADC46C98BFB1C /* TVDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44405F91DE5FC74EFF634D3 /* TVDriver.swift */; };
 		9CABF29420764B69CE52ED09 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9C450D22C7D445E62710FF5D /* Foundation.framework */; };
 		AF670AF8B9F1EB53EEAF349B /* HafaRemoteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F11E2A820EC89F7AD933554 /* HafaRemoteApp.swift */; };
@@ -85,6 +87,8 @@
 		621127FDEF5F6BE4013D7C65 /* HafaTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HafaTheme.swift; path = DesignSystem/HafaTheme.swift; sourceTree = "<group>"; };
 		79D1230B04BD184CAC360802 /* SamsungProtocolCodecTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungProtocolCodecTests.swift; sourceTree = "<group>"; };
 		7FD1515BC189F740FA4DE7A3 /* SamsungDeviceInfo.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDeviceInfo.swift; sourceTree = "<group>"; };
+		A62000000000000000000001 /* SamsungWakeOnLAN.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungWakeOnLAN.swift; sourceTree = "<group>"; };
+		A62000000000000000000002 /* SamsungWakeOnLANTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungWakeOnLANTests.swift; sourceTree = "<group>"; };
 		7A7000110000000000000001 /* SamsungDiscovery.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDiscovery.swift; sourceTree = "<group>"; };
 		7A7000120000000000000002 /* SamsungDiscoveryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDiscoveryTests.swift; sourceTree = "<group>"; };
 		9660B0481989B57E29327545 /* SamsungCommandTransport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungCommandTransport.swift; sourceTree = "<group>"; };
@@ -135,6 +139,7 @@
 				7A7000110000000000000001 /* SamsungDiscovery.swift */,
 				D8FBB69EF7BB0B53E30FF7A1 /* SamsungPairingCredential.swift */,
 				7FD1515BC189F740FA4DE7A3 /* SamsungDeviceInfo.swift */,
+				A62000000000000000000001 /* SamsungWakeOnLAN.swift */,
 				FD21C56485650437D59630CC /* SamsungProtocolCodec.swift */,
 				05F87DEC2C03FC39EAECAB38 /* SamsungTrustDelegate.swift */,
 				9660B0481989B57E29327545 /* SamsungCommandTransport.swift */,
@@ -221,6 +226,7 @@
 				11CFB329B0E5168B6E0EC74E /* SamsungPairingCoordinatorTests.swift */,
 				174B2BC669B6814751000013 /* RemoteSessionControllerTests.swift */,
 				275B2BC669B6814751000013 /* SavedTVTests.swift */,
+				A62000000000000000000002 /* SamsungWakeOnLANTests.swift */,
 			);
 			name = HafaRemoteTests;
 			path = HafaRemoteTests;
@@ -445,6 +451,7 @@
 				C7EAE220E972FBE92AD2F6E5 /* SamsungPairingCoordinatorTests.swift in Sources */,
 				174B2BC669B6814751000003 /* RemoteSessionControllerTests.swift in Sources */,
 				275B2BC669B6814751000003 /* SavedTVTests.swift in Sources */,
+				A61000000000000000000002 /* SamsungWakeOnLANTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -475,6 +482,7 @@
 				11DFB409FF879A160B1AB3C4 /* PrivateIPv4Address.swift in Sources */,
 				3802FE2339022BC3629CF923 /* SamsungPairingCredential.swift in Sources */,
 				854D9E6D373AC5EC05814B57 /* SamsungDeviceInfo.swift in Sources */,
+				A61000000000000000000001 /* SamsungWakeOnLAN.swift in Sources */,
 				7A7000010000000000000001 /* SamsungDiscovery.swift in Sources */,
 				66EA7DA266631F013C97D50E /* SamsungProtocolCodec.swift in Sources */,
 				5C0C08C13F47A1E0A1C4EF91 /* SamsungTrustDelegate.swift in Sources */,

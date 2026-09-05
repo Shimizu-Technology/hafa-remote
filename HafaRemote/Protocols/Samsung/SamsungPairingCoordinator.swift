@@ -5,6 +5,21 @@ struct PairedSamsungTV: Equatable, Sendable {
     let address: PrivateIPv4Address
     let modelName: String
     let firmwareVersion: String?
+    let macAddress: SamsungMACAddress?
+
+    init(
+        reportedDeviceID: String,
+        address: PrivateIPv4Address,
+        modelName: String,
+        firmwareVersion: String?,
+        macAddress: SamsungMACAddress? = nil
+    ) {
+        self.reportedDeviceID = reportedDeviceID
+        self.address = address
+        self.modelName = modelName
+        self.firmwareVersion = firmwareVersion
+        self.macAddress = macAddress
+    }
 }
 
 protocol SamsungPairingCoordinating: Sendable {
@@ -105,7 +120,8 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                     reportedDeviceID: deviceInfo.reportedDeviceID,
                     address: address,
                     modelName: deviceInfo.modelName,
-                    firmwareVersion: deviceInfo.firmwareVersion
+                    firmwareVersion: deviceInfo.firmwareVersion,
+                    macAddress: deviceInfo.macAddress
                 )
             } catch {
                 guard Task.isCancelled || error is CancellationError else {

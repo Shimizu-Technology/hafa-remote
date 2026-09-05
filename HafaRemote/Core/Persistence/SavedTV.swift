@@ -10,6 +10,8 @@ final class SavedTV: CustomStringConvertible {
     var modelName: String
     var firmwareVersion: String?
     var lastKnownAddress: String
+    var macAddress: String?
+    var wakeWasVerified: Bool = false
     var lastSeenAt: Date
     var lastUsedAt: Date
 
@@ -20,6 +22,8 @@ final class SavedTV: CustomStringConvertible {
         modelName: String,
         firmwareVersion: String?,
         lastKnownAddress: String,
+        macAddress: String? = nil,
+        wakeWasVerified: Bool = false,
         lastSeenAt: Date = .now,
         lastUsedAt: Date = .now
     ) {
@@ -29,12 +33,18 @@ final class SavedTV: CustomStringConvertible {
         self.modelName = modelName
         self.firmwareVersion = firmwareVersion
         self.lastKnownAddress = lastKnownAddress
+        self.macAddress = macAddress
+        self.wakeWasVerified = wakeWasVerified
         self.lastSeenAt = lastSeenAt
         self.lastUsedAt = lastUsedAt
     }
 
     var validatedAddress: PrivateIPv4Address? {
         try? PrivateIPv4Address(lastKnownAddress)
+    }
+
+    var validatedMACAddress: SamsungMACAddress? {
+        macAddress.flatMap { try? SamsungMACAddress($0) }
     }
 
     var description: String {
@@ -46,6 +56,9 @@ final class SavedTV: CustomStringConvertible {
         modelName = tv.modelName
         firmwareVersion = tv.firmwareVersion
         lastKnownAddress = tv.address.rawValue
+        if let macAddress = tv.macAddress {
+            self.macAddress = macAddress.persistedValue
+        }
         lastSeenAt = date
         lastUsedAt = date
     }

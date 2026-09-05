@@ -17,6 +17,8 @@ struct SavedTVTests {
             modelName: "Q70AA",
             firmwareVersion: "2210",
             lastKnownAddress: "192.168.10.20",
+            macAddress: "02:00:5E:10:00:01",
+            wakeWasVerified: true,
             lastSeenAt: Date(timeIntervalSince1970: 100),
             lastUsedAt: Date(timeIntervalSince1970: 200)
         )
@@ -32,6 +34,8 @@ struct SavedTVTests {
         #expect(fetched.first?.modelName == "Q70AA")
         #expect(fetched.first?.firmwareVersion == "2210")
         #expect(fetched.first?.validatedAddress == (try PrivateIPv4Address("192.168.10.20")))
+        #expect(fetched.first?.validatedMACAddress == (try SamsungMACAddress("02:00:5E:10:00:01")))
+        #expect(fetched.first?.wakeWasVerified == true)
         #expect(fetched.first?.lastSeenAt == Date(timeIntervalSince1970: 100))
         #expect(fetched.first?.lastUsedAt == Date(timeIntervalSince1970: 200))
         #expect(fetched.first?.description == "SavedTV(redacted)")
@@ -63,7 +67,8 @@ struct SavedTVTests {
             reportedDeviceID: "synthetic-device-id",
             address: try PrivateIPv4Address("192.168.10.42"),
             modelName: "Q70AA",
-            firmwareVersion: "1002"
+            firmwareVersion: "1002",
+            macAddress: try SamsungMACAddress("02:00:5E:10:00:02")
         )
 
         saved.recordConnection(to: reconnectedTV, at: Date(timeIntervalSince1970: 300))
@@ -72,7 +77,30 @@ struct SavedTVTests {
         #expect(saved.reportedDeviceID == "synthetic-device-id")
         #expect(saved.lastKnownAddress == "192.168.10.42")
         #expect(saved.firmwareVersion == "1002")
+        #expect(saved.macAddress == "02:00:5E:10:00:02")
         #expect(saved.lastUsedAt == Date(timeIntervalSince1970: 300))
+    }
+
+    @Test("A reconnect without wake metadata preserves the previously captured MAC")
+    func preservesMACWhenReconnectOmitsIt() throws {
+        let saved = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.20",
+            macAddress: "02:00:5E:10:00:01"
+        )
+        let reconnectedTV = PairedSamsungTV(
+            reportedDeviceID: "synthetic-device-id",
+            address: try PrivateIPv4Address("192.168.10.42"),
+            modelName: "Q70AA",
+            firmwareVersion: nil
+        )
+
+        saved.recordConnection(to: reconnectedTV)
+
+        #expect(saved.macAddress == "02:00:5E:10:00:01")
     }
 
     @MainActor

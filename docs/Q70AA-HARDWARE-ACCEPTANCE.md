@@ -92,11 +92,13 @@ simulator on the same LAN or a connected iPhone.
 - [ ] A screen that ignores remote text was explained honestly.
 - [ ] Text was not echoed into logs, screenshots, or diagnostics.
 - [ ] Pairing tokens, network identifiers, and certificate fingerprints are absent from ordinary app logs.
-- [x] Power on remains unavailable in this build.
-- [x] No MAC address is collected while Wake-on-LAN is unavailable.
+- [ ] A valid wireless MAC is captured automatically without appearing in logs or screenshots.
+- [ ] Power on succeeds immediately, after one minute, and after 30 minutes of standby.
+- [ ] The TV is treated as awake only after the secure connection is restored.
 - [x] No multicast entitlement or broadcast sender is included.
-- Notes: Apple requires the multicast networking entitlement for broadcast
-  Wake-on-LAN. Request and physical wake testing are separate gates.
+- Notes: This build starts with Apple-permitted UDP unicast Wake-on-LAN. Apple
+  requires the multicast networking entitlement before a broadcast fallback can
+  be added. Entitlement approval and physical wake testing remain separate gates.
 
 ## Go/no-go
 
