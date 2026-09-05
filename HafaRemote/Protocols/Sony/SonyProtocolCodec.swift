@@ -230,7 +230,8 @@ enum SonyPairingProtocolCodec {
 }
 
 enum SonyRemoteEvent: Equatable, Sendable {
-    case configured(vendor: String, model: String, supportedFeatures: UInt64)
+    case configured(vendor: String, model: String, softwareVersion: String, supportedFeatures: UInt64)
+    case setActive
     case ping(Int64)
     case powerState(Bool)
     case other
@@ -298,8 +299,12 @@ enum SonyRemoteProtocolCodec {
             return .configured(
                 vendor: string(field: 2, in: deviceFields),
                 model: string(field: 1, in: deviceFields),
+                softwareVersion: string(field: 6, in: deviceFields),
                 supportedFeatures: features
             )
+        }
+        if fields.contains(where: { $0.number == 2 }) {
+            return .setActive
         }
         if let ping = fields.first(where: { $0.number == 8 })?.bytes {
             let value = try SonyProtobuf.fields(in: ping).first(where: { $0.number == 1 })?.varint ?? 0
