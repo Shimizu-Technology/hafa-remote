@@ -11,6 +11,8 @@
 		174B2BC669B6814751000001 /* RemoteSessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 174B2BC669B6814751000011 /* RemoteSessionController.swift */; };
 		174B2BC669B6814751000002 /* RemoteSessionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 174B2BC669B6814751000012 /* RemoteSessionState.swift */; };
 		174B2BC669B6814751000004 /* RemoteSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 174B2BC669B6814751000014 /* RemoteSessionStore.swift */; };
+		174B2BC669B6814751000005 /* RemoteControlButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 174B2BC669B6814751000015 /* RemoteControlButton.swift */; };
+		174B2BC669B6814751000006 /* RemoteControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 174B2BC669B6814751000016 /* RemoteControlView.swift */; };
 		2D3D3C2CF9409A3568772E68 /* SamsungSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10AAEEB17C3074710C8B3AD8 /* SamsungSetupView.swift */; };
 		3802FE2339022BC3629CF923 /* SamsungPairingCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8FBB69EF7BB0B53E30FF7A1 /* SamsungPairingCredential.swift */; };
 		3A58178774479925FA7D5AF6 /* SamsungCommandTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9660B0481989B57E29327545 /* SamsungCommandTransport.swift */; };
@@ -33,7 +35,6 @@
 		D39084F5026A79477345A47B /* SamsungPairingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76591F3ADBB7B6D47D2D03E /* SamsungPairingCoordinator.swift */; };
 		D4C49D71FFB313E977E0A762 /* HafaRemoteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 470B5BF9F811323D35B6050E /* HafaRemoteTests.swift */; };
 		DB5A9E7AF0102E13F6C22521 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9C450D22C7D445E62710FF5D /* Foundation.framework */; };
-		E7C238A6D81C5F7C768D81C0 /* SamsungSetupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB92C658DE21FF12B96B6505 /* SamsungSetupViewModel.swift */; };
 		F338C28FB5D32B11FAA6CD02 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D907E6B71E286A4EA2A187FA /* HomeView.swift */; };
 /* End PBXBuildFile section */
 
@@ -62,6 +63,8 @@
 		174B2BC669B6814751000012 /* RemoteSessionState.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteSessionState.swift; sourceTree = "<group>"; };
 		174B2BC669B6814751000013 /* RemoteSessionControllerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteSessionControllerTests.swift; sourceTree = "<group>"; };
 		174B2BC669B6814751000014 /* RemoteSessionStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteSessionStore.swift; sourceTree = "<group>"; };
+		174B2BC669B6814751000015 /* RemoteControlButton.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteControlButton.swift; sourceTree = "<group>"; };
+		174B2BC669B6814751000016 /* RemoteControlView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteControlView.swift; sourceTree = "<group>"; };
 		25EE7FE3555C6B4938A553CE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		2A781F30B9F124284352D849 /* RemoteCommand.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RemoteCommand.swift; sourceTree = "<group>"; };
 		2A939B24A7E535AB6DA1B6D7 /* HafaRemoteUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HafaRemoteUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -83,7 +86,6 @@
 		D8FBB69EF7BB0B53E30FF7A1 /* SamsungPairingCredential.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungPairingCredential.swift; sourceTree = "<group>"; };
 		D907E6B71E286A4EA2A187FA /* HomeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HomeView.swift; path = Features/Home/HomeView.swift; sourceTree = "<group>"; };
 		D90C5FC34ABBF76738E4A178 /* PrivateIPv4Address.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PrivateIPv4Address.swift; sourceTree = "<group>"; };
-		EB92C658DE21FF12B96B6505 /* SamsungSetupViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungSetupViewModel.swift; sourceTree = "<group>"; };
 		EE6807FBFFE03076A21CC1B1 /* HafaRemote.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = HafaRemote.entitlements; sourceTree = "<group>"; };
 		FD21C56485650437D59630CC /* SamsungProtocolCodec.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungProtocolCodec.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -153,9 +155,20 @@
 			isa = PBXGroup;
 			children = (
 				D104483FD9922EAAB53F615C /* Setup */,
+				174B2BC669B6814751000017 /* Remote */,
 			);
 			name = Features;
 			path = Features;
+			sourceTree = "<group>";
+		};
+		174B2BC669B6814751000017 /* Remote */ = {
+			isa = PBXGroup;
+			children = (
+				174B2BC669B6814751000015 /* RemoteControlButton.swift */,
+				174B2BC669B6814751000016 /* RemoteControlView.swift */,
+			);
+			name = Remote;
+			path = Remote;
 			sourceTree = "<group>";
 		};
 		62C96688E60E0F3A754B9426 = {
@@ -228,7 +241,6 @@
 		D104483FD9922EAAB53F615C /* Setup */ = {
 			isa = PBXGroup;
 			children = (
-				EB92C658DE21FF12B96B6505 /* SamsungSetupViewModel.swift */,
 				10AAEEB17C3074710C8B3AD8 /* SamsungSetupView.swift */,
 			);
 			name = Setup;
@@ -421,6 +433,8 @@
 				174B2BC669B6814751000002 /* RemoteSessionState.swift in Sources */,
 				174B2BC669B6814751000001 /* RemoteSessionController.swift in Sources */,
 				174B2BC669B6814751000004 /* RemoteSessionStore.swift in Sources */,
+				174B2BC669B6814751000005 /* RemoteControlButton.swift in Sources */,
+				174B2BC669B6814751000006 /* RemoteControlView.swift in Sources */,
 				11DFB409FF879A160B1AB3C4 /* PrivateIPv4Address.swift in Sources */,
 				3802FE2339022BC3629CF923 /* SamsungPairingCredential.swift in Sources */,
 				854D9E6D373AC5EC05814B57 /* SamsungDeviceInfo.swift in Sources */,
@@ -428,7 +442,6 @@
 				5C0C08C13F47A1E0A1C4EF91 /* SamsungTrustDelegate.swift in Sources */,
 				3A58178774479925FA7D5AF6 /* SamsungCommandTransport.swift in Sources */,
 				D39084F5026A79477345A47B /* SamsungPairingCoordinator.swift in Sources */,
-				E7C238A6D81C5F7C768D81C0 /* SamsungSetupViewModel.swift in Sources */,
 				2D3D3C2CF9409A3568772E68 /* SamsungSetupView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

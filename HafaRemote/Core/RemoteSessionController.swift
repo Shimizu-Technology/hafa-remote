@@ -5,6 +5,7 @@ protocol RemoteSessionDriving: TVDriver {
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV
+    func forget(addressText: String) async throws
 }
 
 extension SamsungPairingCoordinator: RemoteSessionDriving {
@@ -33,12 +34,14 @@ struct RemoteSessionConfiguration: Equatable, Sendable {
     let connectionTimeout: Duration
     let commandTimeout: Duration
     let disconnectTimeout: Duration
+    let pairingRemovalTimeout: Duration
     let reconnectDelays: [Duration]
 
     static let production = RemoteSessionConfiguration(
         connectionTimeout: .seconds(12),
         commandTimeout: .seconds(3),
         disconnectTimeout: .seconds(2),
+        pairingRemovalTimeout: .seconds(3),
         reconnectDelays: [.milliseconds(250), .seconds(1), .seconds(2)]
     )
 }
@@ -64,6 +67,7 @@ actor RemoteSessionController {
     private let driver: any RemoteSessionDriving
     private let clock: any RemoteSessionClock
     private let configuration: RemoteSessionConfiguration
+    private let commandSerializer = RemoteSessionCommandSerializer()
 
     private var isForeground = true
     private var lastNetworkReachability: Bool?
@@ -73,6 +77,10 @@ actor RemoteSessionController {
 
     private var connectionID: UUID?
     private var connectionTask: Task<PairedSamsungTV, Error>?
+    private var driverTeardownID: UUID?
+    private var driverTeardownTask: Task<Void, Never>?
+    private var pairingRemovalID: UUID?
+    private var pairingRemovalWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var reconnectTask: Task<Void, Never>?
     private var commandTasks: [UUID: Task<Void, Error>] = [:]
     private var stateContinuations: [UUID: AsyncStream<RemoteSessionState>.Continuation] = [:]
@@ -101,6 +109,15 @@ actor RemoteSessionController {
     }
 
     func connect(to addressText: String) async {
+        do {
+            try await waitForPairingRemoval()
+        } catch is CancellationError {
+            return
+        } catch {
+            transition(to: .failed(.timedOut(.forgetPairing)))
+            return
+        }
+        guard !Task.isCancelled else { return }
         generation = UUID()
         let requestedGeneration = generation
         targetAddressText = addressText
@@ -122,6 +139,7 @@ actor RemoteSessionController {
         let commandID = UUID()
         let commandGeneration = generation
         let driver = driver
+        let commandSerializer = commandSerializer
         let clock = clock
         let timeout = configuration.commandTimeout
         let task = Task {
@@ -130,7 +148,9 @@ actor RemoteSessionController {
                 timeout: timeout,
                 clock: clock
             ) {
-                try await driver.send(command)
+                try await commandSerializer.perform {
+                    try await driver.send(command)
+                }
             }
         }
         commandTasks[commandID] = task
@@ -148,6 +168,11 @@ actor RemoteSessionController {
             commandTasks[commandID] = nil
             let wasCancelled = Task.isCancelled || error is CancellationError
             if generation == commandGeneration, !wasCancelled {
+                let queuedCommands = Array(commandTasks.values)
+                commandTasks.removeAll()
+                for queuedCommand in queuedCommands {
+                    queuedCommand.cancel()
+                }
                 let shouldReconnect: Bool
                 if let timeoutError = error as? RemoteSessionControllerError {
                     transition(to: .failed(.timedOut(timeoutError.operation)))
@@ -179,6 +204,127 @@ actor RemoteSessionController {
         await cancelInFlightWork()
         transition(to: .idle)
         await disconnectDriverWithinLimit()
+    }
+
+    func forgetPairing(for addressText: String) async throws {
+        try await waitForPairingRemoval()
+        try Task.checkCancellation()
+        let removalID = UUID()
+        pairingRemovalID = removalID
+
+        generation = UUID()
+        let removalGeneration = generation
+        targetAddressText = nil
+        reconnectAttempt = 0
+        transition(to: .idle)
+        await cancelInFlightWork()
+        let didFinishTeardown = await disconnectDriverWithinLimit()
+        if Task.isCancelled {
+            finishPairingRemoval(id: removalID)
+            throw CancellationError()
+        }
+        guard didFinishTeardown else {
+            finishPairingRemoval(id: removalID)
+            if generation == removalGeneration {
+                transition(to: .failed(.timedOut(.disconnect)))
+            }
+            throw RemoteSessionControllerError.timedOut(.disconnect)
+        }
+        let driver = driver
+        let clock = clock
+        let timeout = configuration.pairingRemovalTimeout
+        let driverTask = Task {
+            try await driver.forget(addressText: addressText)
+        }
+        Task { [weak self] in
+            _ = await driverTask.result
+            await self?.finishPairingRemoval(id: removalID)
+        }
+
+        do {
+            try await withTaskCancellationHandler {
+                try await RemoteSessionTimeout.run(
+                    operation: .forgetPairing,
+                    timeout: timeout,
+                    clock: clock
+                ) {
+                    try await driverTask.value
+                }
+            } onCancel: {
+                driverTask.cancel()
+            }
+            finishPairingRemoval(id: removalID)
+            try Task.checkCancellation()
+        } catch {
+            let removalIsStillRunning =
+                Task.isCancelled || error is CancellationError
+                || error as? RemoteSessionControllerError == .timedOut(.forgetPairing)
+            if removalIsStillRunning {
+                driverTask.cancel()
+            } else {
+                finishPairingRemoval(id: removalID)
+            }
+            if generation == removalGeneration,
+                !Task.isCancelled,
+                !(error is CancellationError)
+            {
+                if let timeoutError = error as? RemoteSessionControllerError {
+                    transition(to: .failed(.timedOut(timeoutError.operation)))
+                } else {
+                    transition(to: .failed(.unexpected))
+                }
+            }
+            if Task.isCancelled || error is CancellationError {
+                throw CancellationError()
+            }
+            throw error
+        }
+    }
+
+    private func waitForPairingRemoval() async throws {
+        while pairingRemovalID != nil {
+            let clock = clock
+            let timeout = configuration.pairingRemovalTimeout
+            try await RemoteSessionTimeout.run(
+                operation: .forgetPairing,
+                timeout: timeout,
+                clock: clock
+            ) { [weak self] in
+                await self?.waitForActivePairingRemoval()
+            }
+        }
+    }
+
+    private func waitForActivePairingRemoval() async {
+        let waiterID = UUID()
+        let owner = self
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if pairingRemovalID == nil || Task.isCancelled {
+                    continuation.resume()
+                } else {
+                    pairingRemovalWaiters[waiterID] = continuation
+                }
+            }
+        } onCancel: {
+            Task {
+                await owner.cancelPairingRemovalWaiter(id: waiterID)
+            }
+        }
+    }
+
+    private func cancelPairingRemovalWaiter(id: UUID) {
+        pairingRemovalWaiters.removeValue(forKey: id)?.resume()
+    }
+
+    private func finishPairingRemoval(id: UUID) {
+        guard pairingRemovalID == id else { return }
+        pairingRemovalID = nil
+        let waiters = pairingRemovalWaiters.values
+        pairingRemovalWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
     }
 
     func applicationDidEnterBackground() async {
@@ -225,6 +371,12 @@ actor RemoteSessionController {
     }
 
     private func attemptConnection(generation requestedGeneration: UUID, isReconnect: Bool) async {
+        guard await waitForDriverTeardownWithinLimit() else {
+            if generation == requestedGeneration {
+                transition(to: .failed(.timedOut(.disconnect)))
+            }
+            return
+        }
         guard connectionTask == nil,
             generation == requestedGeneration,
             isForeground,
@@ -361,17 +513,64 @@ actor RemoteSessionController {
         }
     }
 
-    private func disconnectDriverWithinLimit() async {
+    @discardableResult
+    private func disconnectDriverWithinLimit() async -> Bool {
+        if let driverTeardownTask, let driverTeardownID {
+            return await waitForDriverTeardownWithinLimit(
+                task: driverTeardownTask,
+                id: driverTeardownID
+            )
+        }
+
         let driver = driver
-        let clock = clock
-        let timeout = configuration.disconnectTimeout
-        _ = try? await RemoteSessionTimeout.run(
-            operation: .disconnect,
-            timeout: timeout,
-            clock: clock
-        ) {
+        let teardownID = UUID()
+        let task = Task {
             await driver.disconnect()
         }
+        driverTeardownID = teardownID
+        driverTeardownTask = task
+        Task { [weak self] in
+            await task.value
+            await self?.finishDriverTeardown(id: teardownID)
+        }
+
+        return await waitForDriverTeardownWithinLimit(task: task, id: teardownID)
+    }
+
+    private func waitForDriverTeardownWithinLimit() async -> Bool {
+        guard let driverTeardownTask, let driverTeardownID else { return true }
+        return await waitForDriverTeardownWithinLimit(
+            task: driverTeardownTask,
+            id: driverTeardownID
+        )
+    }
+
+    private func waitForDriverTeardownWithinLimit(
+        task: Task<Void, Never>,
+        id: UUID
+    ) async -> Bool {
+        let clock = clock
+        let timeout = configuration.disconnectTimeout
+        do {
+            try await RemoteSessionTimeout.run(
+                operation: .disconnect,
+                timeout: timeout,
+                clock: clock
+            ) {
+                await task.value
+            }
+            finishDriverTeardown(id: id)
+            return true
+        } catch {
+            task.cancel()
+            return false
+        }
+    }
+
+    private func finishDriverTeardown(id: UUID) {
+        guard driverTeardownID == id else { return }
+        driverTeardownID = nil
+        driverTeardownTask = nil
     }
 
     private func transition(to newState: RemoteSessionState) {
@@ -403,20 +602,133 @@ private enum RemoteSessionTimeout {
         clock: any RemoteSessionClock,
         work: @escaping @Sendable () async throws -> Value
     ) async throws -> Value {
-        try await withThrowingTaskGroup(of: Value.self) { group in
-            group.addTask {
-                try await work()
+        let race = RemoteSessionTimeoutRace<Value>()
+        let workTask = Task {
+            do {
+                race.resolve(.success(try await work()))
+            } catch {
+                race.resolve(.failure(error))
             }
-            group.addTask {
-                try await clock.sleep(for: timeout)
-                throw RemoteSessionControllerError.timedOut(operation)
-            }
-
-            guard let result = try await group.next() else {
-                throw CancellationError()
-            }
-            group.cancelAll()
-            return result
         }
+        let timeoutTask = Task {
+            do {
+                try await clock.sleep(for: timeout)
+                try Task.checkCancellation()
+                race.resolve(.failure(RemoteSessionControllerError.timedOut(operation)))
+            } catch is CancellationError {
+                return
+            } catch {
+                race.resolve(.failure(error))
+            }
+        }
+
+        defer {
+            workTask.cancel()
+            timeoutTask.cancel()
+        }
+
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                race.install(continuation)
+            }
+        } onCancel: {
+            workTask.cancel()
+            timeoutTask.cancel()
+            race.resolve(.failure(CancellationError()))
+        }
+    }
+}
+
+/// Resolves a timeout race once without structurally awaiting a task that ignores cancellation.
+private final class RemoteSessionTimeoutRace<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Value, Error>?
+    private var pendingResult: Result<Value, Error>?
+    private var isResolved = false
+
+    deinit {}
+
+    func install(_ continuation: CheckedContinuation<Value, Error>) {
+        lock.lock()
+        if let pendingResult {
+            self.pendingResult = nil
+            lock.unlock()
+            continuation.resume(with: pendingResult)
+        } else {
+            self.continuation = continuation
+            lock.unlock()
+        }
+    }
+
+    func resolve(_ result: Result<Value, Error>) {
+        lock.lock()
+        guard !isResolved else {
+            lock.unlock()
+            return
+        }
+        isResolved = true
+        if let continuation {
+            self.continuation = nil
+            lock.unlock()
+            continuation.resume(with: result)
+        } else {
+            pendingResult = result
+            lock.unlock()
+        }
+    }
+}
+
+/// Preserves command submission order while allowing each caller to cancel independently.
+private actor RemoteSessionCommandSerializer {
+    private struct Waiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Bool, Never>
+    }
+
+    private var isExecuting = false
+    private var waiters: [Waiter] = []
+
+    func perform(_ operation: @Sendable () async throws -> Void) async throws {
+        try await acquire()
+        defer { release() }
+        try Task.checkCancellation()
+        try await operation()
+    }
+
+    private func acquire() async throws {
+        try Task.checkCancellation()
+        if !isExecuting {
+            isExecuting = true
+            return
+        }
+
+        let waiterID = UUID()
+        let acquired = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume(returning: false)
+                } else {
+                    waiters.append(Waiter(id: waiterID, continuation: continuation))
+                }
+            }
+        } onCancel: {
+            Task {
+                await self.cancelWaiter(waiterID)
+            }
+        }
+        guard acquired else { throw CancellationError() }
+    }
+
+    private func release() {
+        if waiters.isEmpty {
+            isExecuting = false
+        } else {
+            waiters.removeFirst().continuation.resume(returning: true)
+        }
+    }
+
+    private func cancelWaiter(_ waiterID: UUID) {
+        guard let index = waiters.firstIndex(where: { $0.id == waiterID }) else { return }
+        waiters.remove(at: index).continuation.resume(returning: false)
     }
 }

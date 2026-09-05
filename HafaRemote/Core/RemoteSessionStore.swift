@@ -6,6 +6,7 @@ import Observation
 @Observable
 final class RemoteSessionStore {
     private(set) var state: RemoteSessionState = .idle
+    private(set) var lastConnectedTV: PairedSamsungTV?
 
     private let controller: RemoteSessionController
     private let stateSubscription = RemoteSessionStateSubscription()
@@ -18,6 +19,11 @@ final class RemoteSessionStore {
                 for await state in states {
                     guard !Task.isCancelled else { return }
                     self?.state = state
+                    if case .connected(let tv) = state {
+                        self?.lastConnectedTV = tv
+                    } else if case .idle = state {
+                        self?.lastConnectedTV = nil
+                    }
                 }
             }
         )
@@ -51,6 +57,12 @@ final class RemoteSessionStore {
 
     func disconnect() async {
         await controller.disconnect()
+        lastConnectedTV = nil
+    }
+
+    func forgetPairing(for addressText: String) async throws {
+        try await controller.forgetPairing(for: addressText)
+        lastConnectedTV = nil
     }
 
     func applicationDidEnterBackground() async {
