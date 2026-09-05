@@ -60,6 +60,10 @@ struct RemoteControlView: View {
                 argument: "The TV connection is offline. Recovery controls are now available."
             )
         }
+        .onChange(of: isWakingTV) { _, isWakingTV in
+            guard isWakingTV else { return }
+            UIAccessibility.post(notification: .announcement, argument: recoveryMessage)
+        }
         .alert(
             "Turn off \(tvName)?",
             isPresented: $isConfirmingPowerOff

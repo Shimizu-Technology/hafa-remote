@@ -60,6 +60,37 @@ final class RemoteSessionStore {
         await controller.connect(to: addressText)
     }
 
+    /// Starts one connection sequence and waits for its eventual connected state.
+    func connectAndWait(
+        to addressText: String,
+        timeout: Duration
+    ) async throws -> PairedSamsungTV {
+        let states = await controller.states()
+
+        return try await withThrowingTaskGroup(of: PairedSamsungTV.self) { group in
+            group.addTask {
+                for await state in states {
+                    try Task.checkCancellation()
+                    if case .connected(let tv) = state {
+                        return tv
+                    }
+                }
+                throw CancellationError()
+            }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                throw RemoteSessionControllerError.timedOut(.connect)
+            }
+
+            await connect(to: addressText)
+            guard let connectedTV = try await group.next() else {
+                throw RemoteSessionControllerError.timedOut(.connect)
+            }
+            group.cancelAll()
+            return connectedTV
+        }
+    }
+
     func send(_ command: RemoteCommand) async throws {
         try await controller.send(command)
     }

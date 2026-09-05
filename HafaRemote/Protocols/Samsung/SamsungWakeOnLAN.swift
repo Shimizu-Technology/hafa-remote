@@ -74,12 +74,16 @@ protocol SamsungTVWaking: Sendable {
 actor SamsungWakeOnLANService: SamsungTVWaking {
     private static let discardPort: UInt16 = 9
     private static let repetitionCount = 3
-    private static let sendTimeout: Duration = .seconds(2)
 
     private let sender: any SamsungWakePacketSending
+    private let sendTimeout: Duration
 
-    init(sender: any SamsungWakePacketSending = NetworkSamsungWakePacketSender()) {
+    init(
+        sender: any SamsungWakePacketSending = NetworkSamsungWakePacketSender(),
+        sendTimeout: Duration = .seconds(2)
+    ) {
         self.sender = sender
+        self.sendTimeout = sendTimeout
     }
 
     func wake(_ macAddress: SamsungMACAddress, at address: PrivateIPv4Address) async throws {
@@ -110,12 +114,13 @@ actor SamsungWakeOnLANService: SamsungTVWaking {
 
     private func sendWithinTimeout(_ packet: Data, to address: PrivateIPv4Address) async throws {
         let sender = sender
+        let sendTimeout = sendTimeout
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 try await sender.send(packet, to: address, port: Self.discardPort)
             }
             group.addTask {
-                try await Task.sleep(for: Self.sendTimeout)
+                try await Task.sleep(for: sendTimeout)
                 throw SamsungWakeOnLANError.signalNotSent
             }
             _ = try await group.next()

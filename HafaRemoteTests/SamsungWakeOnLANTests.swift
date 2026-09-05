@@ -70,6 +70,40 @@ struct SamsungWakeOnLANTests {
         #expect(SamsungWakeOnLANError.signalNotSent.errorDescription?.contains("192") == false)
         #expect(SamsungWakeOnLANError.signalNotSent.errorDescription?.contains("02:00") == false)
     }
+
+    @Test("Cancelling wake propagates cancellation")
+    func cancellationPropagates() async throws {
+        let sender = SuspendedWakePacketSender()
+        let service = SamsungWakeOnLANService(sender: sender)
+        let macAddress = try SamsungMACAddress("02:00:5E:10:00:01")
+        let address = try PrivateIPv4Address("192.168.10.25")
+        var starts = sender.starts.makeAsyncIterator()
+
+        let wake = Task {
+            try await service.wake(macAddress, at: address)
+        }
+        _ = await starts.next()
+        wake.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            try await wake.value
+        }
+    }
+
+    @Test("A stalled send is bounded by the delivery timeout")
+    func stalledSendTimesOut() async throws {
+        let sender = SuspendedWakePacketSender()
+        let service = SamsungWakeOnLANService(
+            sender: sender,
+            sendTimeout: .milliseconds(20)
+        )
+        let macAddress = try SamsungMACAddress("02:00:5E:10:00:01")
+        let address = try PrivateIPv4Address("192.168.10.25")
+
+        await #expect(throws: SamsungWakeOnLANError.signalNotSent) {
+            try await service.wake(macAddress, at: address)
+        }
+    }
 }
 
 private actor RecordingWakePacketSender: SamsungWakePacketSending {
@@ -89,6 +123,31 @@ private actor RecordingWakePacketSender: SamsungWakePacketSending {
 private struct FailingWakePacketSender: SamsungWakePacketSending {
     func send(_ packet: Data, to address: PrivateIPv4Address, port: UInt16) throws {
         throw SyntheticWakeError.failed
+    }
+}
+
+private actor SuspendedWakePacketSender: SamsungWakePacketSending {
+    nonisolated let starts: AsyncStream<Void>
+
+    private let startContinuation: AsyncStream<Void>.Continuation
+    private let releases: AsyncStream<Void>
+    private let releaseContinuation: AsyncStream<Void>.Continuation
+
+    init() {
+        (starts, startContinuation) = AsyncStream.makeStream()
+        (releases, releaseContinuation) = AsyncStream.makeStream()
+    }
+
+    func release() {
+        releaseContinuation.yield()
+    }
+
+    func send(_ packet: Data, to address: PrivateIPv4Address, port: UInt16) async throws {
+        startContinuation.yield()
+        for await _ in releases {
+            break
+        }
+        try Task.checkCancellation()
     }
 }
 

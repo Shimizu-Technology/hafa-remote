@@ -23,6 +23,47 @@ struct RemoteSessionControllerTests {
     }
 
     @MainActor
+    @Test("The observable store waits for the reconnect sequence to succeed")
+    func storeWaitsForEventualConnection() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let driver = MockRemoteSessionDriver(
+            outcomes: [
+                .failure(.offline),
+                .success(tv: tv, announcesPairing: false),
+            ]
+        )
+        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+
+        let connectedTV = try await store.connectAndWait(
+            to: tv.address.rawValue,
+            timeout: .seconds(2)
+        )
+
+        #expect(connectedTV == tv)
+        #expect(await driver.connectCallCount == 2)
+    }
+
+    @MainActor
+    @Test("The observable store bounds an unsuccessful connection sequence")
+    func storeConnectionWaitTimesOut() async throws {
+        let driver = MockRemoteSessionDriver(outcomes: [.failure(.offline)])
+        let controller = RemoteSessionController(
+            driver: driver,
+            configuration: testConfiguration(reconnectDelays: [])
+        )
+        let store = RemoteSessionStore(controller: controller)
+
+        await #expect(throws: RemoteSessionControllerError.timedOut(.connect)) {
+            try await store.connectAndWait(
+                to: "192.168.10.20",
+                timeout: .milliseconds(20)
+            )
+        }
+        #expect(await driver.connectCallCount == 1)
+    }
+
+    @MainActor
     @Test("The observable store clears its remembered TV on disconnect and forget")
     func storeClearsRememberedTV() async throws {
         let tv = try testTV(

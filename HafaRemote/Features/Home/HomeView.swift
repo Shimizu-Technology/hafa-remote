@@ -274,9 +274,23 @@ struct HomeView: View {
         }
 
         do {
-            try await wakeService.wake(macAddress, at: tv.address)
-            try await Task.sleep(for: .seconds(2))
-            await session.connect(to: tv.address.rawValue)
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    try await wakeService.wake(macAddress, at: tv.address)
+                    try await Task.sleep(for: .seconds(2))
+                    _ = try await session.connectAndWait(
+                        to: tv.address.rawValue,
+                        timeout: .seconds(30)
+                    )
+                }
+                group.addTask {
+                    try await Task.sleep(for: .seconds(30))
+                    throw RemoteSessionControllerError.timedOut(.connect)
+                }
+
+                _ = try await group.next()
+                group.cancelAll()
+            }
         } catch {
             if pendingWakeAttempt?.id == attempt.id {
                 pendingWakeAttempt = nil

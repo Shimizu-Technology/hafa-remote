@@ -30,7 +30,7 @@ The canonical verification command is:
 
 Simulator checks prove interface and deterministic state behavior. Pairing, TV certificate trust, command delivery, and power behavior require a physical iPhone and Samsung TV.
 
-The repository is public so its hosted macOS workflow can run on pull requests without paid private-repository Actions minutes. `main` is protected by the same active `Protect Main` ruleset used across Shimizu Technology: changes require a pull request and cannot force-push or delete the branch. Every PR must record a passing local gate and an exact-head CodeRabbit approval before merge.
+The repository is public so its hosted macOS workflow can run on pull requests without paid private-repository Actions minutes. GitHub's active `Protect Main` ruleset enforces pull-request-only changes and blocks force-pushes and branch deletion. Before merging, the maintainer separately verifies a passing hosted workflow, a passing local gate, exact-head CodeRabbit approval, and zero unresolved review threads.
 
 ## Distribution boundary
 

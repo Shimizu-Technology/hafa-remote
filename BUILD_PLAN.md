@@ -34,7 +34,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** None
 
-- [x] Create the public `hafa-remote` GitHub repository under Shimizu Technology with protected `main`.
+- [x] Create the public `hafa-remote` GitHub repository under Shimizu Technology with `main` protected by required pull requests and blocked deletion/non-fast-forward updates.
 - [x] Create the SwiftUI iPhone app, unit-test target, and UI-test target in the existing Shimizu Apple developer team.
 - [x] Set product name to **Hafa Remote**, bundle ID to `com.shimizutechnology.hafaremote`, Swift 6 language mode, and minimum iOS 18.4.
 - [x] Add `AGENTS.md`, `README.md`, `PRD.md`, `BUILD_PLAN.md`, `.gitignore`, and `scripts/gate.sh`.
