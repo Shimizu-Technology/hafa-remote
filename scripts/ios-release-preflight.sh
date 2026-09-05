@@ -104,7 +104,7 @@ if [[ "$local_network_copy" != *"supported TVs"* ]]; then
 fi
 
 bonjour_services="$(plutil -extract NSBonjourServices json -o - "$info_plist")"
-if [[ "$bonjour_services" != '["_androidtvremote2._tcp","_samsungmsf._tcp"]' ]]; then
+if [[ "$bonjour_services" != '["_androidtvremote2._tcp","_samsungmsf._tcp","_viziocast._tcp"]' ]]; then
   echo "Bonjour declarations must contain only the verified Sony/Google TV and Samsung services." >&2
   exit 1
 fi

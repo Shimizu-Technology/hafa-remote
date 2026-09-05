@@ -30,6 +30,7 @@
 	<array>
 		<string>_androidtvremote2._tcp</string>
 		<string>_samsungmsf._tcp</string>
+		<string>_viziocast._tcp</string>
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>

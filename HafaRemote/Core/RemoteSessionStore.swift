@@ -47,7 +47,10 @@ final class RemoteSessionStore {
         )
         let driver = MultiBrandSessionDriver(
             samsung: samsung,
-            sony: SonyPairingCoordinator()
+            sony: SonyPairingCoordinator(),
+            vizio: VizioPairingCoordinator(
+                credentialStore: KeychainVizioPairingCredentialStore()
+            )
         )
         self.init(controller: RemoteSessionController(driver: driver))
     }

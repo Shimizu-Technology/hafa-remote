@@ -21,7 +21,10 @@ struct HafaRemoteTests {
         let bonjourServices = try #require(
             bundle.object(forInfoDictionaryKey: "NSBonjourServices") as? [String]
         )
-        #expect(bonjourServices == ["_androidtvremote2._tcp", "_samsungmsf._tcp"])
+        #expect(
+            bonjourServices
+                == ["_androidtvremote2._tcp", "_samsungmsf._tcp", "_viziocast._tcp"]
+        )
     }
 
     @MainActor

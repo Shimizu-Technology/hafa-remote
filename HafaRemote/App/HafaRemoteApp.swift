@@ -35,6 +35,19 @@ struct HafaRemoteApp: App {
                             backend: TVDiscoveryFixtureBackend(fixture: .sonyTelevision)
                         )
                     )
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-vizio-pairing") {
+                    HomeView(
+                        session: RemoteSessionStore(
+                            controller: RemoteSessionController(driver: VizioPairingUIFixtureDriver())
+                        ),
+                        discovery: TVDiscoveryStore(
+                            backend: TVDiscoveryFixtureBackend(fixture: .vizioTelevision)
+                        )
+                    )
+                } else if ProcessInfo.processInfo.arguments.contains(
+                    "-ui-testing-vizio-pairing-repair"
+                ) {
+                    VizioPairingRepairUITestHarness()
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-discovery-empty") {
                     HomeView(
                         discovery: TVDiscoveryStore(
@@ -58,3 +71,40 @@ struct HafaRemoteApp: App {
         .modelContainer(for: SavedTV.self, inMemory: usesInMemoryStore)
     }
 }
+
+#if DEBUG
+    private struct VizioPairingRepairUITestHarness: View {
+        private let target: TVConnectionTarget
+        @State private var session: RemoteSessionStore
+
+        init() {
+            guard let address = try? PrivateIPv4Address("192.168.10.52") else {
+                preconditionFailure("The fixed UI-test address must remain valid")
+            }
+            target = TVConnectionTarget(
+                brand: .vizio,
+                reportedDeviceID: "synthetic-vizio-serial",
+                address: address,
+                controlPort: 7345
+            )
+            _session = State(
+                initialValue: RemoteSessionStore(
+                    controller: RemoteSessionController(
+                        driver: VizioPairingRepairUIFixtureDriver(),
+                        initialState: .savedPairingRejected
+                    )
+                )
+            )
+        }
+
+        var body: some View {
+            TVSetupView(
+                session: session,
+                initialTarget: target,
+                discovery: TVDiscoveryStore(
+                    backend: TVDiscoveryFixtureBackend(fixture: .noResults)
+                )
+            )
+        }
+    }
+#endif

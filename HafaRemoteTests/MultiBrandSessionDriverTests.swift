@@ -9,7 +9,8 @@ struct MultiBrandSessionDriverTests {
     func routesSonyPairingAndCommands() async throws {
         let samsung = MultiBrandSamsungFixture()
         let sony = MultiBrandSonyFixture()
-        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony)
+        let vizio = MultiBrandVizioFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony, vizio: vizio)
         let target = TVConnectionTarget(
             brand: .sony,
             reportedDeviceID: "synthetic-candidate",
@@ -32,6 +33,7 @@ struct MultiBrandSessionDriverTests {
         #expect(await sony.receivedCode == "A1B2C3")
         #expect(await sony.commands == [.volumeUp])
         #expect(await samsung.commands.isEmpty)
+        #expect(await vizio.commands.isEmpty)
     }
 
     @Test("A manual Samsung connection cancels a pending Sony code request")
@@ -39,7 +41,8 @@ struct MultiBrandSessionDriverTests {
     func manualSamsungConnectionCancelsSonyPairing() async throws {
         let samsung = MultiBrandSamsungFixture()
         let sony = MultiBrandSonyFixture()
-        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony)
+        let vizio = MultiBrandVizioFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony, vizio: vizio)
         let sonyTarget = TVConnectionTarget(
             brand: .sony,
             reportedDeviceID: "synthetic-sony",
@@ -69,7 +72,8 @@ struct MultiBrandSessionDriverTests {
     func forgetUsesSavedTVBrand() async throws {
         let samsung = MultiBrandSamsungFixture()
         let sony = MultiBrandSonyFixture()
-        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony)
+        let vizio = MultiBrandVizioFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony, vizio: vizio)
         let reportedDeviceID = String(repeating: "a", count: 64)
         let sonyTarget = TVConnectionTarget(
             brand: .sony,
@@ -102,7 +106,8 @@ struct MultiBrandSessionDriverTests {
     func routesSamsungCommands() async throws {
         let samsung = MultiBrandSamsungFixture()
         let sony = MultiBrandSonyFixture()
-        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony)
+        let vizio = MultiBrandVizioFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony, vizio: vizio)
         let target = TVConnectionTarget(
             brand: .samsung,
             reportedDeviceID: "synthetic-samsung",
@@ -115,11 +120,137 @@ struct MultiBrandSessionDriverTests {
 
         #expect(await samsung.commands == [.home])
         #expect(await sony.commands.isEmpty)
+        #expect(await vizio.commands.isEmpty)
+    }
+
+    @Test("Vizio selection requests a PIN and routes commands only to Vizio")
+    @MainActor
+    func routesVizioPairingAndCommands() async throws {
+        let samsung = MultiBrandSamsungFixture()
+        let sony = MultiBrandSonyFixture()
+        let vizio = MultiBrandVizioFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony, vizio: vizio)
+        let target = TVConnectionTarget(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-candidate",
+            address: try PrivateIPv4Address("192.168.10.52"),
+            controlPort: 7345
+        )
+        let requestSignal = PairingRequestSignal()
+        let connection = Task {
+            try await driver.connect(to: target) {
+                await requestSignal.signal()
+            }
+        }
+
+        try await requestSignal.wait()
+        try await driver.submitPairingCode("1234")
+        let television = try await connection.value
+        try await driver.send(.select)
+
+        #expect(television.brand == .vizio)
+        #expect(await vizio.receivedPIN == "1234")
+        #expect(await vizio.commands == [.select])
+        #expect(await samsung.commands.isEmpty)
+        #expect(await sony.commands.isEmpty)
+    }
+
+    @Test("Switching targets cancels a pending Vizio PIN and leaves Samsung active")
+    @MainActor
+    func switchingToSamsungCancelsVizioPairing() async throws {
+        let samsung = MultiBrandSamsungFixture()
+        let sony = MultiBrandSonyFixture()
+        let vizio = MultiBrandVizioFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony, vizio: vizio)
+        let vizioTarget = TVConnectionTarget(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-vizio",
+            address: try PrivateIPv4Address("192.168.10.52"),
+            controlPort: 7345
+        )
+        let samsungTarget = TVConnectionTarget(
+            brand: .samsung,
+            reportedDeviceID: "synthetic-samsung",
+            address: try PrivateIPv4Address("192.168.10.51"),
+            controlPort: 8002
+        )
+        let requestSignal = PairingRequestSignal()
+        let vizioConnection = Task {
+            try await driver.connect(to: vizioTarget) {
+                await requestSignal.signal()
+            }
+        }
+        try await requestSignal.wait()
+
+        _ = try await driver.connect(to: samsungTarget) {}
+
+        await #expect(throws: CancellationError.self) {
+            try await vizioConnection.value
+        }
+        await #expect(throws: MultiBrandSessionDriverError.pairingCodeNotExpected) {
+            try await driver.submitPairingCode("1234")
+        }
+        try await driver.send(.home)
+        #expect(await samsung.commands == [.home])
+        #expect(await vizio.commands.isEmpty)
+    }
+
+    @Test("Vizio pairing removal stays brand-scoped after a Samsung connection")
+    @MainActor
+    func forgetUsesSavedVizioBrand() async throws {
+        let samsung = MultiBrandSamsungFixture()
+        let sony = MultiBrandSonyFixture()
+        let vizio = MultiBrandVizioFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony, vizio: vizio)
+        let target = TVConnectionTarget(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-vizio-candidate",
+            address: try PrivateIPv4Address("192.168.10.52"),
+            controlPort: 7345
+        )
+        let requestSignal = PairingRequestSignal()
+        let connection = Task {
+            try await driver.connect(to: target) {
+                await requestSignal.signal()
+            }
+        }
+        try await requestSignal.wait()
+        try await driver.submitPairingCode("1234")
+        let television = try await connection.value
+        _ = try await driver.connect(addressText: "192.168.10.51") {}
+
+        try await driver.forget(
+            addressText: target.address.rawValue,
+            reportedDeviceID: television.reportedDeviceID,
+            brand: .vizio
+        )
+
+        #expect(await vizio.forgottenDeviceIDs == [television.reportedDeviceID])
+        #expect(await samsung.forgottenAddresses.isEmpty)
+        #expect(await sony.forgottenDeviceIDs.isEmpty)
+    }
+
+    @Test("Vizio pairing removal requires a stable reported identity")
+    @MainActor
+    func vizioForgetRequiresStableIdentity() async {
+        let samsung = MultiBrandSamsungFixture()
+        let sony = MultiBrandSonyFixture()
+        let vizio = MultiBrandVizioFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony, vizio: vizio)
+
+        await #expect(throws: MultiBrandSessionDriverError.missingStableIdentity) {
+            try await driver.forget(
+                addressText: "192.168.10.52",
+                reportedDeviceID: nil,
+                brand: .vizio
+            )
+        }
+        #expect(await vizio.forgottenDeviceIDs.isEmpty)
     }
 
     @Test("Cancelling a pending Sony code request releases its continuation")
     func cancelsPairingCodeWait() async {
-        let broker = SonyPairingCodeBroker()
+        let broker = PairingCodeBroker()
         await broker.prepare()
         let waiting = Task { try await broker.waitForCode() }
         await Task.yield()
@@ -227,4 +358,36 @@ private actor PairingRequestSignal {
 private enum PairingRequestSignalError: Error {
     case closed
     case timedOut
+}
+
+private actor MultiBrandVizioFixture: VizioPairingCoordinating {
+    private(set) var commands: [RemoteCommand] = []
+    private(set) var receivedPIN: String?
+    private(set) var forgottenDeviceIDs: [String] = []
+
+    func pair(
+        target: TVConnectionTarget,
+        pinProvider: @escaping VizioPINProvider
+    ) async throws -> ConnectedTV {
+        receivedPIN = try await pinProvider(
+            VizioPairingChallenge(challengeType: 1, requestToken: 42)
+        )
+        return ConnectedTV(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-vizio-serial",
+            address: target.address,
+            controlPort: 7345,
+            modelName: "Synthetic Vizio",
+            firmwareVersion: nil
+        )
+    }
+
+    func send(_ command: RemoteCommand) {
+        commands.append(command)
+    }
+
+    func forget(reportedDeviceID: String) {
+        forgottenDeviceIDs.append(reportedDeviceID)
+    }
+    func disconnect() {}
 }

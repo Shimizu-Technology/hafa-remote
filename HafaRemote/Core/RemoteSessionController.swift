@@ -115,7 +115,7 @@ enum RemoteSessionControllerError: Error, Equatable, Sendable {
 
 /// Owns the single driver session, lifecycle cancellation, and bounded reconnect policy.
 actor RemoteSessionController {
-    private(set) var state: RemoteSessionState = .idle
+    private(set) var state: RemoteSessionState
 
     private let driver: any RemoteSessionDriving
     private let clock: any RemoteSessionClock
@@ -142,11 +142,13 @@ actor RemoteSessionController {
     init(
         driver: any RemoteSessionDriving,
         clock: any RemoteSessionClock = ContinuousRemoteSessionClock(),
-        configuration: RemoteSessionConfiguration = .production
+        configuration: RemoteSessionConfiguration = .production,
+        initialState: RemoteSessionState = .idle
     ) {
         self.driver = driver
         self.clock = clock
         self.configuration = configuration
+        state = initialState
     }
 
     func states() -> AsyncStream<RemoteSessionState> {
@@ -579,8 +581,16 @@ actor RemoteSessionController {
             transition(to: .certificateChanged)
         } else if error as? SonyPairingCoordinatorError == .invalidPairingCode
             || error as? SonyPairingCoordinatorError == .pairingRejected
+            || error as? VizioPairingCoordinatorError == .pinRejected
         {
             transition(to: .denied)
+        } else if error as? VizioPairingCoordinatorError == .savedPairingRejected {
+            transition(to: .savedPairingRejected)
+        } else if error as? VizioPairingCoordinatorError == .certificateChanged
+            || error as? VizioPairingCoordinatorError == .deviceIdentityChanged
+            || error as? VizioHTTPSClientError == .certificateChanged
+        {
+            transition(to: .certificateChanged)
         } else if Self.isUnsupportedError(error) {
             transition(to: .unsupported)
         } else if Self.isOfflineError(error) {
@@ -719,6 +729,7 @@ actor RemoteSessionController {
     private static func isUnsupportedError(_ error: Error) -> Bool {
         error as? SamsungPairingCoordinatorError == .unsupportedTokenAuthentication
             || error as? SonyPairingCoordinatorError == .unsupportedDevice
+            || error as? VizioPairingCoordinatorError == .invalidTarget
             || error as? MultiBrandSessionDriverError == .unsupportedBrand
     }
 
@@ -728,6 +739,9 @@ actor RemoteSessionController {
         }
         if let error = error as? SonyTLSChannelError {
             return error == .unavailable || error == .connectionClosed
+        }
+        if let error = error as? VizioHTTPSClientError {
+            return error == .unavailable || error == .notConnected
         }
         return false
     }

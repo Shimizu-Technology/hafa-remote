@@ -78,6 +78,9 @@ struct HomeView: View {
                 initialReportedDeviceID:
                     session.lastConnectedTV?.reportedDeviceID
                     ?? savedTVs.first?.reportedDeviceID,
+                initialTarget:
+                    session.lastConnectedTV?.connectionTarget
+                    ?? savedTVs.first?.connectionTarget,
                 discovery: discovery
             )
         }

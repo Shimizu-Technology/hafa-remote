@@ -106,6 +106,73 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertFalse(app.buttons["remote-keyboard"].exists)
     }
 
+    /// Vizio discovery stays address-free and uses the four-digit PIN shown on the TV.
+    @MainActor
+    func testVizioPairingPINFlow() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-vizio-pairing")
+        app.launch()
+
+        let addButton = app.buttons["addTVButton"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+        addButton.tap()
+
+        let discoveredTV = app.buttons["discoveredTVButton"]
+        XCTAssertTrue(discoveredTV.waitForExistence(timeout: 2))
+        XCTAssertTrue(discoveredTV.label.contains("Vizio"))
+        discoveredTV.tap()
+
+        let codeField = app.textFields["vizioPairingCodeField"]
+        XCTAssertTrue(codeField.waitForExistence(timeout: 2))
+        let submit = app.buttons["submitVizioPairingCodeButton"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 2))
+        XCTAssertFalse(submit.isEnabled)
+
+        codeField.tap()
+        codeField.typeText("1234")
+        XCTAssertTrue(submit.isEnabled)
+        submit.tap()
+
+        let connectionStatus = app.staticTexts["remoteConnectionStatus"]
+        XCTAssertTrue(connectionStatus.waitForExistence(timeout: 5))
+        XCTAssertEqual(connectionStatus.label, "Connected")
+        XCTAssertFalse(app.buttons["remote-keyboard"].exists)
+    }
+
+    /// Repairing a rejected saved Vizio pairing preserves its brand-specific PIN flow.
+    @MainActor
+    func testVizioSavedPairingRepairPreservesPINFlow() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-vizio-pairing-repair")
+        app.launch()
+
+        let forget = app.buttons["forgetPairingButton"]
+        XCTAssertTrue(forget.waitForExistence(timeout: 5))
+        for _ in 0..<3 where !forget.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(forget.isHittable)
+        forget.tap()
+        XCTAssertTrue(forget.waitForNonExistence(timeout: 3))
+
+        let codeField = app.textFields["vizioPairingCodeField"]
+        for _ in 0..<3 where !codeField.exists {
+            app.swipeDown()
+        }
+        XCTAssertTrue(codeField.waitForExistence(timeout: 3))
+        codeField.tap()
+        codeField.typeText("0000")
+
+        let submit = app.buttons["submitVizioPairingCodeButton"]
+        XCTAssertTrue(submit.waitForExistence(timeout: 2))
+        XCTAssertTrue(submit.isEnabled)
+        submit.tap()
+
+        let error = app.staticTexts["setupErrorMessage"]
+        XCTAssertTrue(error.waitForExistence(timeout: 3))
+        XCTAssertTrue(error.label.contains("Vizio PIN was not accepted"))
+    }
+
     /// Runs separately from the deterministic gate against the powered-on household TV.
     @MainActor
     func testHardwareDiscoveryFindsSamsungTV() throws {
