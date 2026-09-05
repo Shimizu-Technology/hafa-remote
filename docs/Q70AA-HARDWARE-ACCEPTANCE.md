@@ -37,12 +37,22 @@ fingerprints, Wi-Fi names, or typed private content.
 
 ## HR-005 lifecycle
 
+### Internal TestFlight acceptance
+
 - [ ] Ten background/lock cycles completed
-- Healthy reconnects within two seconds: __ / 10 (at least 9 / 10 required; 8 or fewer blocks release)
+- Healthy background/lock reconnects within two seconds: __ / 10 (at least 9 / 10 required;
+  8 or fewer blocks internal TestFlight)
 - [ ] TV restart recovery without manual re-pairing
 - [ ] App force-quit/relaunch recovery without manual re-pairing
 - [ ] Wi-Fi loss and recovery without losing the saved pairing token
 - [ ] Pairing-token invalidation rejects the old token and completes re-pairing
+- Notes:
+
+### Public-review evidence
+
+- [ ] Twenty foreground reconnect cycles completed
+- Foreground reconnects without re-pairing: __ / 20 (at least 19 / 20 required)
+- Healthy foreground reconnects normally completed within two seconds
 - Notes:
 
 ## HR-006 text and power truth
