@@ -18,4 +18,57 @@ struct HafaRemoteTests {
         )
         #expect(localNetworkCopy.contains("Samsung TVs"))
     }
+
+    @MainActor
+    @Test("Dismissing text input cancels its pending delivery")
+    func textInputDismissalCancelsPendingDelivery() async throws {
+        let controller = SamsungTextDeliveryController()
+        let probe = SuspendedTextDeliveryProbe()
+        let input = try RemoteTextInput("Håfa")
+
+        controller.send(input) { input in
+            try await probe.suspend(input)
+        }
+
+        #expect(await probe.nextStartedCharacterCount() == 4)
+        #expect(controller.isSending)
+
+        controller.cancel()
+
+        #expect(await probe.nextCancellation() == true)
+        #expect(!controller.isSending)
+        #expect(controller.result == nil)
+    }
+}
+
+private actor SuspendedTextDeliveryProbe {
+    private let started: AsyncStream<Int>
+    private let startedContinuation: AsyncStream<Int>.Continuation
+    private let cancellations: AsyncStream<Bool>
+    private let cancellationContinuation: AsyncStream<Bool>.Continuation
+
+    init() {
+        (started, startedContinuation) = AsyncStream.makeStream()
+        (cancellations, cancellationContinuation) = AsyncStream.makeStream()
+    }
+
+    func suspend(_ input: RemoteTextInput) async throws {
+        startedContinuation.yield(input.value.count)
+        do {
+            try await Task.sleep(for: .seconds(60))
+        } catch is CancellationError {
+            cancellationContinuation.yield(true)
+            throw CancellationError()
+        }
+    }
+
+    func nextStartedCharacterCount() async -> Int? {
+        var iterator = started.makeAsyncIterator()
+        return await iterator.next()
+    }
+
+    func nextCancellation() async -> Bool? {
+        var iterator = cancellations.makeAsyncIterator()
+        return await iterator.next()
+    }
 }
