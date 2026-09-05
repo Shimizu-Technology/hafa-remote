@@ -45,6 +45,11 @@
 		C11000000000000000000006 /* VizioHTTPSClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12000000000000000000006 /* VizioHTTPSClient.swift */; };
 		C11000000000000000000007 /* VizioPairingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12000000000000000000007 /* VizioPairingCoordinator.swift */; };
 		C11000000000000000000008 /* VizioPairingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12000000000000000000008 /* VizioPairingCoordinatorTests.swift */; };
+		B11000000000000000000005 /* SonyTLSChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B12000000000000000000005 /* SonyTLSChannel.swift */; };
+		B11000000000000000000006 /* SonyTLSChannelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B12000000000000000000006 /* SonyTLSChannelTests.swift */; };
+		B11000000000000000000007 /* SonyPairingCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = B12000000000000000000007 /* SonyPairingCredential.swift */; };
+		B11000000000000000000008 /* SonyPairingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B12000000000000000000008 /* SonyPairingCoordinator.swift */; };
+		B11000000000000000000009 /* SonyPairingCredentialTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B12000000000000000000009 /* SonyPairingCredentialTests.swift */; };
 		8F86632B2E9ADC46C98BFB1C /* TVDriver.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44405F91DE5FC74EFF634D3 /* TVDriver.swift */; };
 		9CABF29420764B69CE52ED09 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9C450D22C7D445E62710FF5D /* Foundation.framework */; };
 		AF670AF8B9F1EB53EEAF349B /* HafaRemoteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F11E2A820EC89F7AD933554 /* HafaRemoteApp.swift */; };
@@ -113,6 +118,11 @@
 		C12000000000000000000006 /* VizioHTTPSClient.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VizioHTTPSClient.swift; sourceTree = "<group>"; };
 		C12000000000000000000007 /* VizioPairingCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VizioPairingCoordinator.swift; sourceTree = "<group>"; };
 		C12000000000000000000008 /* VizioPairingCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VizioPairingCoordinatorTests.swift; sourceTree = "<group>"; };
+		B12000000000000000000005 /* SonyTLSChannel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SonyTLSChannel.swift; sourceTree = "<group>"; };
+		B12000000000000000000006 /* SonyTLSChannelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SonyTLSChannelTests.swift; sourceTree = "<group>"; };
+		B12000000000000000000007 /* SonyPairingCredential.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SonyPairingCredential.swift; sourceTree = "<group>"; };
+		B12000000000000000000008 /* SonyPairingCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SonyPairingCoordinator.swift; sourceTree = "<group>"; };
+		B12000000000000000000009 /* SonyPairingCredentialTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SonyPairingCredentialTests.swift; sourceTree = "<group>"; };
 		7A7000110000000000000001 /* SamsungDiscovery.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDiscovery.swift; sourceTree = "<group>"; };
 		7A7000120000000000000002 /* SamsungDiscoveryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungDiscoveryTests.swift; sourceTree = "<group>"; };
 		9660B0481989B57E29327545 /* SamsungCommandTransport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungCommandTransport.swift; sourceTree = "<group>"; };
@@ -188,7 +198,10 @@
 			isa = PBXGroup;
 			children = (
 				B12000000000000000000003 /* SonyClientIdentity.swift */,
+				B12000000000000000000007 /* SonyPairingCredential.swift */,
+				B12000000000000000000008 /* SonyPairingCoordinator.swift */,
 				B12000000000000000000001 /* SonyProtocolCodec.swift */,
+				B12000000000000000000005 /* SonyTLSChannel.swift */,
 			);
 			name = Sony;
 			path = Sony;
@@ -278,9 +291,11 @@
 				275B2BC669B6814751000013 /* SavedTVTests.swift */,
 				A62000000000000000000002 /* SamsungWakeOnLANTests.swift */,
 				B12000000000000000000004 /* SonyClientIdentityTests.swift */,
+				B12000000000000000000009 /* SonyPairingCredentialTests.swift */,
 				B12000000000000000000002 /* SonyProtocolCodecTests.swift */,
 				C12000000000000000000004 /* VizioProtocolCodecTests.swift */,
 				C12000000000000000000008 /* VizioPairingCoordinatorTests.swift */,
+				B12000000000000000000006 /* SonyTLSChannelTests.swift */,
 			);
 			name = HafaRemoteTests;
 			path = HafaRemoteTests;
@@ -507,9 +522,11 @@
 				275B2BC669B6814751000003 /* SavedTVTests.swift in Sources */,
 				A61000000000000000000002 /* SamsungWakeOnLANTests.swift in Sources */,
 				B11000000000000000000004 /* SonyClientIdentityTests.swift in Sources */,
+				B11000000000000000000009 /* SonyPairingCredentialTests.swift in Sources */,
 				B11000000000000000000002 /* SonyProtocolCodecTests.swift in Sources */,
 				C11000000000000000000004 /* VizioProtocolCodecTests.swift in Sources */,
 				C11000000000000000000008 /* VizioPairingCoordinatorTests.swift in Sources */,
+				B11000000000000000000006 /* SonyTLSChannelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -547,6 +564,8 @@
 				3A58178774479925FA7D5AF6 /* SamsungCommandTransport.swift in Sources */,
 				D39084F5026A79477345A47B /* SamsungPairingCoordinator.swift in Sources */,
 				B11000000000000000000003 /* SonyClientIdentity.swift in Sources */,
+				B11000000000000000000007 /* SonyPairingCredential.swift in Sources */,
+				B11000000000000000000008 /* SonyPairingCoordinator.swift in Sources */,
 				B11000000000000000000001 /* SonyProtocolCodec.swift in Sources */,
 				C11000000000000000000001 /* VizioProtocolCodec.swift in Sources */,
 				C11000000000000000000002 /* VizioPairingCredential.swift in Sources */,
@@ -554,6 +573,7 @@
 				C11000000000000000000005 /* VizioPairingCredentialStore.swift in Sources */,
 				C11000000000000000000006 /* VizioHTTPSClient.swift in Sources */,
 				C11000000000000000000007 /* VizioPairingCoordinator.swift in Sources */,
+				B11000000000000000000005 /* SonyTLSChannel.swift in Sources */,
 				2D3D3C2CF9409A3568772E68 /* SamsungSetupView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

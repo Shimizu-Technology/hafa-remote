@@ -98,6 +98,7 @@ struct SonyProtocolCodecTests {
         let device =
             SonyProtobuf.stringField(1, "BRAVIA TEST")
             + SonyProtobuf.stringField(2, "Sony")
+            + SonyProtobuf.stringField(6, "12.34")
         let configure =
             SonyProtobuf.varintField(1, 99)
             + SonyProtobuf.bytesField(2, device)
@@ -107,7 +108,32 @@ struct SonyProtocolCodecTests {
 
         #expect(
             try SonyRemoteProtocolCodec.parse(configureMessage)
-                == .configured(vendor: "Sony", model: "BRAVIA TEST", supportedFeatures: 99)
+                == .configured(
+                    vendor: "Sony",
+                    model: "BRAVIA TEST",
+                    softwareVersion: "12.34",
+                    supportedFeatures: 99
+                )
+        )
+        #expect(
+            try SonyRemoteProtocolCodec.parse(SonyProtobuf.bytesField(2, Data())) == .setActive
+        )
+        let deviceWithoutVersion =
+            SonyProtobuf.stringField(1, "BRAVIA TEST")
+            + SonyProtobuf.stringField(2, "Sony")
+        let configureWithoutVersion = SonyProtobuf.bytesField(
+            1,
+            SonyProtobuf.varintField(1, 99)
+                + SonyProtobuf.bytesField(2, deviceWithoutVersion)
+        )
+        #expect(
+            try SonyRemoteProtocolCodec.parse(configureWithoutVersion)
+                == .configured(
+                    vendor: "Sony",
+                    model: "BRAVIA TEST",
+                    softwareVersion: "",
+                    supportedFeatures: 99
+                )
         )
         #expect(try SonyRemoteProtocolCodec.parse(pingMessage) == .ping(42))
         #expect(try SonyRemoteProtocolCodec.parse(powerMessage) == .powerState(true))
