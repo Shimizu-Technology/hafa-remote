@@ -196,9 +196,10 @@ actor RemoteSessionController {
         isForeground = true
         guard targetAddressText != nil else { return }
         generation = UUID()
+        let requestedGeneration = generation
         reconnectAttempt = 0
         await cancelInFlightWork()
-        await attemptConnection(generation: generation, isReconnect: true)
+        await attemptConnection(generation: requestedGeneration, isReconnect: true)
     }
 
     func networkReachabilityChanged(isReachable: Bool) async {
@@ -217,9 +218,10 @@ actor RemoteSessionController {
 
         guard previous == false, isForeground, targetAddressText != nil else { return }
         generation = UUID()
+        let requestedGeneration = generation
         reconnectAttempt = 0
         await cancelInFlightWork()
-        await attemptConnection(generation: generation, isReconnect: true)
+        await attemptConnection(generation: requestedGeneration, isReconnect: true)
     }
 
     private func attemptConnection(generation requestedGeneration: UUID, isReconnect: Bool) async {
