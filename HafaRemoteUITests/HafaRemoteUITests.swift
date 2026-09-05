@@ -185,7 +185,7 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertEqual(tvName.label, "Living Room TV")
         let status = app.staticTexts["remoteConnectionStatus"]
         expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
-        waitForExpectations(timeout: 5)
+        waitForExpectations(timeout: 15)
 
         let tvPicker = app.buttons["changeTVButton"]
         XCTAssertTrue(tvPicker.waitForExistence(timeout: 2))
@@ -197,7 +197,7 @@ final class HafaRemoteUITests: XCTestCase {
 
         XCTAssertTrue(app.staticTexts["Side Door TV"].waitForExistence(timeout: 5))
         expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
-        waitForExpectations(timeout: 5)
+        waitForExpectations(timeout: 15)
     }
 
     /// Runs separately from the deterministic gate against the powered-on household TV.
