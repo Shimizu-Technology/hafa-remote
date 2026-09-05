@@ -27,18 +27,31 @@ struct RemoteSessionControllerTests {
     func storeWaitsForEventualConnection() async throws {
         let tv = try testTV(
             address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
         let driver = MockRemoteSessionDriver(
             outcomes: [
                 .failure(.offline),
                 .success(tv: tv, announcesPairing: false),
             ]
         )
-        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
-
-        let connectedTV = try await store.connectAndWait(
-            to: tv.address.rawValue,
-            timeout: .seconds(2)
+        let controller = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                connectionTimeout: .seconds(5),
+                reconnectDelays: [.seconds(1)]
+            )
         )
+        let store = RemoteSessionStore(controller: controller, connectionWaitClock: clock)
+
+        let connection = Task {
+            try await store.connectAndWait(
+                to: tv.address.rawValue,
+                timeout: .seconds(30)
+            )
+        }
+        await resume(clock: clock, duration: .seconds(1))
+        let connectedTV = try await connection.value
 
         #expect(connectedTV == tv)
         #expect(await driver.connectCallCount == 2)
@@ -47,14 +60,30 @@ struct RemoteSessionControllerTests {
     @MainActor
     @Test("The observable store timeout cancels a suspended initial connection")
     func storeConnectionWaitTimesOut() async throws {
+        let clock = ManualRemoteSessionClock()
         let driver = SuspendedRemoteSessionDriver()
-        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+        let controller = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                connectionTimeout: .seconds(5),
+                reconnectDelays: []
+            )
+        )
+        let store = RemoteSessionStore(controller: controller, connectionWaitClock: clock)
+        var starts = driver.connectionStarts.makeAsyncIterator()
 
-        await #expect(throws: RemoteSessionControllerError.timedOut(.connect)) {
+        let connection = Task {
             try await store.connectAndWait(
                 to: "192.168.10.20",
-                timeout: .milliseconds(20)
+                timeout: .seconds(2)
             )
+        }
+        _ = await starts.next()
+        await resume(clock: clock, duration: .seconds(2))
+
+        await #expect(throws: RemoteSessionControllerError.timedOut(.connect)) {
+            try await connection.value
         }
         #expect(await driver.cancelledConnectionCount == 1)
     }

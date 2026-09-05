@@ -11,13 +11,16 @@ final class RemoteSessionStore {
     private var projectionRevision = 0
 
     private let controller: RemoteSessionController
+    private let connectionWaitClock: any RemoteSessionClock
     private let stateSubscription = RemoteSessionStateSubscription()
 
     init(
         controller: RemoteSessionController,
+        connectionWaitClock: any RemoteSessionClock = ContinuousRemoteSessionClock(),
         beforeProjectingState: @escaping @Sendable (RemoteSessionState) async -> Void = { _ in }
     ) {
         self.controller = controller
+        self.connectionWaitClock = connectionWaitClock
         stateSubscription.install(
             Task { [weak self, controller] in
                 let states = await controller.states()
@@ -66,6 +69,7 @@ final class RemoteSessionStore {
         timeout: Duration
     ) async throws -> PairedSamsungTV {
         let states = await controller.states()
+        let connectionWaitClock = connectionWaitClock
 
         return try await withThrowingTaskGroup(of: PairedSamsungTV?.self) { group in
             group.addTask {
@@ -83,7 +87,8 @@ final class RemoteSessionStore {
                 throw CancellationError()
             }
             group.addTask {
-                try await Task.sleep(for: timeout)
+                try await connectionWaitClock.sleep(for: timeout)
+                try Task.checkCancellation()
                 throw RemoteSessionControllerError.timedOut(.connect)
             }
 
