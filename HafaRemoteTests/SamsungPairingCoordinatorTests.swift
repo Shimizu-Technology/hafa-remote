@@ -4,6 +4,15 @@ import Testing
 @testable import HafaRemote
 
 struct SamsungPairingCoordinatorTests {
+    @Test("The select convenience forwards one semantic select command")
+    func selectConvenienceForwardsSemanticCommand() async throws {
+        let coordinator = SetupCoordinatorStub(suspendsPairing: false)
+
+        try await coordinator.sendSelect()
+
+        #expect(await coordinator.sentCommands == [.select])
+    }
+
     @Test("Successful pairing stores the new token and certificate pin")
     func persistsCredentialAfterConnection() async throws {
         let address = try PrivateIPv4Address("192.168.10.20")
@@ -775,6 +784,7 @@ private actor SetupCoordinatorStub: SamsungPairingCoordinating {
     private var disconnectContinuation: CheckedContinuation<Void, Never>?
     private(set) var pairCallCount = 0
     private(set) var disconnectCount = 0
+    private(set) var sentCommands: [RemoteCommand] = []
 
     init(suspendsPairing: Bool, suspendsDisconnect: Bool = false) {
         self.suspendsPairing = suspendsPairing
@@ -789,7 +799,7 @@ private actor SetupCoordinatorStub: SamsungPairingCoordinating {
 
     func pair(
         addressText: String,
-        onWaitingForApproval: @escaping @Sendable @MainActor () -> Void
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV {
         pairCallCount += 1
         await onWaitingForApproval()
@@ -813,7 +823,9 @@ private actor SetupCoordinatorStub: SamsungPairingCoordinating {
         )
     }
 
-    func sendSelect() {}
+    func send(_ command: RemoteCommand) {
+        sentCommands.append(command)
+    }
 
     func forget(addressText: String) {}
 
