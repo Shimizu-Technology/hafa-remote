@@ -245,25 +245,25 @@ struct HomeView: View {
         }
     }
 
-    private func displayName(for tv: PairedSamsungTV) -> String {
-        savedTV(for: tv)?.displayName ?? "Samsung TV"
+    private func displayName(for tv: ConnectedTV) -> String {
+        savedTV(for: tv)?.displayName ?? tv.brand.defaultDeviceName
     }
 
-    private func savedTV(for tv: PairedSamsungTV) -> SavedTV? {
-        savedTVs.first(where: { $0.reportedDeviceID == tv.reportedDeviceID })
+    private func savedTV(for tv: ConnectedTV) -> SavedTV? {
+        savedTVs.first(where: { $0.stableDeviceKey == tv.stableDeviceKey })
     }
 
     private func wakeMACAddress(
-        for tv: PairedSamsungTV,
+        for tv: ConnectedTV,
         savedTV: SavedTV?
-    ) -> SamsungMACAddress? {
-        guard tv.networkConnection != .wired else { return nil }
+    ) -> TVMACAddress? {
+        guard tv.brand == .samsung, tv.networkConnection != .wired else { return nil }
         return tv.macAddress ?? savedTV?.validatedMACAddress
     }
 
-    private func wake(_ tv: PairedSamsungTV, savedTV: SavedTV?) async throws {
+    private func wake(_ tv: ConnectedTV, savedTV: SavedTV?) async throws {
         guard let macAddress = wakeMACAddress(for: tv, savedTV: savedTV) else {
-            throw SamsungMACAddressError.invalid
+            throw TVMACAddressError.invalid
         }
 
         let attempt = PendingWakeAttempt(reportedDeviceID: tv.reportedDeviceID)
@@ -300,10 +300,10 @@ struct HomeView: View {
         }
     }
 
-    private func saveConnectedTV(_ tv: PairedSamsungTV) {
+    private func saveConnectedTV(_ tv: ConnectedTV) {
         let now = Date.now
         let wakeWasJustVerified = pendingWakeAttempt?.reportedDeviceID == tv.reportedDeviceID
-        if let saved = savedTVs.first(where: { $0.reportedDeviceID == tv.reportedDeviceID }) {
+        if let saved = savedTVs.first(where: { $0.stableDeviceKey == tv.stableDeviceKey }) {
             saved.recordConnection(
                 to: tv,
                 at: now,
@@ -313,11 +313,13 @@ struct HomeView: View {
             let canPersistWakeMetadata = tv.networkConnection == .wireless
             modelContext.insert(
                 SavedTV(
+                    brand: tv.brand,
                     reportedDeviceID: tv.reportedDeviceID,
-                    displayName: "Samsung TV",
+                    displayName: tv.brand.defaultDeviceName,
                     modelName: tv.modelName,
                     firmwareVersion: tv.firmwareVersion,
                     lastKnownAddress: tv.address.rawValue,
+                    controlPort: tv.controlPort,
                     macAddress: canPersistWakeMetadata ? tv.macAddress?.persistedValue : nil,
                     wakeWasVerified: canPersistWakeMetadata && wakeWasJustVerified,
                     lastSeenAt: now,

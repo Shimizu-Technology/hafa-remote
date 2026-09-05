@@ -5,7 +5,7 @@ enum RemoteSessionState: Equatable, Sendable {
     case idle
     case pairing
     case connecting
-    case connected(PairedSamsungTV)
+    case connected(ConnectedTV)
     case reconnecting(attempt: Int)
     case offline
     case denied

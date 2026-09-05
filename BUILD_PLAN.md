@@ -3,17 +3,17 @@
 
 **Version:** 0.1  
 **Last updated:** September 5, 2026
-**Current status:** HR-001, HR-003 through HR-005, HR-006 text input, and HR-007 automatic discovery are merged; the App Store Connect record is reserved; HR-006 conditional Wake-on-LAN and HR-015 release engineering are in progress; physical wake and broader hardware acceptance remain pending
-**Current execution frontier:** Automatic-discovery merge, Q70AA network visibility and acceptance, and internal TestFlight
+**Current status:** The Samsung internal alpha and conditional Wake-on-LAN are merged and uploaded as TestFlight build 1; HR-020 multi-brand identity is in progress; Sony and Vizio household validation remain pending
+**Current execution frontier:** Brand-neutral identity/session boundaries, then Sony and Vizio discovery and pairing on Leon's exact household TVs
 
 ## Delivery targets
 
 | Target | Outcome | Active build time | Elapsed time |
 |---|---|---:|---:|
 | Protocol decision | Q70AA pairing, commands, token persistence, and reconnect are proven | 3 days | 3 days |
-| Personal alpha | Daily-driver remote for Leon's Samsung TVs | 3–5 more days | 1–2 weeks |
+| Personal alpha | Daily-driver remote for Leon's Samsung, Sony, and Vizio TVs | 6–10 more days | 2–3 weeks |
 | External TestFlight | Tested setup, diagnostics, and multi-model evidence | 3–5 more days | Only after Samsung authorization gate |
-| App Store 1.0 | Free Samsung-only public release | 2–4 more days | Only after beta and authorization gates |
+| App Store 1.0 | Free mixed-brand public release | 3–5 more days | Only after beta and per-brand authorization gates |
 
 Estimates assume focused build sessions. Hardware testing and entitlement/App Review waits determine calendar time.
 
@@ -136,7 +136,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Acceptance evidence:** A new installation finds and pairs the Q70AA without entering an IP; denied permission and no-result paths are understandable.
 
-### HR-008 — Support multiple saved Samsung TVs
+### HR-008 — Support multiple saved TVs
 
 **Blockers:** HR-005; HR-007
 
@@ -147,7 +147,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 - [ ] Add forget/re-pair actions that delete the associated Keychain token.
 - [ ] Add tests for duplicate discovery, deleted credentials, renamed TVs, and repeated switching.
 
-**Acceptance evidence:** Two Samsung TVs can be paired, renamed, switched ten times, relaunched, and forgotten without crossing credentials or commands.
+**Acceptance evidence:** Multiple TVs can be paired, renamed, switched ten times, relaunched, and forgotten without crossing brand identity, credentials, or commands.
 
 ### HR-009 — Complete the production-quality remote experience
 
@@ -187,15 +187,53 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Acceptance evidence:** Seven-day log, zero unresolved P0/P1 defects, full gate green, and a written TestFlight go/no-go decision.
 
+### HR-020 — Establish brand-neutral device identity and routing
+
+**Blockers:** Samsung internal alpha merged
+
+- [ ] Add `TVBrand`, a brand-neutral connected-TV record, and a brand-scoped stable identity.
+- [ ] Migrate existing saved records safely to Samsung without losing their Keychain pairing.
+- [ ] Persist an optional brand-specific control port without treating it as stable identity.
+- [ ] Route commands and credential deletion only to the selected brand driver.
+- [ ] Keep all existing Samsung tests and behavior green.
+
+**Acceptance evidence:** Existing Samsung records restore as Samsung, identical reported identifiers from different brands cannot collide, and the complete gate passes without changing the Samsung UI flow.
+
+### HR-021 — Add Sony BRAVIA/Google TV support
+
+**Blockers:** HR-020; exact household Sony is powered on for discovery and model capture
+
+- [ ] Prefer zero-entry Bonjour discovery and validate that the selected service is the Sony television before pairing.
+- [ ] Choose the supported control path from observed hardware: Android TV Remote Service v2 for compatible Google/Android TV models, or Sony IRCC-IP only when the exact model exposes its documented secure setup.
+- [ ] Implement on-TV PIN/approval pairing with a per-device credential stored only in Keychain.
+- [ ] Map the approved semantic command allowlist; never expose raw Android keycodes or IRCC values to UI code.
+- [ ] Implement power off and conditional wake only when the observed network-standby behavior proves it.
+- [ ] Run pairing, relaunch, 50-command, reconnect, and power tests on the household Sony.
+
+**Acceptance evidence:** The Sony is found without an address, pairs once, survives relaunch, passes the control soak, and either powers on repeatedly or shows an honest unavailable state.
+
+### HR-022 — Add Vizio SmartCast support
+
+**Blockers:** HR-020; exact household Vizio is powered on for discovery and model/firmware capture
+
+- [ ] Discover SmartCast candidates without subnet scanning, then verify the local SmartCast endpoint on port 7345 or the legacy 9000 port.
+- [ ] Implement the TV-displayed PIN flow and store the returned auth token only in Keychain.
+- [ ] Scope self-signed TLS trust to the selected private endpoint and persist the approved certificate fingerprint; never add a global trust bypass.
+- [ ] Map the approved semantic command allowlist and check SmartCast response status rather than relying on HTTP status alone.
+- [ ] Implement explicit power off/on commands only when Quick Start/network standby behavior is observed; otherwise use conditional Wake-on-LAN with truthful reconnect verification.
+- [ ] Run pairing, relaunch, 50-command, reconnect, and power tests on the household Vizio.
+
+**Acceptance evidence:** The Vizio is found without an address, PIN-pairs once, survives relaunch, passes the control soak, and either powers on repeatedly or shows an honest unavailable state.
+
 ## Phase 3 — External TestFlight
 
-### HR-012 — Resolve the Samsung distribution basis
+### HR-012 — Resolve each brand's distribution basis
 
 **Blockers:** HR-011 go decision
 
-- [ ] Document exactly which local Samsung interfaces, commands, marks, and device data the app uses.
+- [ ] Document exactly which local Samsung, Sony/Google TV, and Vizio interfaces, commands, marks, and device data the app uses.
 - [ ] Review Samsung's Consumer TV IP Control worksheet, current device/service terms, developer terms, and partner routes.
-- [ ] Ask Samsung for written permission or partner guidance covering an independently distributed iOS remote.
+- [ ] Seek written permission, partner guidance, or a qualified legal basis for every brand-specific control protocol included in the distributed build.
 - [ ] If permission is unavailable or unclear, obtain a focused attorney review before external distribution.
 - [ ] Save the controlling documents, dates, contacts, and conclusion in a release-only decision record.
 - [ ] Treat personal development use as separate from permission to distribute through TestFlight or the App Store.
@@ -218,7 +256,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** HR-013
 
-- [ ] Recruit testers covering at least five Samsung TVs, three model years, and three home networks.
+- [ ] Recruit testers covering every advertised brand, at least three model years overall, and three home networks.
 - [ ] Run first-pair, relaunch, foreground reconnect, fifty-command soak, power, text, and token-revocation tests on each TV.
 - [ ] Record supported capabilities and failures by exact model/firmware.
 - [ ] Cover at least one 2017–2019 TV, one 2020–2022 TV, and one 2023–2026 TV if the public listing intends to span those generations.
@@ -285,8 +323,8 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## App Store 1.0 definition of done
 
-- [ ] Samsung-only scope is explicit.
-- [ ] Samsung authorization/partner terms or a documented qualified legal basis covers public distribution.
+- [ ] The tested brand/model scope is explicit.
+- [ ] Authorization, partner terms, or a documented qualified legal basis covers every distributed brand protocol.
 - [ ] Multiple saved TVs work without credential crossover.
 - [ ] Pairing, reconnect, controls, text entry, power-off, and conditional wake pass the documented device matrix.
 - [ ] The UI never presents stale socket state as connected.

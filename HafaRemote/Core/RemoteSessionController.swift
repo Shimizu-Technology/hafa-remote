@@ -4,7 +4,7 @@ protocol RemoteSessionDriving: TVDriver {
     func connect(
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
-    ) async throws -> PairedSamsungTV
+    ) async throws -> ConnectedTV
     func forget(addressText: String) async throws
 }
 
@@ -12,7 +12,7 @@ extension SamsungPairingCoordinator: RemoteSessionDriving {
     func connect(
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
-    ) async throws -> PairedSamsungTV {
+    ) async throws -> ConnectedTV {
         try await pair(
             addressText: addressText,
             onWaitingForApproval: onWaitingForApproval
@@ -76,7 +76,7 @@ actor RemoteSessionController {
     private var reconnectAttempt = 0
 
     private var connectionID: UUID?
-    private var connectionTask: Task<PairedSamsungTV, Error>?
+    private var connectionTask: Task<ConnectedTV, Error>?
     private var driverTeardownID: UUID?
     private var driverTeardownTask: Task<Void, Never>?
     private var pairingRemovalID: UUID?

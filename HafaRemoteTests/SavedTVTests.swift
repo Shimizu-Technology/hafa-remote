@@ -12,11 +12,13 @@ struct SavedTVTests {
         let container = try ModelContainer(for: SavedTV.self, configurations: configuration)
         let context = container.mainContext
         let saved = SavedTV(
+            brand: .sony,
             reportedDeviceID: "synthetic-device-id",
             displayName: "Living Room",
             modelName: "Q70AA",
             firmwareVersion: "2210",
             lastKnownAddress: "192.168.10.20",
+            controlPort: 6466,
             macAddress: "02:00:5E:10:00:01",
             wakeWasVerified: true,
             lastSeenAt: Date(timeIntervalSince1970: 100),
@@ -29,16 +31,86 @@ struct SavedTVTests {
         let fetched = try restoredContext.fetch(FetchDescriptor<SavedTV>())
 
         #expect(fetched.count == 1)
+        #expect(fetched.first?.brand == .sony)
+        #expect(fetched.first?.stableDeviceKey == "sony:synthetic-device-id")
         #expect(fetched.first?.reportedDeviceID == "synthetic-device-id")
         #expect(fetched.first?.displayName == "Living Room")
         #expect(fetched.first?.modelName == "Q70AA")
         #expect(fetched.first?.firmwareVersion == "2210")
         #expect(fetched.first?.validatedAddress == (try PrivateIPv4Address("192.168.10.20")))
+        #expect(fetched.first?.validatedControlPort == 6466)
         #expect(fetched.first?.validatedMACAddress == (try SamsungMACAddress("02:00:5E:10:00:01")))
         #expect(fetched.first?.wakeWasVerified == true)
         #expect(fetched.first?.lastSeenAt == Date(timeIntervalSince1970: 100))
         #expect(fetched.first?.lastUsedAt == Date(timeIntervalSince1970: 200))
         #expect(fetched.first?.description == "SavedTV(redacted)")
+    }
+
+    @Test("Existing Samsung records keep a safe brand default")
+    func defaultsLegacyRecordsToSamsung() {
+        let saved = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.20"
+        )
+
+        #expect(saved.brand == .samsung)
+        #expect(saved.stableDeviceKey == "samsung:synthetic-device-id")
+        #expect(saved.validatedControlPort == nil)
+    }
+
+    @Test("Brand-scoped identity prevents cross-brand device collisions")
+    @MainActor
+    func scopesIdentityByBrand() throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let samsung = ConnectedTV(
+            brand: .samsung,
+            reportedDeviceID: "synthetic-device-id",
+            address: address,
+            modelName: "Q70AA",
+            firmwareVersion: nil
+        )
+        let vizio = ConnectedTV(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-device-id",
+            address: address,
+            controlPort: 7345,
+            modelName: "V-Series",
+            firmwareVersion: nil
+        )
+
+        #expect(samsung.stableDeviceKey != vizio.stableDeviceKey)
+        #expect(vizio.stableDeviceKey == "vizio:synthetic-device-id")
+
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: SavedTV.self, configurations: configuration)
+        let context = container.mainContext
+        context.insert(
+            SavedTV(
+                brand: .samsung,
+                reportedDeviceID: samsung.reportedDeviceID,
+                displayName: "Samsung TV",
+                modelName: samsung.modelName,
+                firmwareVersion: nil,
+                lastKnownAddress: samsung.address.rawValue
+            ))
+        context.insert(
+            SavedTV(
+                brand: .vizio,
+                reportedDeviceID: vizio.reportedDeviceID,
+                displayName: "Vizio TV",
+                modelName: vizio.modelName,
+                firmwareVersion: nil,
+                lastKnownAddress: vizio.address.rawValue,
+                controlPort: vizio.controlPort
+            ))
+        try context.save()
+
+        let savedTVs = try context.fetch(FetchDescriptor<SavedTV>())
+        #expect(
+            Set(savedTVs.map(\.stableDeviceKey)) == Set([samsung.stableDeviceKey, vizio.stableDeviceKey]))
     }
 
     @Test("An invalid persisted host is never reused for a connection")

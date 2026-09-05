@@ -2,14 +2,16 @@
 
 ## Product
 
-Hafa Remote is an iPhone-only, local-network remote for compatible Samsung Tizen TVs. Version one has no backend, account, cloud sync, advertising, tracking, or subscription.
+Hafa Remote is an iPhone-only, local-network remote. The shipped internal alpha supports compatible Samsung Tizen TVs; Sony BRAVIA/Google TV and Vizio SmartCast support must remain separately capability-gated until each household TV passes its hardware matrix. Version one has no backend, account, cloud sync, advertising, tracking, or subscription.
 
 Read `PRD.md` and `BUILD_PLAN.md` before implementation. Implement only the current ticket and its acceptance criteria.
 
 ## Architecture rules
 
 - Use SwiftUI and Swift 6 concurrency.
-- Keep Samsung protocol details behind `TVDriver` and the Samsung protocol module.
+- Keep every brand's protocol details behind `TVDriver` and its own protocol module.
+- Scope saved identity and credentials by brand plus stable device identifier; an address alone is never identity.
+- Do not let one brand's driver read, reuse, or delete another brand's credential.
 - UI code sends semantic `RemoteCommand` values; it never sends Samsung key strings.
 - One actor owns each mutable network session and serialized command stream.
 - A remembered IP is a cache, not stable TV identity.

@@ -5,11 +5,14 @@ import SwiftData
 @Model
 final class SavedTV: CustomStringConvertible {
     @Attribute(.unique) var id: UUID
-    @Attribute(.unique) var reportedDeviceID: String
+    @Attribute(.unique) var stableDeviceID: String?
+    var reportedDeviceID: String
+    var brandRawValue: String = TVBrand.samsung.rawValue
     var displayName: String
     var modelName: String
     var firmwareVersion: String?
     var lastKnownAddress: String
+    var controlPort: Int?
     var macAddress: String?
     var wakeWasVerified: Bool = false
     var lastSeenAt: Date
@@ -17,22 +20,27 @@ final class SavedTV: CustomStringConvertible {
 
     init(
         id: UUID = UUID(),
+        brand: TVBrand = .samsung,
         reportedDeviceID: String,
         displayName: String,
         modelName: String,
         firmwareVersion: String?,
         lastKnownAddress: String,
+        controlPort: UInt16? = nil,
         macAddress: String? = nil,
         wakeWasVerified: Bool = false,
         lastSeenAt: Date = .now,
         lastUsedAt: Date = .now
     ) {
         self.id = id
+        brandRawValue = brand.rawValue
+        stableDeviceID = "\(brand.rawValue):\(reportedDeviceID)"
         self.reportedDeviceID = reportedDeviceID
         self.displayName = displayName
         self.modelName = modelName
         self.firmwareVersion = firmwareVersion
         self.lastKnownAddress = lastKnownAddress
+        self.controlPort = controlPort.map(Int.init)
         self.macAddress = macAddress
         self.wakeWasVerified = wakeWasVerified
         self.lastSeenAt = lastSeenAt
@@ -43,8 +51,20 @@ final class SavedTV: CustomStringConvertible {
         try? PrivateIPv4Address(lastKnownAddress)
     }
 
-    var validatedMACAddress: SamsungMACAddress? {
-        macAddress.flatMap { try? SamsungMACAddress($0) }
+    var brand: TVBrand {
+        TVBrand(rawValue: brandRawValue) ?? .samsung
+    }
+
+    var stableDeviceKey: String {
+        stableDeviceID ?? "\(brand.rawValue):\(reportedDeviceID)"
+    }
+
+    var validatedControlPort: UInt16? {
+        controlPort.flatMap(UInt16.init(exactly:))
+    }
+
+    var validatedMACAddress: TVMACAddress? {
+        macAddress.flatMap { try? TVMACAddress($0) }
     }
 
     var description: String {
@@ -52,14 +72,17 @@ final class SavedTV: CustomStringConvertible {
     }
 
     func recordConnection(
-        to tv: PairedSamsungTV,
+        to tv: ConnectedTV,
         at date: Date = .now,
         wakeWasJustVerified: Bool = false
     ) {
+        brandRawValue = tv.brand.rawValue
+        stableDeviceID = tv.stableDeviceKey
         reportedDeviceID = tv.reportedDeviceID
         modelName = tv.modelName
         firmwareVersion = tv.firmwareVersion
         lastKnownAddress = tv.address.rawValue
+        controlPort = tv.controlPort.map(Int.init)
         let previousMACAddress = macAddress
         switch tv.networkConnection {
         case .wired:

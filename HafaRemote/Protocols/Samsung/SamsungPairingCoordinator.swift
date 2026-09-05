@@ -1,35 +1,10 @@
 import Foundation
 
-struct PairedSamsungTV: Equatable, Sendable {
-    let reportedDeviceID: String
-    let address: PrivateIPv4Address
-    let modelName: String
-    let firmwareVersion: String?
-    let networkConnection: SamsungNetworkConnection
-    let macAddress: SamsungMACAddress?
-
-    init(
-        reportedDeviceID: String,
-        address: PrivateIPv4Address,
-        modelName: String,
-        firmwareVersion: String?,
-        networkConnection: SamsungNetworkConnection = .unavailable,
-        macAddress: SamsungMACAddress? = nil
-    ) {
-        self.reportedDeviceID = reportedDeviceID
-        self.address = address
-        self.modelName = modelName
-        self.firmwareVersion = firmwareVersion
-        self.networkConnection = networkConnection
-        self.macAddress = macAddress
-    }
-}
-
 protocol SamsungPairingCoordinating: Sendable {
     func pair(
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
-    ) async throws -> PairedSamsungTV
+    ) async throws -> ConnectedTV
     func send(_ command: RemoteCommand) async throws
     func sendText(_ input: RemoteTextInput) async throws
     func forget(addressText: String) async throws
@@ -66,7 +41,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
     func pair(
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void = {}
-    ) async throws -> PairedSamsungTV {
+    ) async throws -> ConnectedTV {
         guard activeAttemptID == nil else {
             throw SamsungPairingCoordinatorError.pairingInProgress
         }
@@ -119,7 +94,8 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                 try await credentialStore.save(credential, for: address)
                 try Task.checkCancellation()
 
-                return PairedSamsungTV(
+                return ConnectedTV(
+                    brand: .samsung,
                     reportedDeviceID: deviceInfo.reportedDeviceID,
                     address: address,
                     modelName: deviceInfo.modelName,
