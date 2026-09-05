@@ -118,6 +118,7 @@ struct RemoteControlView: View {
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.white)
                         .lineLimit(1)
+                        .accessibilityIdentifier("remoteTVName")
 
                     Text(modelName)
                         .font(.subheadline)

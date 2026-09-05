@@ -4,6 +4,64 @@ import Testing
 @testable import HafaRemote
 
 struct RemoteSessionControllerTests {
+    @MainActor
+    @Test("The observable store exposes its matching initial state synchronously")
+    func storeProjectsMatchingInitialStateSynchronously() throws {
+        let television = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "fixture-samsung",
+            model: "Q70AA"
+        )
+        let initialState = RemoteSessionState.connected(television)
+        let driver = MockRemoteSessionDriver(outcomes: [])
+
+        let store = RemoteSessionStore(
+            controller: RemoteSessionController(driver: driver, initialState: initialState),
+            initialState: initialState
+        )
+
+        #expect(store.state == initialState)
+        #expect(store.connectedTV == television)
+        #expect(store.lastConnectedTV == television)
+        #expect(store.hasInitiatedConnection)
+    }
+
+    @MainActor
+    @Test("A delayed saved query cannot replace an in-progress manual connection")
+    func delayedRestorationDoesNotReplaceManualConnection() async throws {
+        let driver = SuspendedRemoteSessionDriver(announcesPairing: true)
+        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+        let restoration = SavedTVRestorationCoordinator()
+        let savedTV = SavedTV(
+            reportedDeviceID: "saved-tv",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.21"
+        )
+        var starts = driver.connectionStarts.makeAsyncIterator()
+        let manualConnection = Task { @MainActor in
+            await store.connect(to: "192.168.10.20")
+        }
+        _ = await starts.next()
+        await waitUntil { @MainActor in store.state == .pairing }
+        var restorationConnections = 0
+
+        await restoration.restore(
+            from: [savedTV],
+            skipBecauseConnectionWasInitiated: store.hasInitiatedConnection
+        ) { _ in
+            restorationConnections += 1
+        }
+
+        #expect(restorationConnections == 0)
+        #expect(await driver.connectionStartCount == 1)
+        manualConnection.cancel()
+        await manualConnection.value
+        await waitUntil { @MainActor in store.state == .offline }
+        #expect(await driver.connectionStartCount == 1)
+    }
+
     @Test("A Sony discovery never enters the Samsung session driver")
     func rejectsTargetForDifferentDriverBrand() async throws {
         let address = try PrivateIPv4Address("192.168.10.20")

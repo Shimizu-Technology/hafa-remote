@@ -48,6 +48,8 @@ struct HafaRemoteApp: App {
                     "-ui-testing-vizio-pairing-repair"
                 ) {
                     VizioPairingRepairUITestHarness()
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-saved-tvs") {
+                    SavedTVSwitchingUITestHarness()
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-discovery-empty") {
                     HomeView(
                         discovery: TVDiscoveryStore(
@@ -105,6 +107,79 @@ struct HafaRemoteApp: App {
                     backend: TVDiscoveryFixtureBackend(fixture: .noResults)
                 )
             )
+        }
+    }
+
+    private struct SavedTVSwitchingUITestHarness: View {
+        @Environment(\.modelContext) private var modelContext
+        @State private var didSeed = false
+        @State private var session: RemoteSessionStore
+
+        init() {
+            guard let address = try? PrivateIPv4Address("192.168.10.20") else {
+                preconditionFailure("The fixed UI-test address must remain valid")
+            }
+            let television = ConnectedTV(
+                brand: .samsung,
+                reportedDeviceID: "fixture-samsung",
+                address: address,
+                controlPort: 8_002,
+                modelName: "Q70AA",
+                firmwareVersion: "1.0"
+            )
+            let initialState = RemoteSessionState.connected(television)
+            _session = State(
+                initialValue: RemoteSessionStore(
+                    controller: RemoteSessionController(
+                        driver: SavedTVSwitchingUIFixtureDriver(),
+                        initialState: initialState
+                    ),
+                    initialState: initialState
+                )
+            )
+        }
+
+        var body: some View {
+            Group {
+                if didSeed {
+                    HomeView(session: session)
+                } else {
+                    ProgressView("Preparing TVs…")
+                }
+            }
+            .task {
+                guard !didSeed else { return }
+                let existing = (try? modelContext.fetch(FetchDescriptor<SavedTV>())) ?? []
+                for savedTV in existing {
+                    modelContext.delete(savedTV)
+                }
+                modelContext.insert(
+                    SavedTV(
+                        brand: .samsung,
+                        reportedDeviceID: "fixture-samsung",
+                        displayName: "Living Room TV",
+                        modelName: "Q70AA",
+                        firmwareVersion: "1.0",
+                        lastKnownAddress: "192.168.10.20",
+                        controlPort: 8_002,
+                        lastUsedAt: Date(timeIntervalSince1970: 200)
+                    )
+                )
+                modelContext.insert(
+                    SavedTV(
+                        brand: .sony,
+                        reportedDeviceID: "fixture-sony",
+                        displayName: "Side Door TV",
+                        modelName: "Sony BRAVIA",
+                        firmwareVersion: "1.0",
+                        lastKnownAddress: "192.168.10.21",
+                        controlPort: 6_466,
+                        lastUsedAt: Date(timeIntervalSince1970: 100)
+                    )
+                )
+                try? modelContext.save()
+                didSeed = true
+            }
         }
     }
 #endif

@@ -460,8 +460,8 @@ struct SavedTVTests {
     }
 
     @MainActor
-    @Test("An empty initial restore is not retried after the first TV is paired")
-    func doesNotRestoreAgainWhenSavedTVsPopulate() async {
+    @Test("An empty initial query retries when saved TVs populate")
+    func retriesRestorationWhenSavedTVsPopulate() async {
         let restoration = SavedTVRestorationCoordinator()
         var connectionAttempts = 0
         let newlyPairedTV = SavedTV(
@@ -476,6 +476,33 @@ struct SavedTVTests {
             connectionAttempts += 1
         }
         await restoration.restore(from: [newlyPairedTV]) { _ in
+            connectionAttempts += 1
+        }
+
+        #expect(connectionAttempts == 1)
+        #expect(!restoration.isRestoring)
+    }
+
+    @MainActor
+    @Test("A connected first pairing is not restored when its saved record appears")
+    func doesNotRestoreNewlyPairedTV() async {
+        let restoration = SavedTVRestorationCoordinator()
+        let newlyPairedTV = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.20"
+        )
+        var connectionAttempts = 0
+
+        await restoration.restore(from: []) { _ in
+            connectionAttempts += 1
+        }
+        await restoration.restore(
+            from: [newlyPairedTV],
+            skipBecauseConnectionWasInitiated: true
+        ) { _ in
             connectionAttempts += 1
         }
 
@@ -575,10 +602,118 @@ struct SavedTVTests {
         #expect(connecting.title == "Connecting to your TV…")
         #expect(connecting.instruction == nil)
     }
+
+    @Test("A saved TV can present its identity while it is offline")
+    func buildsOfflinePresentationFromSavedMetadata() throws {
+        let savedTV = SavedTV(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-vizio",
+            displayName: "Office TV",
+            modelName: "V655-G9",
+            firmwareVersion: "1.2.3",
+            lastKnownAddress: "192.168.10.30",
+            controlPort: 7_345
+        )
+
+        let rememberedTV = try #require(savedTV.rememberedTV)
+
+        #expect(rememberedTV.brand == .vizio)
+        #expect(rememberedTV.reportedDeviceID == "synthetic-vizio")
+        #expect(rememberedTV.address == (try PrivateIPv4Address("192.168.10.30")))
+        #expect(rememberedTV.controlPort == 7_345)
+        #expect(rememberedTV.modelName == "V655-G9")
+        #expect(rememberedTV.networkConnection == .unavailable)
+    }
+
+    @MainActor
+    @Test("Selecting another TV immediately changes identity and cancels the stale switch")
+    func latestTVSelectionWins() async throws {
+        let selection = SavedTVSelectionCoordinator()
+        let gate = SelectionCancellationGate()
+        let first = TVConnectionTarget(
+            brand: .samsung,
+            reportedDeviceID: "first",
+            address: try PrivateIPv4Address("192.168.10.20"),
+            controlPort: 8_002
+        )
+        let second = TVConnectionTarget(
+            brand: .sony,
+            reportedDeviceID: "second",
+            address: try PrivateIPv4Address("192.168.10.21"),
+            controlPort: 6_466
+        )
+        var connectedTargets: [TVConnectionTarget] = []
+
+        selection.select(
+            deviceKey: "samsung:first",
+            target: first,
+            disconnect: {
+                await gate.suspendUntilCancelled()
+            },
+            connect: { connectedTargets.append($0) }
+        )
+        #expect(selection.selectedDeviceKey == "samsung:first")
+        await waitForSelectionState { await gate.didStart }
+        #expect(await gate.didStart)
+
+        selection.select(
+            deviceKey: "sony:second",
+            target: second,
+            disconnect: {},
+            connect: { connectedTargets.append($0) }
+        )
+
+        await waitForSelectionState { await gate.didFinish }
+        await waitForSelectionState { connectedTargets == [second] && !selection.isSwitching }
+        #expect(await gate.didFinish)
+        #expect(connectedTargets == [second])
+        #expect(selection.selectedDeviceKey == "sony:second")
+        #expect(!selection.isSwitching)
+    }
 }
 
 private enum RestorationTestError: Error {
     case failed
+}
+
+private actor SelectionCancellationGate {
+    private(set) var didStart = false
+    private(set) var didFinish = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func suspendUntilCancelled() async {
+        didStart = true
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard !Task.isCancelled else {
+                    didFinish = true
+                    continuation.resume()
+                    return
+                }
+                self.continuation = continuation
+            }
+        } onCancel: {
+            Task { await self.finish() }
+        }
+    }
+
+    private func finish() {
+        guard !didFinish else { return }
+        didFinish = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+@MainActor
+private func waitForSelectionState(_ condition: @escaping @MainActor () async -> Bool) async {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: .seconds(2))
+    while clock.now < deadline {
+        if await condition() { return }
+        await Task.yield()
+    }
+    Issue.record("Timed out waiting for the expected selection state")
 }
 
 private actor RestorationConnectionGate {

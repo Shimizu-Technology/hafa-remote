@@ -173,6 +173,35 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(error.label.contains("Vizio PIN was not accepted"))
     }
 
+    /// Saved televisions can be switched directly without scanning the network again.
+    @MainActor
+    func testSavedTVPickerSwitchesTheVisibleAndConnectedTarget() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-saved-tvs")
+        app.launch()
+
+        let tvName = app.staticTexts["remoteTVName"]
+        XCTAssertTrue(tvName.waitForExistence(timeout: 5))
+        XCTAssertEqual(tvName.label, "Living Room TV")
+        let status = app.staticTexts["remoteConnectionStatus"]
+        expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
+        waitForExpectations(timeout: 15)
+
+        let tvPicker = app.buttons["changeTVButton"]
+        XCTAssertTrue(tvPicker.waitForExistence(timeout: 2))
+        tvPicker.tap()
+
+        let sideDoorTV = app.buttons["Side Door TV"]
+        XCTAssertTrue(sideDoorTV.waitForExistence(timeout: 2))
+        sideDoorTV.tap()
+
+        expectation(for: NSPredicate(format: "label == 'Connecting'"), evaluatedWith: status)
+        waitForExpectations(timeout: 2)
+        XCTAssertTrue(app.staticTexts["Side Door TV"].waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
+        waitForExpectations(timeout: 15)
+    }
+
     /// Runs separately from the deterministic gate against the powered-on household TV.
     @MainActor
     func testHardwareDiscoveryFindsSamsungTV() throws {
