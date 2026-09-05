@@ -45,17 +45,38 @@ struct SonyProtocolCodecTests {
 
     @Test("Pairing handshake responses are classified and rejected by status")
     func parsesPairingHandshakeResponses() throws {
-        let acknowledgement =
+        func response(field: Int) -> Data {
             SonyProtobuf.varintField(1, 2)
-            + SonyProtobuf.varintField(2, 200)
-            + SonyProtobuf.bytesField(31, Data())
+                + SonyProtobuf.varintField(2, 200)
+                + SonyProtobuf.bytesField(field, Data())
+        }
         let rejection =
             SonyProtobuf.varintField(1, 2)
             + SonyProtobuf.varintField(2, 402)
 
-        #expect(try SonyPairingProtocolCodec.parse(acknowledgement) == .configurationAcknowledged)
+        #expect(try SonyPairingProtocolCodec.parse(response(field: 11)) == .requestAcknowledged)
+        #expect(try SonyPairingProtocolCodec.parse(response(field: 20)) == .options)
+        #expect(try SonyPairingProtocolCodec.parse(response(field: 31)) == .configurationAcknowledged)
+        #expect(try SonyPairingProtocolCodec.parse(response(field: 41)) == .secretAcknowledged)
         #expect(throws: SonyProtocolCodecError.pairingRejected(402)) {
             try SonyPairingProtocolCodec.parse(rejection)
+        }
+    }
+
+    @Test("The pairing secret accepts only a complete SHA-256 digest")
+    func encodesPairingSecret() throws {
+        let digest = Data(repeating: 0xA5, count: 32)
+        let message = try SonyPairingProtocolCodec.secret(digest)
+        let outer = try SonyProtobuf.fields(in: message)
+        let secret = try #require(outer.first(where: { $0.number == 40 })?.bytes)
+        let secretFields = try SonyProtobuf.fields(in: secret)
+
+        #expect(secretFields.first(where: { $0.number == 1 })?.bytes == digest)
+        #expect(throws: SonyProtocolCodecError.malformedProtobuf) {
+            try SonyPairingProtocolCodec.secret(Data(repeating: 0, count: 31))
+        }
+        #expect(throws: SonyProtocolCodecError.malformedProtobuf) {
+            try SonyPairingProtocolCodec.secret(Data(repeating: 0, count: 33))
         }
     }
 

@@ -7,6 +7,7 @@ enum SonyClientIdentityError: Error, Equatable, Sendable {
     case certificateGenerationFailed
     case certificateStorageFailed(OSStatus)
     case identityLookupFailed(OSStatus)
+    case keychainCleanupFailed(OSStatus)
     case invalidPublicKey
     case invalidPairingCode
     case pairingCodeMismatch
@@ -107,14 +108,57 @@ enum SonyPairingSecret {
     }
 }
 
+struct SonyClientIdentityKeychainScope: Sendable {
+    let keyTag: Data
+    let certificateLabel: String
+
+    init(namespace: String) {
+        keyTag = Data("\(namespace).key".utf8)
+        certificateLabel = "\(namespace).certificate"
+    }
+
+    func certificateLookupQuery() -> [String: Any] {
+        [
+            kSecClass as String: kSecClassCertificate,
+            kSecAttrLabel as String: certificateLabel,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+    }
+
+    func certificateDeleteQuery() -> [String: Any] {
+        [
+            kSecClass as String: kSecClassCertificate,
+            kSecAttrLabel as String: certificateLabel,
+        ]
+    }
+
+    func privateKeyDeleteQuery() -> [String: Any] {
+        [
+            kSecClass as String: kSecClassKey,
+            kSecAttrApplicationTag as String: keyTag,
+        ]
+    }
+
+    func privateKeyCreationAttributes() -> [String: Any] {
+        [
+            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
+            kSecAttrKeySizeInBits as String: 2_048,
+            kSecPrivateKeyAttrs as String: [
+                kSecAttrIsPermanent as String: true,
+                kSecAttrApplicationTag as String: keyTag,
+                kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            ],
+        ]
+    }
+}
+
 final class SonyClientIdentityStore: @unchecked Sendable {
-    private let keyTag: Data
-    private let certificateLabel: String
+    private let scope: SonyClientIdentityKeychainScope
     private let lock = NSLock()
 
     init(namespace: String = "com.shimizutechnology.hafaremote.sony-client") {
-        keyTag = Data("\(namespace).key".utf8)
-        certificateLabel = "\(namespace).certificate"
+        scope = SonyClientIdentityKeychainScope(namespace: namespace)
     }
 
     func identity() throws -> SecIdentity {
@@ -122,27 +166,35 @@ final class SonyClientIdentityStore: @unchecked Sendable {
         defer { lock.unlock() }
 
         if let certificate = try savedCertificate() {
-            return try identity(for: certificate)
+            do {
+                return try identity(for: certificate)
+            } catch SonyClientIdentityError.identityLookupFailed(let status)
+                where status == errSecItemNotFound
+            {
+                try removeNamespacedMaterial()
+            }
+        } else {
+            try removeNamespacedMaterial()
         }
 
-        let privateKey = try createPrivateKey()
-        let serial = try secureRandomBytes(count: 16)
-        let certificate = try SonyClientCertificateFactory.make(
-            privateKey: privateKey,
-            commonName: "Hafa Remote",
-            serialNumber: serial
-        )
-        try save(certificate: certificate)
-        return try identity(for: certificate)
+        do {
+            let privateKey = try createPrivateKey()
+            let serial = try secureRandomBytes(count: 16)
+            let certificate = try SonyClientCertificateFactory.make(
+                privateKey: privateKey,
+                commonName: "Hafa Remote",
+                serialNumber: serial
+            )
+            try save(certificate: certificate)
+            return try identity(for: certificate)
+        } catch {
+            try? removeNamespacedMaterial()
+            throw error
+        }
     }
 
     private func savedCertificate() throws -> SecCertificate? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassCertificate,
-            kSecAttrLabel as String: certificateLabel,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
+        let query = scope.certificateLookupQuery()
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecItemNotFound { return nil }
@@ -156,15 +208,7 @@ final class SonyClientIdentityStore: @unchecked Sendable {
     }
 
     private func createPrivateKey() throws -> SecKey {
-        let attributes: [String: Any] = [
-            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-            kSecAttrKeySizeInBits as String: 2_048,
-            kSecPrivateKeyAttrs as String: [
-                kSecAttrIsPermanent as String: true,
-                kSecAttrApplicationTag as String: keyTag,
-                kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-            ],
-        ]
+        let attributes = scope.privateKeyCreationAttributes()
         var error: Unmanaged<CFError>?
         guard let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else {
             throw SonyClientIdentityError.keyGenerationFailed
@@ -177,7 +221,7 @@ final class SonyClientIdentityStore: @unchecked Sendable {
             [
                 kSecClass as String: kSecClassCertificate,
                 kSecValueRef as String: certificate,
-                kSecAttrLabel as String: certificateLabel,
+                kSecAttrLabel as String: scope.certificateLabel,
             ] as CFDictionary,
             nil
         )
@@ -212,6 +256,15 @@ final class SonyClientIdentityStore: @unchecked Sendable {
             }
         }
         throw SonyClientIdentityError.identityLookupFailed(errSecItemNotFound)
+    }
+
+    private func removeNamespacedMaterial() throws {
+        for query in [scope.certificateDeleteQuery(), scope.privateKeyDeleteQuery()] {
+            let status = SecItemDelete(query as CFDictionary)
+            guard status == errSecSuccess || status == errSecItemNotFound else {
+                throw SonyClientIdentityError.keychainCleanupFailed(status)
+            }
+        }
     }
 
     private func secureRandomBytes(count: Int) throws -> Data {

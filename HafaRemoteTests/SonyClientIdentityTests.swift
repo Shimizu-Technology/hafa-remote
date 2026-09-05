@@ -5,6 +5,33 @@ import Testing
 @testable import HafaRemote
 
 struct SonyClientIdentityTests {
+    @Test("Key and certificate queries stay inside the Sony namespace")
+    func scopesKeychainQueries() throws {
+        let namespace = "com.shimizutechnology.hafaremote.tests.sony"
+        let scope = SonyClientIdentityKeychainScope(namespace: namespace)
+        let keyAttributes = scope.privateKeyCreationAttributes()
+        let privateAttributes = try #require(
+            keyAttributes[kSecPrivateKeyAttrs as String] as? [String: Any]
+        )
+
+        #expect(
+            privateAttributes[kSecAttrApplicationTag as String] as? Data
+                == Data("\(namespace).key".utf8)
+        )
+        #expect(
+            scope.privateKeyDeleteQuery()[kSecAttrApplicationTag as String] as? Data
+                == Data("\(namespace).key".utf8)
+        )
+        #expect(
+            scope.certificateLookupQuery()[kSecAttrLabel as String] as? String
+                == "\(namespace).certificate"
+        )
+        #expect(
+            scope.certificateDeleteQuery()[kSecAttrLabel as String] as? String
+                == "\(namespace).certificate"
+        )
+    }
+
     @Test("A generated Sony client certificate contains its RSA public key")
     func generatesSelfSignedRSAClientCertificate() throws {
         let privateKey = try makeRSAKey()

@@ -241,7 +241,9 @@ enum SonyRemoteProtocolCodec {
 
     static func configurationResponse() -> Data {
         let deviceInfo =
-            SonyProtobuf.varintField(3, 1)
+            SonyProtobuf.stringField(1, "Hafa Remote")
+            + SonyProtobuf.stringField(2, "Shimizu Technology")
+            + SonyProtobuf.varintField(3, 1)
             + SonyProtobuf.stringField(4, "1")
             + SonyProtobuf.stringField(5, "com.shimizutechnology.hafaremote")
             + SonyProtobuf.stringField(6, "1.0")
