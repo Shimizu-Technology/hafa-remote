@@ -15,6 +15,10 @@ struct TVSetupView: View {
     @State private var repairTaskID: UUID?
     @State private var recoveryTask: Task<Void, Never>?
     @State private var repairTask: Task<Void, Never>?
+    @State private var pairingCode = ""
+    @State private var isSubmittingPairingCode = false
+    @State private var hasSubmittedPairingCode = false
+    @State private var pairingCodeTask: Task<Void, Never>?
     let session: RemoteSessionStore
     let initialAddress: String
     let initialReportedDeviceID: String?
@@ -64,6 +68,8 @@ struct TVSetupView: View {
                 recoveryTask = nil
                 repairTask?.cancel()
                 repairTask = nil
+                pairingCodeTask?.cancel()
+                pairingCodeTask = nil
                 guard !session.canSendCommands else { return }
                 Task {
                     await session.disconnect(clearRememberedTV: false)
@@ -80,6 +86,13 @@ struct TVSetupView: View {
                 UIAccessibility.post(notification: .announcement, argument: announcement)
             }
             .onChange(of: session.state) { _, state in
+                if case .pairing = state {
+                    // Preserve entered digits while the Sony handshake is waiting.
+                } else {
+                    pairingCode = ""
+                    isSubmittingPairingCode = false
+                    hasSubmittedPairingCode = false
+                }
                 preparePairingRepairIfNeeded(for: state)
                 if let announcement = accessibilityAnnouncement(for: state) {
                     UIAccessibility.post(notification: .announcement, argument: announcement)
@@ -168,7 +181,7 @@ struct TVSetupView: View {
             } header: {
                 Text("Nearby TVs")
             } footer: {
-                Text("Tap your TV, then choose Allow on the TV if asked.")
+                Text("Tap your TV, then follow the pairing instructions.")
             }
 
         case .noResults:
@@ -246,7 +259,45 @@ struct TVSetupView: View {
             }
         case .pairing:
             Section {
-                Label("Choose Allow if your TV asks to approve Hafa Remote.", systemImage: "tv.badge.wifi")
+                if selectedTV?.brand == .sony {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Label("Enter the code shown on your Sony TV.", systemImage: "number")
+                            .font(.headline)
+
+                        TextField("6-character code", text: $pairingCode)
+                            .keyboardType(.asciiCapable)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .textContentType(.oneTimeCode)
+                            .onChange(of: pairingCode) { _, value in
+                                pairingCode = sanitizedPairingCode(value)
+                            }
+                            .accessibilityLabel("Sony TV pairing code")
+                            .accessibilityIdentifier("sonyPairingCodeField")
+
+                        Button {
+                            submitSonyPairingCode()
+                        } label: {
+                            HStack {
+                                Text(hasSubmittedPairingCode ? "Code Submitted" : "Pair Sony TV")
+                                Spacer()
+                                if isSubmittingPairingCode {
+                                    ProgressView()
+                                }
+                            }
+                        }
+                        .disabled(
+                            pairingCode.count != 6 || isSubmittingPairingCode
+                                || hasSubmittedPairingCode
+                        )
+                        .accessibilityIdentifier("submitSonyPairingCodeButton")
+                    }
+                } else {
+                    Label(
+                        "Choose Allow if your TV asks to approve Hafa Remote.",
+                        systemImage: "tv.badge.wifi"
+                    )
+                }
             }
         case .connected:
             EmptyView()
@@ -259,7 +310,10 @@ struct TVSetupView: View {
                 "The TV is unavailable. Make sure it is on and connected to the same Wi-Fi.")
         case .denied:
             connectionErrorSection(
-                "The TV did not approve Hafa Remote. Try again and choose Allow on the TV.")
+                selectedTV?.brand == .sony
+                    ? "The Sony pairing code was not accepted. Find the TV and try again."
+                    : "The TV did not approve Hafa Remote. Try again and choose Allow on the TV."
+            )
         case .savedPairingRejected:
             connectionErrorSection(
                 "The TV no longer accepts its saved pairing. Remove it and approve Hafa Remote again.")
@@ -390,6 +444,8 @@ struct TVSetupView: View {
 
     private func connect(to television: DiscoveredTV) {
         selectedTV = television
+        pairingCode = ""
+        hasSubmittedPairingCode = false
         address = television.address.rawValue
         discovery.stop()
         connect(to: television.connectionTarget)
@@ -397,6 +453,8 @@ struct TVSetupView: View {
 
     private func connectManually() {
         selectedTV = nil
+        pairingCode = ""
+        hasSubmittedPairingCode = false
         discovery.stop()
         connectUsingCurrentAddress()
     }
@@ -448,6 +506,37 @@ struct TVSetupView: View {
         }
     }
 
+    private func sanitizedPairingCode(_ value: String) -> String {
+        String(
+            value.uppercased().filter { $0.isHexDigit }.prefix(6)
+        )
+    }
+
+    private func submitSonyPairingCode() {
+        guard pairingCode.count == 6, !isSubmittingPairingCode, !hasSubmittedPairingCode else {
+            return
+        }
+        pairingCodeTask?.cancel()
+        isSubmittingPairingCode = true
+        let submittedCode = pairingCode
+        pairingCodeTask = Task {
+            do {
+                try await session.submitPairingCode(submittedCode)
+                guard !Task.isCancelled else { return }
+                hasSubmittedPairingCode = true
+            } catch is CancellationError {
+                return
+            } catch {
+                UIAccessibility.post(
+                    notification: .announcement,
+                    argument: "The pairing code could not be submitted. Try again."
+                )
+            }
+            isSubmittingPairingCode = false
+            pairingCodeTask = nil
+        }
+    }
+
     private func forgetAndRetry(for address: String) async {
         guard !isForgettingPairing else { return }
         isForgettingPairing = true
@@ -485,7 +574,9 @@ struct TVSetupView: View {
     private func accessibilityAnnouncement(for state: RemoteSessionState) -> String? {
         switch state {
         case .pairing:
-            "Choose Allow if your TV asks to approve Hafa Remote."
+            selectedTV?.brand == .sony
+                ? "Enter the six-character code shown on your Sony TV."
+                : "Choose Allow if your TV asks to approve Hafa Remote."
         case .connected(let tv):
             "Connected to \(tv.modelName)."
         case .denied:

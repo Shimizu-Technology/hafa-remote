@@ -496,8 +496,8 @@ struct SavedTVTests {
             lastKnownAddress: "192.168.10.20"
         )
         let task = Task { @MainActor in
-            await restoration.restore(from: [savedTV]) { address in
-                await gate.wait(at: address)
+            await restoration.restore(from: [savedTV]) { target in
+                await gate.wait(at: target.address)
             }
         }
 
@@ -547,8 +547,8 @@ struct SavedTVTests {
             lastKnownAddress: "192.168.10.20"
         )
         let task = Task { @MainActor in
-            await restoration.restore(from: [savedTV]) { address in
-                await gate.waitUntilCancelled(at: address)
+            await restoration.restore(from: [savedTV]) { target in
+                await gate.waitUntilCancelled(at: target.address)
             }
         }
 

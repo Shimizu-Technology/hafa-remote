@@ -45,7 +45,7 @@ struct HomeView: View {
                 } wakeAction: {
                     try await wake(tv, savedTV: savedTV)
                 } retry: {
-                    await session.connect(to: tv.address.rawValue)
+                    await session.connect(to: tv.connectionTarget)
                 } showTVSetup: {
                     isShowingSetup = true
                 }
@@ -244,8 +244,8 @@ struct HomeView: View {
     }
 
     private func restoreLastUsedTVIfNeeded() async {
-        await restoration.restore(from: savedTVs) { address in
-            await session.connect(to: address.rawValue)
+        await restoration.restore(from: savedTVs) { target in
+            await session.connect(to: target)
         }
     }
 
@@ -389,15 +389,15 @@ final class SavedTVRestorationCoordinator {
 
     func restore(
         from savedTVs: [SavedTV],
-        connect: @MainActor (PrivateIPv4Address) async throws -> Void
+        connect: @MainActor (TVConnectionTarget) async throws -> Void
     ) async {
         guard !didAttempt else { return }
         didAttempt = true
-        guard let address = savedTVs.first?.validatedAddress else { return }
+        guard let target = savedTVs.first?.connectionTarget else { return }
 
         isRestoring = true
         defer { isRestoring = false }
-        try? await connect(address)
+        try? await connect(target)
     }
 }
 

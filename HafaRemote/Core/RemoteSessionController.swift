@@ -2,6 +2,7 @@ import Foundation
 
 protocol RemoteSessionDriving: TVDriver {
     var brand: TVBrand { get }
+    func supports(_ brand: TVBrand) -> Bool
     func connect(
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
@@ -12,6 +13,7 @@ protocol RemoteSessionDriving: TVDriver {
     ) async throws -> ConnectedTV
     func forget(addressText: String) async throws
     func forget(addressText: String, reportedDeviceID: String?) async throws
+    func submitPairingCode(_ code: String) async throws
 }
 
 extension RemoteSessionDriving {
@@ -29,6 +31,14 @@ extension RemoteSessionDriving {
 
     func forget(addressText: String, reportedDeviceID: String?) async throws {
         try await forget(addressText: addressText)
+    }
+
+    func supports(_ brand: TVBrand) -> Bool {
+        brand == self.brand
+    }
+
+    func submitPairingCode(_ code: String) async throws {
+        throw MultiBrandSessionDriverError.pairingCodeNotExpected
     }
 }
 
@@ -79,7 +89,7 @@ struct RemoteSessionConfiguration: Equatable, Sendable {
     let reconnectDelays: [Duration]
 
     static let production = RemoteSessionConfiguration(
-        connectionTimeout: .seconds(12),
+        connectionTimeout: .seconds(60),
         commandTimeout: .seconds(3),
         disconnectTimeout: .seconds(2),
         pairingRemovalTimeout: .seconds(3),
@@ -155,7 +165,7 @@ actor RemoteSessionController {
     }
 
     func connect(to target: TVConnectionTarget) async {
-        guard target.brand == driver.brand else {
+        guard driver.supports(target.brand) else {
             generation = UUID()
             targetAddressText = nil
             connectionTarget = nil
@@ -207,6 +217,10 @@ actor RemoteSessionController {
         try await performSend {
             try await driver.sendText(input)
         }
+    }
+
+    func submitPairingCode(_ code: String) async throws {
+        try await driver.submitPairingCode(code)
     }
 
     private func performSend(
@@ -545,6 +559,14 @@ actor RemoteSessionController {
             transition(to: .savedPairingRejected)
         } else if error as? SamsungPairingCoordinatorError == .certificateChanged {
             transition(to: .certificateChanged)
+        } else if error as? SonyPairingCoordinatorError == .certificateChanged
+            || error as? SonyTLSChannelError == .certificateChanged
+        {
+            transition(to: .certificateChanged)
+        } else if error as? SonyPairingCoordinatorError == .invalidPairingCode
+            || error as? SonyPairingCoordinatorError == .pairingRejected
+        {
+            transition(to: .denied)
         } else if Self.isUnsupportedError(error) {
             transition(to: .unsupported)
         } else if Self.isOfflineError(error) {
@@ -682,11 +704,18 @@ actor RemoteSessionController {
 
     private static func isUnsupportedError(_ error: Error) -> Bool {
         error as? SamsungPairingCoordinatorError == .unsupportedTokenAuthentication
+            || error as? SonyPairingCoordinatorError == .unsupportedDevice
+            || error as? MultiBrandSessionDriverError == .unsupportedBrand
     }
 
     private static func isOfflineError(_ error: Error) -> Bool {
-        guard let error = error as? SamsungConnectionError else { return false }
-        return error == .unavailable || error == .notConnected
+        if let error = error as? SamsungConnectionError {
+            return error == .unavailable || error == .notConnected
+        }
+        if let error = error as? SonyTLSChannelError {
+            return error == .unavailable || error == .connectionClosed
+        }
+        return false
     }
 }
 

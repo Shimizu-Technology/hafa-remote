@@ -40,12 +40,16 @@ final class RemoteSessionStore {
     }
 
     convenience init() {
-        let coordinator = SamsungPairingCoordinator(
+        let samsung = SamsungPairingCoordinator(
             deviceInfoProvider: SamsungDeviceInfoClient(),
             credentialStore: KeychainSamsungPairingCredentialStore(),
             transport: SamsungCommandTransport()
         )
-        self.init(controller: RemoteSessionController(driver: coordinator))
+        let driver = MultiBrandSessionDriver(
+            samsung: samsung,
+            sony: SonyPairingCoordinator()
+        )
+        self.init(controller: RemoteSessionController(driver: driver))
     }
 
     var connectedTV: ConnectedTV? {
@@ -114,6 +118,10 @@ final class RemoteSessionStore {
 
     func sendText(_ input: RemoteTextInput) async throws {
         try await controller.sendText(input)
+    }
+
+    func submitPairingCode(_ code: String) async throws {
+        try await controller.submitPairingCode(code)
     }
 
     func disconnect(clearRememberedTV: Bool = true) async {

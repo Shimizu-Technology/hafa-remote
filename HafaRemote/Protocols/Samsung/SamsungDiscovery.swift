@@ -366,6 +366,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
     final class TVDiscoveryFixtureBackend: TVDiscoveryBackend {
         enum Fixture {
             case television
+            case sonyTelevision
             case noResults
             case noResultsThenTelevision
         }
@@ -383,14 +384,16 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
             startCount += 1
             switch fixture {
             case .television:
-                publishTelevision(to: eventHandler)
+                publishTelevision(brand: .samsung, to: eventHandler)
+            case .sonyTelevision:
+                publishTelevision(brand: .sony, to: eventHandler)
             case .noResults:
                 eventHandler(.finished)
             case .noResultsThenTelevision:
                 if startCount == 1 {
                     eventHandler(.finished)
                 } else {
-                    publishTelevision(to: eventHandler)
+                    publishTelevision(brand: .samsung, to: eventHandler)
                 }
             }
         }
@@ -398,6 +401,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
         func stop() {}
 
         private func publishTelevision(
+            brand: TVBrand,
             to eventHandler: @escaping @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void
         ) {
             guard let address = try? PrivateIPv4Address("192.168.10.20") else {
@@ -407,10 +411,12 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
             eventHandler(
                 .found(
                     DiscoveredTV(
-                        reportedIdentifier: "synthetic-tv",
+                        brand: brand,
+                        reportedIdentifier: "synthetic-\(brand.rawValue)-tv",
                         displayName: "Living Room TV",
-                        modelName: "Samsung Q70A",
-                        address: address
+                        modelName: brand == .sony ? "Sony BRAVIA" : "Samsung Q70A",
+                        address: address,
+                        controlPort: brand == .sony ? 6466 : nil
                     )
                 )
             )

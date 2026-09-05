@@ -73,6 +73,37 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(addressField.waitForExistence(timeout: 2))
     }
 
+    /// Sony discovery stays address-free and uses the short code shown on the TV.
+    @MainActor
+    func testSonyPairingCodeFlow() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-sony-pairing")
+        app.launch()
+
+        let addButton = app.buttons["addTVButton"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 5))
+        addButton.tap()
+
+        let discoveredTV = app.buttons["discoveredTVButton"]
+        XCTAssertTrue(discoveredTV.waitForExistence(timeout: 2))
+        XCTAssertTrue(discoveredTV.label.contains("Sony"))
+        discoveredTV.tap()
+
+        let codeField = app.textFields["sonyPairingCodeField"]
+        XCTAssertTrue(codeField.waitForExistence(timeout: 2))
+        let submit = app.buttons["submitSonyPairingCodeButton"]
+        XCTAssertFalse(submit.isEnabled)
+
+        codeField.tap()
+        codeField.typeText("A1B2C3")
+        XCTAssertTrue(submit.isEnabled)
+        submit.tap()
+
+        let connectionStatus = app.staticTexts["remoteConnectionStatus"]
+        XCTAssertTrue(connectionStatus.waitForExistence(timeout: 5))
+        XCTAssertEqual(connectionStatus.label, "Connected")
+    }
+
     /// Runs separately from the deterministic gate against the powered-on household TV.
     @MainActor
     func testHardwareDiscoveryFindsSamsungTV() throws {
