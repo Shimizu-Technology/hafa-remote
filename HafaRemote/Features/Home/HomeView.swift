@@ -11,6 +11,7 @@ struct HomeView: View {
     @State private var isShowingSetup = false
     @State private var scenePhaseEvents = ScenePhaseEvents()
     @State private var didAttemptInitialRestore = false
+    @State private var isRestoringSavedTV = false
     @State private var persistenceWarning: String?
 
     init(session: RemoteSessionStore = RemoteSessionStore()) {
@@ -182,19 +183,6 @@ struct HomeView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
     }
 
-    private var isRestoringSavedTV: Bool {
-        guard !savedTVs.isEmpty else { return false }
-        if !didAttemptInitialRestore { return true }
-
-        return switch session.state {
-        case .connecting, .pairing, .reconnecting:
-            true
-        case .idle, .connected, .offline, .denied, .savedPairingRejected,
-            .certificateChanged, .unsupported, .failed:
-            false
-        }
-    }
-
     private var statusLabel: String {
         switch session.state {
         case .connected:
@@ -226,6 +214,8 @@ struct HomeView: View {
         guard !didAttemptInitialRestore else { return }
         guard let address = savedTVs.first?.validatedAddress else { return }
         didAttemptInitialRestore = true
+        isRestoringSavedTV = true
+        defer { isRestoringSavedTV = false }
         await session.connect(to: address.rawValue)
     }
 

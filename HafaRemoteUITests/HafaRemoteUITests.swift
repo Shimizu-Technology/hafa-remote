@@ -9,8 +9,7 @@ final class HafaRemoteUITests: XCTestCase {
     /// Verifies that the primary empty-state action remains discoverable and opens setup.
     @MainActor
     func testEmptyStateOpensTVSetup() throws {
-        let app = XCUIApplication()
-        app.launchArguments.append("-ui-testing-in-memory-store")
+        let app = makeApplication()
         app.launch()
 
         XCTAssertTrue(app.navigationBars["Hafa Remote"].waitForExistence(timeout: 5))
@@ -82,7 +81,7 @@ final class HafaRemoteUITests: XCTestCase {
     /// The scrollable remote must remain usable at the largest accessibility text size.
     @MainActor
     func testRemoteSupportsLargestDynamicType() throws {
-        let app = XCUIApplication()
+        let app = makeApplication()
         app.launchArguments += [
             "-ui-testing-remote",
             "-UIPreferredContentSizeCategoryName",
@@ -106,7 +105,7 @@ final class HafaRemoteUITests: XCTestCase {
     /// Offline state disables commands while keeping recovery actions obvious and functional.
     @MainActor
     func testOfflineRemoteOffersRecoveryWithoutSendingCommands() throws {
-        let app = XCUIApplication()
+        let app = makeApplication()
         app.launchArguments.append("-ui-testing-remote-offline")
         app.launch()
 
@@ -135,9 +134,16 @@ final class HafaRemoteUITests: XCTestCase {
 
     @MainActor
     private func launchRemoteHarness() -> XCUIApplication {
-        let app = XCUIApplication()
+        let app = makeApplication()
         app.launchArguments.append("-ui-testing-remote")
         app.launch()
+        return app
+    }
+
+    @MainActor
+    private func makeApplication() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append("-ui-testing-in-memory-store")
         return app
     }
 }
