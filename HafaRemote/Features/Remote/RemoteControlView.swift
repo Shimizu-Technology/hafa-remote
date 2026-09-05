@@ -19,6 +19,7 @@ struct RemoteControlView: View {
     @State private var isConfirmingPowerOff = false
     @State private var isShowingKeyboard = false
     @State private var isWakingTV = false
+    @State private var activeWakeID: UUID?
     @State private var wakeTask: Task<Void, Never>?
     @State private var wakeFailureMessage: String?
 
@@ -98,8 +99,11 @@ struct RemoteControlView: View {
             )
         }
         .onDisappear {
-            wakeTask?.cancel()
+            activeWakeID = nil
+            isWakingTV = false
+            let task = wakeTask
             wakeTask = nil
+            task?.cancel()
         }
     }
 
@@ -437,23 +441,32 @@ struct RemoteControlView: View {
     private func wakeTV() {
         guard !isConnected, canWakeTV, wakeTask == nil else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        let wakeID = UUID()
+        activeWakeID = wakeID
         isWakingTV = true
         wakeFailureMessage = nil
         wakeTask = Task { @MainActor in
             defer {
-                wakeTask = nil
-                isWakingTV = false
+                finishWake(wakeID)
             }
             do {
                 try await wakeAction()
             } catch is CancellationError {
                 return
             } catch {
+                guard activeWakeID == wakeID else { return }
                 wakeFailureMessage =
                     "The wake signal could not be completed. Confirm your iPhone and TV use the same Wi-Fi, enable Power On With Mobile on the TV, then try again."
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
         }
+    }
+
+    private func finishWake(_ wakeID: UUID) {
+        guard activeWakeID == wakeID else { return }
+        activeWakeID = nil
+        wakeTask = nil
+        isWakingTV = false
     }
 }
 

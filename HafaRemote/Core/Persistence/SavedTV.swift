@@ -75,8 +75,9 @@ final class SavedTV: CustomStringConvertible {
             }
             let reportedMACAddress = tv.macAddress?.persistedValue
             if wakeWasJustVerified,
-                macAddress != nil,
-                reportedMACAddress == nil || reportedMACAddress == previousMACAddress
+                let reportedMACAddress,
+                let previousMACAddress,
+                reportedMACAddress == previousMACAddress
             {
                 wakeWasVerified = true
             }

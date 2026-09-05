@@ -180,6 +180,8 @@ private final class SamsungWakeSendCompletion: @unchecked Sendable {
     private var continuation: CheckedContinuation<Void, Error>?
     private var pendingResult: Result<Void, Error>?
 
+    deinit {}
+
     func install(_ continuation: CheckedContinuation<Void, Error>) {
         lock.lock()
         if let pendingResult {
