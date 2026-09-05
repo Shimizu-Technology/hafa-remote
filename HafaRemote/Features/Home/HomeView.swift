@@ -65,7 +65,7 @@ struct HomeView: View {
         } message: {
             Text(persistenceWarning ?? "")
         }
-        .task {
+        .task(id: savedTVs.first?.persistentModelID) {
             await restoreLastUsedTVIfNeeded()
         }
         .onChange(of: session.state) { _, state in
@@ -180,8 +180,8 @@ struct HomeView: View {
 
     private func restoreLastUsedTVIfNeeded() async {
         guard !didAttemptInitialRestore else { return }
-        didAttemptInitialRestore = true
         guard let address = savedTVs.first?.validatedAddress else { return }
+        didAttemptInitialRestore = true
         await session.connect(to: address.rawValue)
     }
 
