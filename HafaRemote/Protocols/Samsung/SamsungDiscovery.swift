@@ -332,9 +332,11 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
         enum Fixture {
             case television
             case noResults
+            case noResultsThenTelevision
         }
 
         private let fixture: Fixture
+        private var startCount = 0
 
         init(fixture: Fixture) {
             self.fixture = fixture
@@ -343,28 +345,41 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
         func start(
             eventHandler: @escaping @MainActor @Sendable (SamsungDiscoveryBackendEvent) -> Void
         ) {
+            startCount += 1
             switch fixture {
             case .television:
-                guard let address = try? PrivateIPv4Address("192.168.10.20") else {
-                    eventHandler(.failed)
-                    return
-                }
-                eventHandler(
-                    .found(
-                        DiscoveredSamsungTV(
-                            reportedIdentifier: "synthetic-tv",
-                            displayName: "Living Room TV",
-                            modelName: "Samsung Q70A",
-                            address: address
-                        )
-                    )
-                )
-                eventHandler(.finished)
+                publishTelevision(to: eventHandler)
             case .noResults:
                 eventHandler(.finished)
+            case .noResultsThenTelevision:
+                if startCount == 1 {
+                    eventHandler(.finished)
+                } else {
+                    publishTelevision(to: eventHandler)
+                }
             }
         }
 
         func stop() {}
+
+        private func publishTelevision(
+            to eventHandler: @escaping @MainActor @Sendable (SamsungDiscoveryBackendEvent) -> Void
+        ) {
+            guard let address = try? PrivateIPv4Address("192.168.10.20") else {
+                eventHandler(.failed)
+                return
+            }
+            eventHandler(
+                .found(
+                    DiscoveredSamsungTV(
+                        reportedIdentifier: "synthetic-tv",
+                        displayName: "Living Room TV",
+                        modelName: "Samsung Q70A",
+                        address: address
+                    )
+                )
+            )
+            eventHandler(.finished)
+        }
     }
 #endif

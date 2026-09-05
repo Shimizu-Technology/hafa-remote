@@ -46,7 +46,7 @@ final class HafaRemoteUITests: XCTestCase {
     @MainActor
     func testDiscoveryNoResultsOffersRetryAndManualFallback() throws {
         let app = makeApplication()
-        app.launchArguments.append("-ui-testing-discovery-empty")
+        app.launchArguments.append("-ui-testing-discovery-retry")
         app.launch()
 
         let addButton = app.buttons["addSamsungTVButton"]
@@ -57,6 +57,11 @@ final class HafaRemoteUITests: XCTestCase {
         let scanAgain = app.buttons["scanAgainButton"]
         XCTAssertTrue(scanAgain.waitForExistence(timeout: 2))
         XCTAssertTrue(scanAgain.isHittable)
+        scanAgain.tap()
+
+        let discoveredTV = app.buttons["discoveredTVButton"]
+        XCTAssertTrue(discoveredTV.waitForExistence(timeout: 2))
+        XCTAssertTrue(discoveredTV.label.contains("Living Room TV"))
 
         let manualSetup = app.buttons["manualSetupButton"]
         XCTAssertTrue(manualSetup.waitForExistence(timeout: 2))

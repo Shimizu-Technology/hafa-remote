@@ -32,6 +32,13 @@ struct HafaRemoteApp: App {
                             backend: SamsungDiscoveryFixtureBackend(fixture: .noResults)
                         )
                     )
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-discovery-retry") {
+                    HomeView(
+                        discovery: SamsungDiscoveryStore(
+                            backend: SamsungDiscoveryFixtureBackend(
+                                fixture: .noResultsThenTelevision)
+                        )
+                    )
                 } else {
                     HomeView()
                 }
