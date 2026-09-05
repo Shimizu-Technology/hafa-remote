@@ -143,12 +143,12 @@ actor RemoteSessionController {
         let clock = clock
         let timeout = configuration.commandTimeout
         let task = Task {
-            try await commandSerializer.perform {
-                try await RemoteSessionTimeout.run(
-                    operation: .send,
-                    timeout: timeout,
-                    clock: clock
-                ) {
+            try await RemoteSessionTimeout.run(
+                operation: .send,
+                timeout: timeout,
+                clock: clock
+            ) {
+                try await commandSerializer.perform {
                     try await driver.send(command)
                 }
             }
@@ -168,6 +168,11 @@ actor RemoteSessionController {
             commandTasks[commandID] = nil
             let wasCancelled = Task.isCancelled || error is CancellationError
             if generation == commandGeneration, !wasCancelled {
+                let queuedCommands = Array(commandTasks.values)
+                commandTasks.removeAll()
+                for queuedCommand in queuedCommands {
+                    queuedCommand.cancel()
+                }
                 let shouldReconnect: Bool
                 if let timeoutError = error as? RemoteSessionControllerError {
                     transition(to: .failed(.timedOut(timeoutError.operation)))

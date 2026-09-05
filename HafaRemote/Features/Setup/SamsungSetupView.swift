@@ -175,6 +175,8 @@ struct SamsungSetupView: View {
         switch session.state {
         case .savedPairingRejected, .certificateChanged:
             !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .failed(.timedOut(.forgetPairing)):
+            !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         default:
             false
         }

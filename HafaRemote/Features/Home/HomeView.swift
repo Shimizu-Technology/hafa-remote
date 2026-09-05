@@ -5,6 +5,7 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var session: RemoteSessionStore
     @State private var isShowingSetup = false
+    @State private var scenePhaseEvents = ScenePhaseEvents()
 
     init(session: RemoteSessionStore = RemoteSessionStore()) {
         _session = State(initialValue: session)
@@ -38,7 +39,10 @@ struct HomeView: View {
             SamsungSetupView(session: session)
         }
         .onChange(of: scenePhase) { _, phase in
-            Task { @MainActor in
+            scenePhaseEvents.continuation.yield(phase)
+        }
+        .task {
+            for await phase in scenePhaseEvents.stream {
                 switch phase {
                 case .background:
                     await session.applicationDidEnterBackground()
@@ -116,7 +120,7 @@ struct HomeView: View {
         case .connecting:
             "Connecting"
         case .reconnecting(let attempt):
-            "Reconnecting \(attempt)"
+            "Reconnecting (attempt \(attempt))"
         case .offline:
             "Offline"
         case .denied:
@@ -132,6 +136,15 @@ struct HomeView: View {
         case .idle:
             "Disconnected"
         }
+    }
+}
+
+private struct ScenePhaseEvents {
+    let stream: AsyncStream<ScenePhase>
+    let continuation: AsyncStream<ScenePhase>.Continuation
+
+    init() {
+        (stream, continuation) = AsyncStream.makeStream()
     }
 }
 
