@@ -91,6 +91,20 @@ struct SonyTLSMessageBuffer: Sendable {
     }
 }
 
+enum SonyTLSReceivedChunkIsolation {
+    static func append<Connection: AnyObject>(
+        _ chunk: Data,
+        expectedConnection: Connection,
+        currentConnection: Connection?,
+        to buffer: inout SonyTLSMessageBuffer
+    ) throws -> Data? {
+        guard currentConnection === expectedConnection else {
+            throw SonyTLSChannelError.connectionClosed
+        }
+        return try buffer.append(chunk)
+    }
+}
+
 enum SonyTLSConnectionDeadline {
     static func run<Value: Sendable>(
         timeout: Duration,
@@ -238,10 +252,14 @@ actor SonyTLSChannel: SonyTLSChanneling {
 
         while true {
             let chunk = try await receiveChunk(on: connection)
-            guard self.connection === connection else {
-                throw SonyTLSChannelError.connectionClosed
+            if let message = try SonyTLSReceivedChunkIsolation.append(
+                chunk,
+                expectedConnection: connection,
+                currentConnection: self.connection,
+                to: &messageBuffer
+            ) {
+                return message
             }
-            if let message = try messageBuffer.append(chunk) { return message }
         }
     }
 

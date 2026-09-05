@@ -74,6 +74,47 @@ struct SonyPairingCredentialTests {
         }
         #expect(keychain.data(for: credential.reportedDeviceID) == nil)
     }
+
+    @Test("A deleted corrupt record falls through to physical-TV pairing")
+    func corruptRecordBecomesMissingCredential() async throws {
+        let fingerprint = Data(repeating: 12, count: 32)
+        let store = FailingSonyPairingCredentialStore(error: .invalidStoredCredential)
+
+        #expect(
+            try await SonyRecoverableCredentialLookup.credential(
+                in: store,
+                fingerprint: fingerprint
+            ) == nil
+        )
+    }
+
+    @Test("Credential lookup still propagates non-recoverable Keychain failures")
+    func propagatesKeychainFailure() async {
+        let failure = SonyKeychainError.readFailed(-50)
+        let store = FailingSonyPairingCredentialStore(error: failure)
+
+        await #expect(throws: failure) {
+            try await SonyRecoverableCredentialLookup.credential(
+                in: store,
+                fingerprint: Data(repeating: 13, count: 32)
+            )
+        }
+    }
+}
+
+private actor FailingSonyPairingCredentialStore: SonyPairingCredentialStoring {
+    private let error: SonyKeychainError
+
+    init(error: SonyKeychainError) {
+        self.error = error
+    }
+
+    func credential(for certificateSHA256: Data) throws -> SonyPairingCredential? {
+        throw error
+    }
+
+    func save(_ credential: SonyPairingCredential) {}
+    func remove(reportedDeviceID: String) {}
 }
 
 private final class InMemorySonyPairingCredentialKeychain:

@@ -54,6 +54,28 @@ struct SonyTLSChannelTests {
         #expect(buffer.next() == nil)
     }
 
+    @Test("A late read from an old connection cannot enter the replacement connection buffer")
+    func lateReadCannotCrossReconnectBoundary() async throws {
+        let first = SonyTestConnection()
+        let second = SonyTestConnection()
+        let receiver = ControllableSonyChunkReceiver()
+        let harness = SonyReceiveIsolationHarness(connection: first)
+        let task = Task {
+            try await harness.receive(expectedConnection: first) {
+                try await receiver.receive()
+            }
+        }
+
+        await receiver.waitUntilReceiving()
+        await harness.replaceConnection(with: second)
+        await receiver.resume(with: try SonyProtobuf.framed(Data([9, 8, 7])))
+
+        await #expect(throws: SonyTLSChannelError.connectionClosed) {
+            try await task.value
+        }
+        #expect(await harness.nextBufferedMessage() == nil)
+    }
+
     @Test("Cancelling a TLS connection deadline preserves cancellation")
     func connectionDeadlinePreservesCancellation() async {
         let task = Task {
@@ -89,6 +111,76 @@ struct SonyTLSChannelTests {
                 maximumMessages: 8
             )
         }
+    }
+
+    @Test("A stalled pairing exchange becomes the coordinator pairing timeout state")
+    func pairingExchangeTimesOut() async {
+        await #expect(throws: SonyPairingCoordinatorError.pairingTimedOut) {
+            try await SonyPairingExchangeDeadline.run(timeout: .milliseconds(20)) {
+                try await Task.sleep(for: .seconds(1))
+                return true
+            }
+        }
+    }
+}
+
+private final class SonyTestConnection: @unchecked Sendable {}
+
+private actor SonyReceiveIsolationHarness {
+    private var connection: SonyTestConnection?
+    private var buffer = SonyTLSMessageBuffer()
+
+    init(connection: SonyTestConnection) {
+        self.connection = connection
+    }
+
+    func receive(
+        expectedConnection: SonyTestConnection,
+        receiveChunk: @Sendable () async throws -> Data
+    ) async throws -> Data? {
+        let chunk = try await receiveChunk()
+        return try SonyTLSReceivedChunkIsolation.append(
+            chunk,
+            expectedConnection: expectedConnection,
+            currentConnection: connection,
+            to: &buffer
+        )
+    }
+
+    func replaceConnection(with connection: SonyTestConnection) {
+        self.connection = connection
+        buffer.reset()
+    }
+
+    func nextBufferedMessage() -> Data? {
+        buffer.next()
+    }
+}
+
+private actor ControllableSonyChunkReceiver {
+    private var startedContinuation: CheckedContinuation<Void, Never>?
+    private var chunkContinuation: CheckedContinuation<Data, Error>?
+    private var isReceiving = false
+
+    func receive() async throws -> Data {
+        isReceiving = true
+        startedContinuation?.resume()
+        startedContinuation = nil
+        return try await withCheckedThrowingContinuation { continuation in
+            chunkContinuation = continuation
+        }
+    }
+
+    func waitUntilReceiving() async {
+        guard !isReceiving else { return }
+        await withCheckedContinuation { continuation in
+            startedContinuation = continuation
+        }
+    }
+
+    func resume(with chunk: Data) {
+        chunkContinuation?.resume(returning: chunk)
+        chunkContinuation = nil
     }
 }
 

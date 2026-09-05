@@ -46,6 +46,21 @@ protocol SonyPairingCredentialStoring: Sendable {
     func remove(reportedDeviceID: String) async throws
 }
 
+enum SonyRecoverableCredentialLookup {
+    static func credential(
+        in store: any SonyPairingCredentialStoring,
+        fingerprint: Data
+    ) async throws -> SonyPairingCredential? {
+        do {
+            return try await store.credential(for: fingerprint)
+        } catch SonyKeychainError.invalidStoredCredential {
+            // The store has already deleted the malformed entry. Treat it as absent
+            // so the physical-TV approval flow can issue a replacement credential.
+            return nil
+        }
+    }
+}
+
 protocol SonyPairingCredentialKeychain: Sendable {
     func data(for account: String) throws -> Data?
     func save(_ data: Data, for account: String) throws

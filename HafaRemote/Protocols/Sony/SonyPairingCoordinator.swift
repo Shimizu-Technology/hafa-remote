@@ -14,6 +14,7 @@ protocol SonyPairingCoordinating: TVDriver {
 actor SonyPairingCoordinator: SonyPairingCoordinating {
     private static let pairingPort: UInt16 = 6467
     private static let controlPort: UInt16 = 6466
+    private static let pairingExchangeTimeout: Duration = .seconds(90)
     private static let remoteHandshakeTimeout: Duration = .seconds(10)
     private static let maximumRemoteHandshakeMessages = 128
 
@@ -105,7 +106,10 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         else {
             return nil
         }
-        return try await credentialStore.credential(for: candidate.certificateSHA256)
+        return try await SonyRecoverableCredentialLookup.credential(
+            in: credentialStore,
+            fingerprint: candidate.certificateSHA256
+        )
     }
 
     private func pair(
@@ -120,21 +124,45 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             trustMode: .selectedPairingCandidate
         )
 
-        if let saved = try await credentialStore.credential(for: peer.certificateSHA256) {
+        if let saved = try await SonyRecoverableCredentialLookup.credential(
+            in: credentialStore,
+            fingerprint: peer.certificateSHA256
+        ) {
             await pairingChannel.disconnect()
             return saved
         }
 
+        let credential = try await SonyPairingExchangeDeadline.run(
+            timeout: Self.pairingExchangeTimeout
+        ) { [pairingChannel] in
+            try await Self.completePairingExchange(
+                on: pairingChannel,
+                identity: identity,
+                peer: peer,
+                requestPairingCode: requestPairingCode
+            )
+        }
+        try await credentialStore.save(credential)
+        await pairingChannel.disconnect()
+        return credential
+    }
+
+    private static func completePairingExchange(
+        on pairingChannel: any SonyTLSChanneling,
+        identity: SonyClientIdentityReference,
+        peer: SonyTLSPeer,
+        requestPairingCode: @escaping SonyPairingCodeProvider
+    ) async throws -> SonyPairingCredential {
         try await pairingChannel.send(SonyPairingProtocolCodec.request(clientName: "Hafa Remote"))
-        guard try await pairingMessage() == .requestAcknowledged else {
+        guard try await pairingMessage(on: pairingChannel) == .requestAcknowledged else {
             throw SonyPairingCoordinatorError.invalidPairingResponse
         }
         try await pairingChannel.send(SonyPairingProtocolCodec.options())
-        guard try await pairingMessage() == .options else {
+        guard try await pairingMessage(on: pairingChannel) == .options else {
             throw SonyPairingCoordinatorError.invalidPairingResponse
         }
         try await pairingChannel.send(SonyPairingProtocolCodec.configuration())
-        guard try await pairingMessage() == .configurationAcknowledged else {
+        guard try await pairingMessage(on: pairingChannel) == .configurationAcknowledged else {
             throw SonyPairingCoordinatorError.invalidPairingResponse
         }
 
@@ -158,19 +186,18 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         }
 
         try await pairingChannel.send(try SonyPairingProtocolCodec.secret(secret))
-        guard try await pairingMessage() == .secretAcknowledged else {
+        guard try await pairingMessage(on: pairingChannel) == .secretAcknowledged else {
             throw SonyPairingCoordinatorError.pairingRejected
         }
 
-        let credential = try SonyPairingCredential(
+        return try SonyPairingCredential(
             certificateSHA256: peer.certificateSHA256
         )
-        try await credentialStore.save(credential)
-        await pairingChannel.disconnect()
-        return credential
     }
 
-    private func pairingMessage() async throws -> SonyPairingMessage {
+    private static func pairingMessage(on pairingChannel: any SonyTLSChanneling) async throws
+        -> SonyPairingMessage
+    {
         do {
             return try SonyPairingProtocolCodec.parse(await pairingChannel.receive())
         } catch let error as SonyProtocolCodecError {
@@ -243,7 +270,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         }
     }
 
-    private func certificate(from identity: SecIdentity) throws -> SecCertificate {
+    private static func certificate(from identity: SecIdentity) throws -> SecCertificate {
         var certificate: SecCertificate?
         guard SecIdentityCopyCertificate(identity, &certificate) == errSecSuccess,
             let certificate
@@ -257,6 +284,22 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
 struct SonyRemoteDevice: Sendable {
     let model: String
     let softwareVersion: String
+}
+
+enum SonyPairingExchangeDeadline {
+    static func run<Value: Sendable>(
+        timeout: Duration,
+        operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        do {
+            return try await SonyTLSConnectionDeadline.run(
+                timeout: timeout,
+                operation: operation
+            )
+        } catch SonyTLSChannelError.timedOut {
+            throw SonyPairingCoordinatorError.pairingTimedOut
+        }
+    }
 }
 
 enum SonyRemoteHandshake {
@@ -373,6 +416,7 @@ enum SonyPairingCoordinatorError: LocalizedError, Equatable, Sendable {
     case invalidPairingResponse
     case invalidPairingCode
     case pairingRejected
+    case pairingTimedOut
     case invalidRemoteResponse
     case remoteHandshakeTimedOut
     case certificateChanged
@@ -389,6 +433,8 @@ enum SonyPairingCoordinatorError: LocalizedError, Equatable, Sendable {
             "That pairing code did not match the code on the Sony TV."
         case .pairingRejected:
             "The Sony TV did not approve Hafa Remote. Try pairing again."
+        case .pairingTimedOut:
+            "Sony TV pairing took too long. Try again and enter the code shown on the TV."
         case .certificateChanged:
             "This Sony TV's security identity changed. Remove its saved pairing before reconnecting."
         }
