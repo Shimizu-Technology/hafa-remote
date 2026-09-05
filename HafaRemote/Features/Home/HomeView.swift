@@ -43,6 +43,8 @@ struct HomeView: View {
                         .accessibilityIdentifier("changeTVButton")
                     }
                 }
+            } else if isRestoringSavedTV {
+                restoringState
             } else {
                 emptyState
             }
@@ -138,6 +140,7 @@ struct HomeView: View {
                         .tint(HafaTheme.accent)
                         .foregroundStyle(HafaTheme.canvas)
                         .accessibilityIdentifier("addSamsungTVButton")
+                        .disabled(isRestoringSavedTV)
 
                         Spacer(minLength: 24)
                     }
@@ -149,6 +152,47 @@ struct HomeView: View {
         }
         .navigationTitle("Hafa Remote")
         .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    private var restoringState: some View {
+        ZStack {
+            HafaTheme.canvas
+                .ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(HafaTheme.accent)
+
+                Text("Connecting to your TV…")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                if let savedTV = savedTVs.first {
+                    Text(savedTV.displayName)
+                        .font(.subheadline)
+                        .foregroundStyle(HafaTheme.secondaryText)
+                }
+            }
+            .padding(24)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("restoringSavedTVState")
+        }
+        .navigationTitle("Hafa Remote")
+        .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+
+    private var isRestoringSavedTV: Bool {
+        guard !savedTVs.isEmpty else { return false }
+        if !didAttemptInitialRestore { return true }
+
+        return switch session.state {
+        case .connecting, .pairing, .reconnecting:
+            true
+        case .idle, .connected, .offline, .denied, .savedPairingRejected,
+            .certificateChanged, .unsupported, .failed:
+            false
+        }
     }
 
     private var statusLabel: String {
@@ -186,17 +230,18 @@ struct HomeView: View {
     }
 
     private func displayName(for tv: PairedSamsungTV) -> String {
-        savedTVs.first(where: { $0.lastKnownAddress == tv.address.rawValue })?.displayName
+        savedTVs.first(where: { $0.reportedDeviceID == tv.reportedDeviceID })?.displayName
             ?? "Samsung TV"
     }
 
     private func saveConnectedTV(_ tv: PairedSamsungTV) {
         let now = Date.now
-        if let saved = savedTVs.first(where: { $0.lastKnownAddress == tv.address.rawValue }) {
+        if let saved = savedTVs.first(where: { $0.reportedDeviceID == tv.reportedDeviceID }) {
             saved.recordConnection(to: tv, at: now)
         } else {
             modelContext.insert(
                 SavedTV(
+                    reportedDeviceID: tv.reportedDeviceID,
                     displayName: "Samsung TV",
                     modelName: tv.modelName,
                     firmwareVersion: tv.firmwareVersion,

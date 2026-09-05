@@ -12,6 +12,7 @@ struct SavedTVTests {
         let container = try ModelContainer(for: SavedTV.self, configurations: configuration)
         let context = container.mainContext
         let saved = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
             displayName: "Living Room",
             modelName: "Q70AA",
             firmwareVersion: "2210",
@@ -26,6 +27,7 @@ struct SavedTVTests {
         let fetched = try restoredContext.fetch(FetchDescriptor<SavedTV>())
 
         #expect(fetched.count == 1)
+        #expect(fetched.first?.reportedDeviceID == "synthetic-device-id")
         #expect(fetched.first?.displayName == "Living Room")
         #expect(fetched.first?.modelName == "Q70AA")
         #expect(fetched.first?.firmwareVersion == "2210")
@@ -38,6 +40,7 @@ struct SavedTVTests {
     @Test("An invalid persisted host is never reused for a connection")
     func rejectsInvalidPersistedAddress() {
         let saved = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
             displayName: "TV",
             modelName: "Q70AA",
             firmwareVersion: nil,
@@ -45,5 +48,30 @@ struct SavedTVTests {
         )
 
         #expect(saved.validatedAddress == nil)
+    }
+
+    @Test("A stable device identifier preserves metadata across DHCP changes")
+    func updatesAddressWithoutReplacingSavedTV() throws {
+        let saved = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: "1001",
+            lastKnownAddress: "192.168.10.20"
+        )
+        let reconnectedTV = PairedSamsungTV(
+            reportedDeviceID: "synthetic-device-id",
+            address: try PrivateIPv4Address("192.168.10.42"),
+            modelName: "Q70AA",
+            firmwareVersion: "1002"
+        )
+
+        saved.recordConnection(to: reconnectedTV, at: Date(timeIntervalSince1970: 300))
+
+        #expect(saved.displayName == "Living Room")
+        #expect(saved.reportedDeviceID == "synthetic-device-id")
+        #expect(saved.lastKnownAddress == "192.168.10.42")
+        #expect(saved.firmwareVersion == "1002")
+        #expect(saved.lastUsedAt == Date(timeIntervalSince1970: 300))
     }
 }

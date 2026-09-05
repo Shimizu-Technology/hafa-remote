@@ -4,6 +4,14 @@ import SwiftUI
 /// The iPhone application entry point for Hafa Remote.
 @main
 struct HafaRemoteApp: App {
+    private var usesInMemoryStore: Bool {
+        #if DEBUG
+            ProcessInfo.processInfo.arguments.contains("-ui-testing-in-memory-store")
+        #else
+            false
+        #endif
+    }
+
     /// Builds the app's root scene.
     var body: some Scene {
         WindowGroup {
@@ -19,6 +27,6 @@ struct HafaRemoteApp: App {
                 HomeView()
             #endif
         }
-        .modelContainer(for: SavedTV.self)
+        .modelContainer(for: SavedTV.self, inMemory: usesInMemoryStore)
     }
 }

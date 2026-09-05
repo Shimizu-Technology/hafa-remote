@@ -1,6 +1,7 @@
 import Foundation
 
 struct PairedSamsungTV: Equatable, Sendable {
+    let reportedDeviceID: String
     let address: PrivateIPv4Address
     let modelName: String
     let firmwareVersion: String?
@@ -96,6 +97,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                 try Task.checkCancellation()
 
                 return PairedSamsungTV(
+                    reportedDeviceID: deviceInfo.reportedDeviceID,
                     address: address,
                     modelName: deviceInfo.modelName,
                     firmwareVersion: deviceInfo.firmwareVersion

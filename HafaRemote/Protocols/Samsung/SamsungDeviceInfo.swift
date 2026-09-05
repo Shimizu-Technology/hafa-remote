@@ -2,6 +2,7 @@ import Foundation
 
 /// Non-sensitive capability details read from a Samsung TV before pairing.
 struct SamsungDeviceInfo: Equatable, Sendable {
+    let reportedDeviceID: String
     let modelName: String
     let firmwareVersion: String?
     let supportsTokenAuthentication: Bool
@@ -83,11 +84,14 @@ enum SamsungDeviceInfoParser {
         }
 
         let modelName = envelope.device.modelName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !modelName.isEmpty else {
+        let reportedDeviceID =
+            envelope.device.id?.nonemptyTrimmed ?? envelope.device.duid?.nonemptyTrimmed
+        guard !modelName.isEmpty, let reportedDeviceID else {
             throw SamsungDeviceInfoError.invalidResponse
         }
 
         return SamsungDeviceInfo(
+            reportedDeviceID: reportedDeviceID,
             modelName: modelName,
             firmwareVersion: envelope.device.firmwareVersion?.nonemptyTrimmed,
             supportsTokenAuthentication: envelope.device.tokenAuthSupport?.lowercased() == "true"
@@ -99,11 +103,15 @@ private struct SamsungDeviceInfoEnvelope: Decodable {
     let device: Device
 
     struct Device: Decodable {
+        let id: String?
+        let duid: String?
         let modelName: String
         let firmwareVersion: String?
         let tokenAuthSupport: String?
 
         enum CodingKeys: String, CodingKey {
+            case id
+            case duid
             case modelName
             case firmwareVersion
             case tokenAuthSupport = "TokenAuthSupport"

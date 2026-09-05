@@ -11,7 +11,7 @@ final class LocalNetworkMonitor {
     private let monitor: NWPathMonitor
     private let queue = DispatchQueue(label: "com.shimizutechnology.hafaremote.network-path")
 
-    init(monitor: NWPathMonitor = NWPathMonitor()) {
+    init(monitor: NWPathMonitor = NWPathMonitor(requiredInterfaceType: .wifi)) {
         self.monitor = monitor
         monitor.pathUpdateHandler = { [weak self] path in
             let isReachable = path.status == .satisfied

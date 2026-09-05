@@ -5,6 +5,7 @@ import SwiftData
 @Model
 final class SavedTV: CustomStringConvertible {
     @Attribute(.unique) var id: UUID
+    @Attribute(.unique) var reportedDeviceID: String
     var displayName: String
     var modelName: String
     var firmwareVersion: String?
@@ -14,6 +15,7 @@ final class SavedTV: CustomStringConvertible {
 
     init(
         id: UUID = UUID(),
+        reportedDeviceID: String,
         displayName: String,
         modelName: String,
         firmwareVersion: String?,
@@ -22,6 +24,7 @@ final class SavedTV: CustomStringConvertible {
         lastUsedAt: Date = .now
     ) {
         self.id = id
+        self.reportedDeviceID = reportedDeviceID
         self.displayName = displayName
         self.modelName = modelName
         self.firmwareVersion = firmwareVersion
@@ -39,6 +42,7 @@ final class SavedTV: CustomStringConvertible {
     }
 
     func recordConnection(to tv: PairedSamsungTV, at date: Date = .now) {
+        reportedDeviceID = tv.reportedDeviceID
         modelName = tv.modelName
         firmwareVersion = tv.firmwareVersion
         lastKnownAddress = tv.address.rawValue

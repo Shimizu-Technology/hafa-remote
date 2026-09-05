@@ -10,6 +10,7 @@ final class HafaRemoteUITests: XCTestCase {
     @MainActor
     func testEmptyStateOpensTVSetup() throws {
         let app = XCUIApplication()
+        app.launchArguments.append("-ui-testing-in-memory-store")
         app.launch()
 
         XCTAssertTrue(app.navigationBars["Hafa Remote"].waitForExistence(timeout: 5))

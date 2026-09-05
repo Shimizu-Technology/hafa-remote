@@ -1383,6 +1383,7 @@ private actor ManualRemoteSessionClock: RemoteSessionClock {
 
 private func testTV(address: String, model: String) throws -> PairedSamsungTV {
     PairedSamsungTV(
+        reportedDeviceID: "synthetic-device-id-\(model)",
         address: try PrivateIPv4Address(address),
         modelName: model,
         firmwareVersion: "1001.2"

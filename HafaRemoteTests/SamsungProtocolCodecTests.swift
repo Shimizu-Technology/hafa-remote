@@ -171,7 +171,7 @@ struct SamsungProtocolCodecTests {
     @Test("Device parser retains only the reviewed capability fields")
     func parsesSafeDeviceInfo() throws {
         let response = Data(
-            #"{"device":{"modelName":" TEST_MODEL_2021 ","firmwareVersion":" 1001.2 ","TokenAuthSupport":"true","wifiMac":"00:00:00:00:00:00","ssid":"synthetic-network"}}"#
+            #"{"device":{"id":" synthetic-device-id ","modelName":" TEST_MODEL_2021 ","firmwareVersion":" 1001.2 ","TokenAuthSupport":"true","wifiMac":"00:00:00:00:00:00","ssid":"synthetic-network"}}"#
                 .utf8
         )
 
@@ -180,6 +180,7 @@ struct SamsungProtocolCodecTests {
         #expect(
             info
                 == SamsungDeviceInfo(
+                    reportedDeviceID: "synthetic-device-id",
                     modelName: "TEST_MODEL_2021",
                     firmwareVersion: "1001.2",
                     supportsTokenAuthentication: true
