@@ -98,8 +98,8 @@ assert_setting TARGETED_DEVICE_FAMILY 1
 assert_setting CODE_SIGN_STYLE Automatic
 
 local_network_copy="$(plutil -extract NSLocalNetworkUsageDescription raw "$info_plist")"
-if [[ "$local_network_copy" != *"Samsung TVs"* ]]; then
-  echo "Local-network permission copy must tell people it controls Samsung TVs." >&2
+if [[ "$local_network_copy" != *"supported TVs"* ]]; then
+  echo "Local-network permission copy must tell people it controls supported TVs." >&2
   exit 1
 fi
 

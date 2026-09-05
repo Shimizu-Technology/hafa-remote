@@ -566,7 +566,7 @@ struct SavedTVTests {
         let connecting = SavedTVRestorationPresentation(state: .connecting)
 
         #expect(pairing.title == "Approve Hafa Remote on your TV")
-        #expect(pairing.instruction == "Choose Allow on the Samsung TV to finish connecting.")
+        #expect(pairing.instruction == "Follow the approval prompt on your TV to finish connecting.")
         #expect(connecting.title == "Connecting to your TV…")
         #expect(connecting.instruction == nil)
     }

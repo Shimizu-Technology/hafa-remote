@@ -3,8 +3,8 @@
 
 **Version:** 0.1  
 **Last updated:** September 5, 2026
-**Current status:** The Samsung internal alpha and conditional Wake-on-LAN are merged and uploaded as TestFlight build 1; HR-020 multi-brand identity is in progress; Sony and Vizio household validation remain pending
-**Current execution frontier:** Brand-neutral identity/session boundaries, then Sony and Vizio discovery and pairing on Leon's exact household TVs
+**Current status:** The Samsung internal alpha and conditional Wake-on-LAN are merged and uploaded as TestFlight build 1; brand-scoped TV identity is merged; unified discovery plus Sony and Vizio household validation are in progress
+**Current execution frontier:** One automatic multi-brand discovery experience, then Sony and Vizio pairing/control on Leon's exact household TVs
 
 ## Delivery targets
 
@@ -191,9 +191,10 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** Samsung internal alpha merged
 
-- [ ] Add `TVBrand`, a brand-neutral connected-TV record, and a brand-scoped stable identity.
-- [ ] Migrate existing saved records safely to Samsung without losing their Keychain pairing.
-- [ ] Persist an optional brand-specific control port without treating it as stable identity.
+- [x] Add `TVBrand`, a brand-neutral connected-TV record, and a brand-scoped stable identity.
+- [x] Migrate existing saved records safely to Samsung; discard unsafe address-keyed alpha credentials and require fresh approval.
+- [x] Persist an optional brand-specific control port without treating it as stable identity.
+- [ ] Present one automatic Add TV experience with brand-scoped results and no address entry in the normal path.
 - [ ] Route commands and credential deletion only to the selected brand driver.
 - [ ] Keep all existing Samsung tests and behavior green.
 

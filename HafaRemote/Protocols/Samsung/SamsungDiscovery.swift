@@ -1,22 +1,40 @@
 @preconcurrency import Foundation
 import Observation
 
-/// A nearby Samsung TV that advertised itself on the user's local network.
-struct DiscoveredSamsungTV: Identifiable, Equatable, Sendable,
+/// A nearby TV candidate validated by its brand-specific discovery backend.
+struct DiscoveredTV: Identifiable, Equatable, Sendable,
     CustomStringConvertible, CustomDebugStringConvertible
 {
+    let brand: TVBrand
     let reportedIdentifier: String
     let displayName: String
     let modelName: String
     let address: PrivateIPv4Address
+    let controlPort: UInt16?
 
-    var id: String { reportedIdentifier }
+    init(
+        brand: TVBrand = .samsung,
+        reportedIdentifier: String,
+        displayName: String,
+        modelName: String,
+        address: PrivateIPv4Address,
+        controlPort: UInt16? = nil
+    ) {
+        self.brand = brand
+        self.reportedIdentifier = reportedIdentifier
+        self.displayName = displayName
+        self.modelName = modelName
+        self.address = address
+        self.controlPort = controlPort
+    }
 
-    var description: String { "DiscoveredSamsungTV(redacted)" }
+    var id: String { "\(brand.rawValue):\(reportedIdentifier)" }
+
+    var description: String { "DiscoveredTV(redacted)" }
     var debugDescription: String { description }
 }
 
-enum SamsungDiscoveryState: Equatable, Sendable {
+enum TVDiscoveryState: Equatable, Sendable {
     case idle
     case searching
     case results
@@ -25,34 +43,34 @@ enum SamsungDiscoveryState: Equatable, Sendable {
     case failed
 }
 
-enum SamsungDiscoveryBackendEvent: Sendable {
-    case found(DiscoveredSamsungTV)
+enum TVDiscoveryBackendEvent: Sendable {
+    case found(DiscoveredTV)
     case finished
     case permissionDenied
     case failed
 }
 
 @MainActor
-protocol SamsungDiscoveryBackend: AnyObject {
+protocol TVDiscoveryBackend: AnyObject {
     func start(
-        eventHandler: @escaping @MainActor @Sendable (SamsungDiscoveryBackendEvent) -> Void
+        eventHandler: @escaping @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void
     )
     func stop()
 }
 
-/// Owns the user-visible discovery lifecycle and deduplicated result set.
+/// Owns the user-visible discovery lifecycle and brand-scoped result set.
 @MainActor
 @Observable
-final class SamsungDiscoveryStore {
-    private(set) var state: SamsungDiscoveryState = .idle
-    private(set) var televisions: [DiscoveredSamsungTV] = []
+final class TVDiscoveryStore {
+    private(set) var state: TVDiscoveryState = .idle
+    private(set) var televisions: [DiscoveredTV] = []
 
-    @ObservationIgnored private let backend: any SamsungDiscoveryBackend
+    @ObservationIgnored private let backend: any TVDiscoveryBackend
     @ObservationIgnored private let searchDuration: Duration
     @ObservationIgnored private var timeoutTask: Task<Void, Never>?
 
     init(
-        backend: (any SamsungDiscoveryBackend)? = nil,
+        backend: (any TVDiscoveryBackend)? = nil,
         searchDuration: Duration = .seconds(8)
     ) {
         self.backend = backend ?? SamsungBonjourDiscoveryBackend()
@@ -92,7 +110,7 @@ final class SamsungDiscoveryStore {
         }
     }
 
-    private func receive(_ event: SamsungDiscoveryBackendEvent) {
+    private func receive(_ event: TVDiscoveryBackendEvent) {
         guard state == .searching || state == .results else { return }
 
         switch event {
@@ -103,7 +121,11 @@ final class SamsungDiscoveryStore {
                 televisions.append(television)
             }
             televisions.sort {
-                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+                let nameOrder = $0.displayName.localizedCaseInsensitiveCompare($1.displayName)
+                if nameOrder != .orderedSame {
+                    return nameOrder == .orderedAscending
+                }
+                return $0.brand.rawValue < $1.brand.rawValue
             }
             state = .results
         case .finished:
@@ -168,7 +190,7 @@ struct SamsungBonjourMetadata: Equatable, Sendable {
 /// Discovers Samsung TVs through their Bonjour advertisement, then verifies each
 /// candidate through the same local device-information endpoint used for pairing.
 @MainActor
-final class SamsungBonjourDiscoveryBackend: NSObject, SamsungDiscoveryBackend {
+final class SamsungBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
     private struct ValidationOperation {
         let id: UUID
         let task: Task<Void, Never>
@@ -181,14 +203,14 @@ final class SamsungBonjourDiscoveryBackend: NSObject, SamsungDiscoveryBackend {
     private var browser: NetServiceBrowser?
     private var services: [ObjectIdentifier: NetService] = [:]
     private var validationTasks: [ObjectIdentifier: ValidationOperation] = [:]
-    private var eventHandler: (@MainActor @Sendable (SamsungDiscoveryBackendEvent) -> Void)?
+    private var eventHandler: (@MainActor @Sendable (TVDiscoveryBackendEvent) -> Void)?
 
     init(deviceInfoProvider: any SamsungDeviceInfoProviding = SamsungDeviceInfoClient()) {
         self.deviceInfoProvider = deviceInfoProvider
     }
 
     func start(
-        eventHandler: @escaping @MainActor @Sendable (SamsungDiscoveryBackendEvent) -> Void
+        eventHandler: @escaping @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void
     ) {
         stop()
         self.eventHandler = eventHandler
@@ -247,7 +269,7 @@ final class SamsungBonjourDiscoveryBackend: NSObject, SamsungDiscoveryBackend {
 
                 self?.eventHandler?(
                     .found(
-                        DiscoveredSamsungTV(
+                        DiscoveredTV(
                             reportedIdentifier: metadata.reportedIdentifier,
                             displayName: metadata.displayName,
                             modelName: deviceInfo.modelName,
@@ -328,7 +350,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
 
 #if DEBUG
     @MainActor
-    final class SamsungDiscoveryFixtureBackend: SamsungDiscoveryBackend {
+    final class TVDiscoveryFixtureBackend: TVDiscoveryBackend {
         enum Fixture {
             case television
             case noResults
@@ -343,7 +365,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
         }
 
         func start(
-            eventHandler: @escaping @MainActor @Sendable (SamsungDiscoveryBackendEvent) -> Void
+            eventHandler: @escaping @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void
         ) {
             startCount += 1
             switch fixture {
@@ -363,7 +385,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
         func stop() {}
 
         private func publishTelevision(
-            to eventHandler: @escaping @MainActor @Sendable (SamsungDiscoveryBackendEvent) -> Void
+            to eventHandler: @escaping @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void
         ) {
             guard let address = try? PrivateIPv4Address("192.168.10.20") else {
                 eventHandler(.failed)
@@ -371,7 +393,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
             }
             eventHandler(
                 .found(
-                    DiscoveredSamsungTV(
+                    DiscoveredTV(
                         reportedIdentifier: "synthetic-tv",
                         displayName: "Living Room TV",
                         modelName: "Samsung Q70A",

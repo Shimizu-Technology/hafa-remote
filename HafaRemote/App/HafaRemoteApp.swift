@@ -22,20 +22,20 @@ struct HafaRemoteApp: App {
                     RemoteControlTestHarness(isConnected: true)
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-discovery-result") {
                     HomeView(
-                        discovery: SamsungDiscoveryStore(
-                            backend: SamsungDiscoveryFixtureBackend(fixture: .television)
+                        discovery: TVDiscoveryStore(
+                            backend: TVDiscoveryFixtureBackend(fixture: .television)
                         )
                     )
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-discovery-empty") {
                     HomeView(
-                        discovery: SamsungDiscoveryStore(
-                            backend: SamsungDiscoveryFixtureBackend(fixture: .noResults)
+                        discovery: TVDiscoveryStore(
+                            backend: TVDiscoveryFixtureBackend(fixture: .noResults)
                         )
                     )
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-discovery-retry") {
                     HomeView(
-                        discovery: SamsungDiscoveryStore(
-                            backend: SamsungDiscoveryFixtureBackend(
+                        discovery: TVDiscoveryStore(
+                            backend: TVDiscoveryFixtureBackend(
                                 fixture: .noResultsThenTelevision)
                         )
                     )

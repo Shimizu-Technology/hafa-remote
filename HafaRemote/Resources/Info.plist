@@ -25,7 +25,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Hafa Remote uses your Wi-Fi network to find and control Samsung TVs you choose.</string>
+	<string>Hafa Remote uses your Wi-Fi network to find and control supported TVs you choose.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_samsungmsf._tcp</string>
