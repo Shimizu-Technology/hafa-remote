@@ -1,20 +1,20 @@
 # Hafa Remote
 ## Product Requirements Document
 
-**Version:** 0.1  
-**Date:** September 4, 2026  
-**Owner:** Shimizu Technology  
-**Status:** Approved direction; implementation not started
+**Version:** 0.2
+**Date:** September 5, 2026
+**Owner:** Shimizu Technology
+**Status:** Samsung internal alpha available; mixed-brand expansion in progress
 
 ## Executive summary
 
-Hafa Remote is an iPhone-only remote control for compatible Samsung smart TVs on the same local network. It should replace the physical remote for ordinary daily use without an account, advertising, a subscription, or a cloud service. The first proof will run against Leon's Samsung Q70AA. A public App Store release is a later decision that depends on real-device reliability across several Samsung model years and a defensible authorization basis for using Samsung's unpublished local-control protocol.
+Hafa Remote is an iPhone-only remote control for compatible Samsung, Sony, and Vizio smart TVs on the same local network. It should replace the physical remote for ordinary daily use without an account, advertising, a subscription, or a cloud service. Each brand is a separately tested capability: Samsung remains the proven baseline, while Sony and Vizio stay internal-only until Leon's exact household models complete pairing, command, reconnect, and power testing. A public App Store release is a later decision that depends on real-device reliability and a defensible authorization basis for every local-control protocol distributed in the binary.
 
 ## Product classification
 
 - **Profile:** Public consumer utility, beginning as a personal/internal alpha
 - **Platform:** iPhone only
-- **Initial TV platform:** Samsung Tizen smart TVs only
+- **Initial TV platforms:** Compatible Samsung Tizen, Sony BRAVIA/Google TV, and Vizio SmartCast televisions, enabled only after per-model validation
 - **Connectivity:** Local Wi-Fi only
 - **Backend:** None
 - **Account:** None
@@ -26,14 +26,14 @@ Hafa Remote is an iPhone-only remote control for compatible Samsung smart TVs on
 1. **The remote must be immediate.** Opening the app, reconnecting, and pressing a button should feel like using hardware.
 2. **Never fake success.** The UI distinguishes connected, reconnecting, sleeping, unsupported, denied, and failed states. A sent command is not described as completed when the TV protocol provides no acknowledgement.
 3. **Local by default.** No account, backend, third-party analytics, advertising SDK, or cloud dependency in version one.
-4. **Reliability before compatibility.** Support a tested set of Samsung televisions well before adding another brand.
+4. **Reliability before compatibility.** A brand is not called supported until its exact pairing, controls, reconnect, and power behavior pass on real hardware.
 5. **Capabilities drive the interface.** The app only exposes controls a paired television is known or observed to support.
 6. **Be honest about power-on.** Power-off and network wake are separate capabilities. Wake-on-LAN will not be promised for unsupported televisions or networks.
 7. **Accessible without setup knowledge.** Pairing instructions, button labels, touch targets, haptics, VoiceOver, Dynamic Type, dark mode, and reduced-motion behavior are part of the product.
 
 ## Audience and core job
 
-The primary user owns one or more Samsung smart TVs, has misplaced or does not want to use the physical remote, and wants immediate control from an iPhone on the same Wi-Fi network.
+The primary user owns a mixed-brand set of smart TVs, has misplaced or does not want to use the physical remotes, and wants one immediate control surface from an iPhone on the same Wi-Fi network.
 
 The core job is: **Open Hafa Remote, select the intended television if necessary, and control it within two seconds without encountering an ad, login, or paywall.**
 
@@ -60,16 +60,18 @@ Commands use a reviewed allowlist. Factory, service-menu, hospitality, reset, an
 - A model year alone never proves compatibility; the app records the observed transport, token behavior, commands, firmware, and power behavior.
 - Samsung 2016 K-series support is excluded unless its distinct encrypted/PIN pairing variants are implemented and tested deliberately.
 - Frame TV Art Mode is excluded from the first release unless its power-versus-art semantics receive a separate tested capability profile.
+- Sony support prefers Android TV Remote Service v2 when the exact BRAVIA exposes it; IRCC-IP is considered only for a model whose documented authentication flow is verified on hardware.
+- Vizio support targets SmartCast televisions whose local HTTPS pairing API can be verified on port 7345 or the legacy 9000 port.
 - Public metadata lists only the model/firmware groups demonstrated by the hardware matrix.
 
 ### Required device behavior
 
-- Discover compatible Samsung TVs on the current local network
+- Discover compatible TVs on the current local network and identify their brand before pairing
 - Provide manual IP entry as a recovery path, not the primary setup path
-- Show the Samsung approval prompt during initial pairing
-- Store the pairing token securely in Keychain
+- Show the brand-appropriate approval or PIN prompt during initial pairing
+- Store the resulting token, PSK, or client identity securely in Keychain
 - Save non-secret TV metadata locally
-- Remember multiple Samsung TVs
+- Remember multiple TVs without crossing brand-specific identity or credentials
 - Rename TVs and assign an optional room
 - Choose a default or most-recent TV
 - Rediscover a saved TV when DHCP changes its IP address
@@ -96,7 +98,7 @@ The main session state machine must represent at least:
 ## Explicitly out of scope for version one
 
 - Android, iPad-specific, Mac, Apple Watch, or Apple TV apps
-- LG, Roku, Fire TV, Google TV, Vizio, or generic infrared remotes
+- LG, Roku, Fire TV, generic infrared remotes, casting, or devices that cannot complete a supported local pairing flow
 - Casting, screen mirroring, media browsing, or content recommendations
 - User accounts, cloud sync, remote-outside-the-home control, or a backend
 - Siri, widgets, Shortcuts, Live Activities, or home-screen controls
@@ -109,11 +111,11 @@ The main session state machine must represent at least:
 ### First launch and pairing
 
 1. Hafa Remote explains that the iPhone and TV must be on the same non-guest Wi-Fi network.
-2. The user taps **Add Samsung TV**; the setup sheet immediately searches and this user action triggers the iOS local-network permission request.
-3. The app shows verified Samsung devices with their reported name and model when available.
+2. The user taps **Add TV**; the setup sheet immediately searches and this user action triggers the iOS local-network permission request.
+3. The app shows verified Samsung, Sony, and Vizio devices with their reported name, brand, and model when available.
 4. The user chooses a TV.
-5. The app establishes a secure local connection and asks the user to approve Hafa Remote on the television.
-6. The TV returns or recognizes a pairing token; Hafa Remote stores it in Keychain.
+5. The app establishes the brand-specific secure local connection and requests on-TV approval or a short PIN when that protocol requires it.
+6. Hafa Remote stores only the resulting brand-scoped credential in Keychain.
 7. The app confirms the session through the protocol handshake, opens the remote, and explains any unavailable controls.
 
 ### Everyday control
@@ -126,7 +128,7 @@ The main session state machine must represent at least:
 
 ### Power-on
 
-1. When a saved TV is offline and has a known MAC address plus verified wake support, the power control sends a Wake-on-LAN packet.
+1. When a saved Samsung TV is offline, explicitly wireless, and has a known MAC address plus verified wake support, the power control sends a Wake-on-LAN packet. Sony and Vizio use separately tested brand-specific power behavior and never enter this Samsung wake path.
 2. Hafa Remote displays **Waking TV…**, searches for the TV, and connects when it becomes available.
 3. If wake support is unknown or has failed, the app explains the TV/network limitation and does not imply success.
 
@@ -188,13 +190,12 @@ SwiftUI screens
     |
 RemoteSessionStore (@MainActor)
     |
-TVDriver protocol
+TVDriverRouter (actor)
+    |-- SamsungLocalDriver (actor)
+    |-- SonyRemoteDriver (actor)
+    |-- VizioSmartCastDriver (actor)
     |
-SamsungLocalDriver (actor)
-    |-- SamsungDiscoveryService
-    |-- SamsungPairingClient
-    |-- SamsungCommandTransport
-    |-- WakeOnLANService
+Brand-specific discovery + pairing + command + wake services
     |
 DeviceRepository (SwiftData) + PairingTokenStore (Keychain)
 ```
@@ -231,23 +232,24 @@ README.md
 
 ### Core types
 
-- `TVDriver`: discover, pair, connect, disconnect, send semantic command, send text, wake, and expose capabilities
+- `TVDriver`: send semantic commands, send text, and disconnect without leaking protocol keys into UI code; brand-specific session coordinators own discovery, pairing, connection, wake, and capability evaluation
+- `TVBrand` and brand-scoped stable identity: prevent credential or command crossover between televisions that report similar identifiers
 - `RemoteCommand`: semantic commands such as `.move(.up)`, `.select`, `.volume(.up)`, and `.powerOff`
 - `TVCapability`: navigation, playback, volume, mute, text input, power off, and wake
 - `RemoteSessionState`: the explicit connection states defined above
-- `SavedTV`: stable local ID, reported Samsung identifier when available, display name, room, model, last-known host, optional MAC address, last-seen time, capabilities, and trust metadata
+- `SavedTV`: stable local ID, brand-scoped reported device identifier, display name, model, last-known host and optional control port, optional MAC address, wake verification, and last-seen/last-used times
 - `PairingTokenStore`: Keychain-only access keyed by the stable local device ID
 
-The UI must never send Samsung key strings directly. Only `SamsungLocalDriver` maps semantic commands to the TV protocol.
+The UI must never send raw protocol keys directly. Only the active brand driver maps semantic commands to its television protocol.
 
 ## Networking and security requirements
 
 - Use user-initiated local-network access with `NSLocalNetworkUsageDescription`.
-- Declare only Bonjour service types actually used.
-- Bonjour discovery uses only Samsung's declared `_samsungmsf._tcp` service. If future Wake-on-LAN requires broadcast access, request Apple's multicast entitlement before adding it; keep manual address pairing as a troubleshooting fallback.
+- Declare only Bonjour service types actually used and validate every advertisement through the selected brand's local endpoint before presenting it as compatible.
+- Bonjour discovery declares only verified services such as Samsung's `_samsungmsf._tcp`, Android TV Remote Service's `_androidtvremote2._tcp`, and a Vizio candidate service proven on the household model. If a future discovery or Wake-on-LAN path requires arbitrary multicast or broadcast, request Apple's multicast entitlement before adding it; keep manual address pairing only as a troubleshooting fallback.
 - Use a narrow local-network transport policy; do not enable arbitrary network loads globally.
 - Restrict connections to local/link-local targets and reject redirects or unexpected internet hosts.
-- Isolate Samsung's device-certificate handling. Trust must be tied to an explicit pairing action and saved device; do not install a global accept-all TLS policy.
+- Isolate each brand's device-certificate handling. Trust must be tied to an explicit pairing action and saved device; do not install a global accept-all TLS policy.
 - Consider certificate fingerprint pinning per paired TV. If firmware rotates the certificate, show a deliberate re-verification flow.
 - Serialize socket state and command writes in an actor.
 - Keep only one active TV session.
@@ -263,7 +265,7 @@ The UI must never send Samsung key strings directly. Only `SamsungLocalDriver` m
 | Field | Storage | Notes |
 |---|---|---|
 | `id` | SwiftData | App-generated stable ID |
-| `reportedDeviceID` | SwiftData, protected | Used for rediscovery when Samsung exposes one |
+| `brand` + `reportedDeviceID` | SwiftData, protected | Brand-scoped identity used for rediscovery |
 | `name` | SwiftData | User-editable display name |
 | `room` | SwiftData | Optional |
 | `model` | SwiftData | Reported model when available |
@@ -273,7 +275,7 @@ The UI must never send Samsung key strings directly. Only `SamsungLocalDriver` m
 | `certificateFingerprint` | SwiftData, protected | Optional per-device trust record |
 | `lastSeenAt` | SwiftData | Diagnostics and UI |
 | `isDefault` | SwiftData | At most one default TV |
-| pairing token | Keychain | Stored separately under `id`; never logged |
+| pairing token, client identity, or PSK | Keychain | Brand-scoped, stored separately under `id`; never logged |
 
 No data is synced or transmitted to Shimizu Technology in version one.
 
@@ -353,8 +355,8 @@ Before inviting external testers:
 
 Do not submit until:
 
-- Shimizu Technology has written Samsung permission/partner terms covering distribution of this control behavior, or a qualified attorney has documented why the planned use is permitted. If neither is available, stop at personal/internal distribution.
-- Testing includes at least five Samsung TVs, three model years, and three home networks.
+- Shimizu Technology has written permission, applicable partner terms, or a qualified legal basis covering every brand-specific control protocol distributed in the binary. If any brand remains unresolved, exclude that driver from the distributed build or stop at personal/internal distribution.
+- Testing covers every advertised brand, at least three model years overall, and at least three home networks; one household unit is evidence for that exact model, not a universal compatibility claim.
 - Pairing and reconnection results are recorded for each model/firmware combination.
 - Each advertised model group completes a 500-command soak with at least 99% observed delivery, zero duplicate commands, and no stuck repeat state.
 - Each advertised model group completes at least 20 foreground reconnect cycles, with at least 19 reconnecting without re-pairing and normally within two seconds on healthy Wi-Fi.
@@ -385,7 +387,7 @@ The public-release decision is based on the device matrix and TestFlight crash d
 ## Branding and App Store positioning
 
 - **Product name:** Hafa Remote
-- **Working subtitle:** Simple Remote for Samsung TVs
+- **Working subtitle:** TV Remote — No Subscription
 - **Promise:** Fast local control without an account, ads, or a weekly subscription
 - **Tone:** Calm, trustworthy, direct, and local—not a loud “universal remote” clone
 - **Bundle ID:** `com.shimizutechnology.hafaremote`

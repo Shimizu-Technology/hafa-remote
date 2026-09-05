@@ -41,6 +41,98 @@ struct SamsungPairingCoordinatorTests {
         #expect(approvalCount == 1)
     }
 
+    @Test("A legacy address-keyed credential is discarded before new approval")
+    func discardsLegacyCredentialBeforeNewApproval() async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let legacyCredential = try SamsungPairingCredential(
+            token: "legacy-token",
+            certificateSHA256: Data(repeating: 15, count: 32)
+        )
+        let store = InMemorySamsungCredentialStore()
+        await store.seedLegacy(legacyCredential, for: address)
+        let replacementCredential = try SamsungPairingCredential(
+            token: "replacement-token",
+            certificateSHA256: Data(repeating: 18, count: 32)
+        )
+        let transport = StubSamsungTransport(issuedCredential: replacementCredential)
+        let approvalRecorder = ApprovalRecorder()
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: transport
+        )
+
+        _ = try await coordinator.pair(addressText: address.rawValue) {
+            approvalRecorder.record()
+        }
+
+        #expect(await transport.presentedCredential == nil)
+        #expect(await store.credential(for: address) == replacementCredential)
+        #expect(await store.legacyCredential(for: address) == nil)
+        #expect(await approvalRecorder.count == 1)
+    }
+
+    @Test("An address reused by another Samsung TV never inherits its credential")
+    func preventsCredentialCrossoverAfterAddressReuse() async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let oldIdentity = try SamsungPairingCredentialIdentity(reportedDeviceID: "old-tv")
+        let oldCredential = try SamsungPairingCredential(
+            token: "old-tv-token",
+            certificateSHA256: Data(repeating: 16, count: 32)
+        )
+        let newCredential = try SamsungPairingCredential(
+            token: "new-tv-token",
+            certificateSHA256: Data(repeating: 17, count: 32)
+        )
+        let store = InMemorySamsungCredentialStore()
+        await store.save(oldCredential, for: oldIdentity)
+        let transport = StubSamsungTransport(issuedCredential: newCredential)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(reportedDeviceID: "new-tv"),
+            credentialStore: store,
+            transport: transport
+        )
+
+        _ = try await coordinator.pair(addressText: address.rawValue)
+
+        #expect(await transport.presentedCredential == nil)
+        #expect(
+            await store.credential(
+                for: oldIdentity,
+                discardingLegacyCredentialFor: address
+            ) == oldCredential)
+    }
+
+    @Test("A stable credential lookup also discards the legacy address record")
+    func stableCredentialLookupDiscardsLegacyAddressRecord() async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let identity = try SamsungPairingCredentialIdentity(
+            reportedDeviceID: "synthetic-device-id"
+        )
+        let stableCredential = try SamsungPairingCredential(
+            token: "stable-token",
+            certificateSHA256: Data(repeating: 20, count: 32)
+        )
+        let legacyCredential = try SamsungPairingCredential(
+            token: "legacy-token",
+            certificateSHA256: Data(repeating: 21, count: 32)
+        )
+        let store = InMemorySamsungCredentialStore()
+        await store.save(stableCredential, for: identity)
+        await store.seedLegacy(legacyCredential, for: address)
+        let transport = StubSamsungTransport(issuedCredential: stableCredential)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: transport
+        )
+
+        _ = try await coordinator.pair(addressText: address.rawValue)
+
+        #expect(await transport.presentedCredential == stableCredential)
+        #expect(await store.legacyCredential(for: address) == nil)
+    }
+
     @Test("A select request crosses the driver boundary as one semantic command")
     func sendsSemanticSelect() async throws {
         let issuedCredential = try SamsungPairingCredential(
@@ -117,9 +209,73 @@ struct SamsungPairingCoordinatorTests {
         #expect(presentedCredential == revokedCredential)
         #expect(savedCredential == revokedCredential)
 
-        try await coordinator.forget(addressText: address.rawValue)
+        try await coordinator.forget(
+            addressText: address.rawValue,
+            reportedDeviceID: "synthetic-device-id"
+        )
         let credentialAfterForget = await store.credential(for: address)
         #expect(credentialAfterForget == nil)
+    }
+
+    @Test("Forgetting a persisted pairing does not require the TV to be online")
+    func forgetsPersistedIdentityWhileTVIsOffline() async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let identity = try SamsungPairingCredentialIdentity(
+            reportedDeviceID: "offline-tv"
+        )
+        let credential = try SamsungPairingCredential(
+            token: "offline-token",
+            certificateSHA256: Data(repeating: 19, count: 32)
+        )
+        let store = InMemorySamsungCredentialStore()
+        await store.save(credential, for: identity)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: OfflineSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: StubSamsungTransport(issuedCredential: credential)
+        )
+
+        try await coordinator.forget(
+            addressText: address.rawValue,
+            reportedDeviceID: identity.reportedDeviceID
+        )
+
+        #expect(
+            await store.credential(
+                for: identity,
+                discardingLegacyCredentialFor: address
+            ) == nil
+        )
+    }
+
+    @Test("Address-only forget never removes a stable TV credential")
+    func addressOnlyForgetPreservesStableCredential() async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let identity = try SamsungPairingCredentialIdentity(
+            reportedDeviceID: "synthetic-device-id"
+        )
+        let stableCredential = try SamsungPairingCredential(
+            token: "stable-token",
+            certificateSHA256: Data(repeating: 22, count: 32)
+        )
+        let store = InMemorySamsungCredentialStore()
+        await store.save(stableCredential, for: identity)
+        let transport = StubSamsungTransport(issuedCredential: stableCredential)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: transport
+        )
+        _ = try await coordinator.pair(addressText: address.rawValue)
+
+        try await coordinator.forget(addressText: address.rawValue)
+
+        #expect(
+            await store.credential(
+                for: identity,
+                discardingLegacyCredentialFor: address
+            ) == stableCredential
+        )
     }
 
     @Test("Cancelling in-flight pairing disconnects and saves nothing")
@@ -409,9 +565,15 @@ struct SamsungPairingCoordinatorTests {
 }
 
 private struct StubSamsungDeviceInfoProvider: SamsungDeviceInfoProviding {
+    let reportedDeviceID: String
+
+    init(reportedDeviceID: String = "synthetic-device-id") {
+        self.reportedDeviceID = reportedDeviceID
+    }
+
     func fetchDeviceInfo(at address: PrivateIPv4Address) async throws -> SamsungDeviceInfo {
         SamsungDeviceInfo(
-            reportedDeviceID: "synthetic-device-id",
+            reportedDeviceID: reportedDeviceID,
             modelName: "TEST_MODEL_2021",
             firmwareVersion: "1001.2",
             supportsTokenAuthentication: true
@@ -419,19 +581,70 @@ private struct StubSamsungDeviceInfoProvider: SamsungDeviceInfoProviding {
     }
 }
 
+private struct OfflineSamsungDeviceInfoProvider: SamsungDeviceInfoProviding {
+    func fetchDeviceInfo(at address: PrivateIPv4Address) async throws -> SamsungDeviceInfo {
+        throw URLError(.notConnectedToInternet)
+    }
+}
+
 private actor InMemorySamsungCredentialStore: SamsungPairingCredentialStoring {
-    private var values: [PrivateIPv4Address: SamsungPairingCredential] = [:]
+    private var values: [SamsungPairingCredentialIdentity: SamsungPairingCredential] = [:]
+    private var legacyValues: [PrivateIPv4Address: SamsungPairingCredential] = [:]
 
     func credential(for address: PrivateIPv4Address) -> SamsungPairingCredential? {
-        values[address]
+        values[Self.syntheticIdentity]
     }
 
     func save(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) {
-        values[address] = credential
+        values[Self.syntheticIdentity] = credential
     }
 
-    func removeCredential(for address: PrivateIPv4Address) {
-        values[address] = nil
+    func credential(
+        for identity: SamsungPairingCredentialIdentity,
+        discardingLegacyCredentialFor address: PrivateIPv4Address
+    ) -> SamsungPairingCredential? {
+        legacyValues[address] = nil
+        if let credential = values[identity] {
+            return credential
+        }
+        return nil
+    }
+
+    func save(
+        _ credential: SamsungPairingCredential,
+        for identity: SamsungPairingCredentialIdentity
+    ) {
+        values[identity] = credential
+    }
+
+    func removeCredential(
+        for identity: SamsungPairingCredentialIdentity,
+        legacyAddress: PrivateIPv4Address
+    ) {
+        values[identity] = nil
+        legacyValues[legacyAddress] = nil
+    }
+
+    func removeLegacyCredential(for address: PrivateIPv4Address) {
+        legacyValues[address] = nil
+    }
+
+    func seedLegacy(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) {
+        legacyValues[address] = credential
+    }
+
+    func legacyCredential(for address: PrivateIPv4Address) -> SamsungPairingCredential? {
+        legacyValues[address]
+    }
+
+    private static var syntheticIdentity: SamsungPairingCredentialIdentity {
+        do {
+            return try SamsungPairingCredentialIdentity(
+                reportedDeviceID: "synthetic-device-id"
+            )
+        } catch {
+            preconditionFailure("The synthetic Samsung identity fixture must be valid.")
+        }
     }
 }
 
@@ -555,18 +768,29 @@ private actor SuspendedLookupCredentialStore: SamsungPairingCredentialStoring {
         lookupStartedContinuation = continuation
     }
 
-    func credential(for address: PrivateIPv4Address) async -> SamsungPairingCredential? {
+    func credential(
+        for identity: SamsungPairingCredentialIdentity,
+        discardingLegacyCredentialFor address: PrivateIPv4Address
+    ) async -> SamsungPairingCredential? {
         lookupStartedContinuation.yield()
         return await withCheckedContinuation { continuation in
             lookupContinuation = continuation
         }
     }
 
-    func save(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) {
+    func save(
+        _ credential: SamsungPairingCredential,
+        for identity: SamsungPairingCredentialIdentity
+    ) {
         saveCount += 1
     }
 
-    func removeCredential(for address: PrivateIPv4Address) {}
+    func removeCredential(
+        for identity: SamsungPairingCredentialIdentity,
+        legacyAddress: PrivateIPv4Address
+    ) {}
+
+    func removeLegacyCredential(for address: PrivateIPv4Address) {}
 
     func resumeLookup(with credential: SamsungPairingCredential?) {
         lookupContinuation?.resume(returning: credential)
@@ -608,7 +832,7 @@ private actor SuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
     nonisolated let firstSaveStarted: AsyncStream<Void>
     private let firstSaveStartedContinuation: AsyncStream<Void>.Continuation
     private var firstSaveContinuation: CheckedContinuation<Void, Never>?
-    private var values: [PrivateIPv4Address: SamsungPairingCredential] = [:]
+    private var values: [SamsungPairingCredentialIdentity: SamsungPairingCredential] = [:]
     private var saveCallCount = 0
     private let rollbackFails: Bool
 
@@ -620,15 +844,25 @@ private actor SuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
     }
 
     func credential(for address: PrivateIPv4Address) -> SamsungPairingCredential? {
-        values[address]
+        values[Self.syntheticIdentity]
     }
 
-    func save(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) async throws {
+    func credential(
+        for identity: SamsungPairingCredentialIdentity,
+        discardingLegacyCredentialFor address: PrivateIPv4Address
+    ) -> SamsungPairingCredential? {
+        values[identity]
+    }
+
+    func save(
+        _ credential: SamsungPairingCredential,
+        for identity: SamsungPairingCredentialIdentity
+    ) async throws {
         saveCallCount += 1
         if rollbackFails, saveCallCount > 1 {
             throw SyntheticCredentialStoreError.rollbackFailed
         }
-        values[address] = credential
+        values[identity] = credential
         guard saveCallCount == 1 else { return }
 
         firstSaveStartedContinuation.yield()
@@ -637,15 +871,20 @@ private actor SuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
         }
     }
 
-    func removeCredential(for address: PrivateIPv4Address) throws {
+    func removeCredential(
+        for identity: SamsungPairingCredentialIdentity,
+        legacyAddress: PrivateIPv4Address
+    ) throws {
         if rollbackFails {
             throw SyntheticCredentialStoreError.rollbackFailed
         }
-        values[address] = nil
+        values[identity] = nil
     }
 
+    func removeLegacyCredential(for address: PrivateIPv4Address) {}
+
     func seed(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) {
-        values[address] = credential
+        values[Self.syntheticIdentity] = credential
     }
 
     func releaseFirstSave() {
@@ -653,26 +892,61 @@ private actor SuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
         firstSaveContinuation = nil
         firstSaveStartedContinuation.finish()
     }
+
+    private static var syntheticIdentity: SamsungPairingCredentialIdentity {
+        do {
+            return try SamsungPairingCredentialIdentity(
+                reportedDeviceID: "synthetic-device-id"
+            )
+        } catch {
+            preconditionFailure("The synthetic Samsung identity fixture must be valid.")
+        }
+    }
 }
 
 private actor FailFirstSaveCredentialStore: SamsungPairingCredentialStoring {
-    private var values: [PrivateIPv4Address: SamsungPairingCredential] = [:]
+    private var values: [SamsungPairingCredentialIdentity: SamsungPairingCredential] = [:]
     private var shouldFailSave = true
 
     func credential(for address: PrivateIPv4Address) -> SamsungPairingCredential? {
-        values[address]
+        values[Self.syntheticIdentity]
     }
 
-    func save(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) throws {
+    func credential(
+        for identity: SamsungPairingCredentialIdentity,
+        discardingLegacyCredentialFor address: PrivateIPv4Address
+    ) -> SamsungPairingCredential? {
+        values[identity]
+    }
+
+    func save(
+        _ credential: SamsungPairingCredential,
+        for identity: SamsungPairingCredentialIdentity
+    ) throws {
         if shouldFailSave {
             shouldFailSave = false
             throw SyntheticCredentialStoreError.writeFailed
         }
-        values[address] = credential
+        values[identity] = credential
     }
 
-    func removeCredential(for address: PrivateIPv4Address) {
-        values[address] = nil
+    func removeCredential(
+        for identity: SamsungPairingCredentialIdentity,
+        legacyAddress: PrivateIPv4Address
+    ) {
+        values[identity] = nil
+    }
+
+    func removeLegacyCredential(for address: PrivateIPv4Address) {}
+
+    private static var syntheticIdentity: SamsungPairingCredentialIdentity {
+        do {
+            return try SamsungPairingCredentialIdentity(
+                reportedDeviceID: "synthetic-device-id"
+            )
+        } catch {
+            preconditionFailure("The synthetic Samsung identity fixture must be valid.")
+        }
     }
 }
 

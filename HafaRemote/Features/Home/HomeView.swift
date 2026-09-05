@@ -74,6 +74,9 @@ struct HomeView: View {
                     session.lastConnectedTV?.address.rawValue
                     ?? savedTVs.first?.lastKnownAddress
                     ?? "",
+                initialReportedDeviceID:
+                    session.lastConnectedTV?.reportedDeviceID
+                    ?? savedTVs.first?.reportedDeviceID,
                 discovery: discovery
             )
         }
@@ -89,6 +92,7 @@ struct HomeView: View {
             Text(persistenceWarning ?? "")
         }
         .task(id: savedTVs.first?.persistentModelID) {
+            backfillLegacySavedTVsIfNeeded()
             await restoreLastUsedTVIfNeeded()
         }
         .onChange(of: session.state) { _, state in
@@ -245,28 +249,28 @@ struct HomeView: View {
         }
     }
 
-    private func displayName(for tv: PairedSamsungTV) -> String {
-        savedTV(for: tv)?.displayName ?? "Samsung TV"
+    private func displayName(for tv: ConnectedTV) -> String {
+        savedTV(for: tv)?.displayName ?? tv.brand.defaultDeviceName
     }
 
-    private func savedTV(for tv: PairedSamsungTV) -> SavedTV? {
-        savedTVs.first(where: { $0.reportedDeviceID == tv.reportedDeviceID })
+    private func savedTV(for tv: ConnectedTV) -> SavedTV? {
+        savedTVs.first(where: { $0.stableDeviceKey == tv.stableDeviceKey })
     }
 
     private func wakeMACAddress(
-        for tv: PairedSamsungTV,
+        for tv: ConnectedTV,
         savedTV: SavedTV?
-    ) -> SamsungMACAddress? {
-        guard tv.networkConnection != .wired else { return nil }
+    ) -> TVMACAddress? {
+        guard tv.isEligibleForSamsungWake else { return nil }
         return tv.macAddress ?? savedTV?.validatedMACAddress
     }
 
-    private func wake(_ tv: PairedSamsungTV, savedTV: SavedTV?) async throws {
+    private func wake(_ tv: ConnectedTV, savedTV: SavedTV?) async throws {
         guard let macAddress = wakeMACAddress(for: tv, savedTV: savedTV) else {
-            throw SamsungMACAddressError.invalid
+            throw TVMACAddressError.invalid
         }
 
-        let attempt = PendingWakeAttempt(reportedDeviceID: tv.reportedDeviceID)
+        let attempt = PendingWakeAttempt(stableDeviceKey: tv.stableDeviceKey)
         pendingWakeAttempt = attempt
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(30))
@@ -300,10 +304,10 @@ struct HomeView: View {
         }
     }
 
-    private func saveConnectedTV(_ tv: PairedSamsungTV) {
+    private func saveConnectedTV(_ tv: ConnectedTV) {
         let now = Date.now
-        let wakeWasJustVerified = pendingWakeAttempt?.reportedDeviceID == tv.reportedDeviceID
-        if let saved = savedTVs.first(where: { $0.reportedDeviceID == tv.reportedDeviceID }) {
+        let wakeWasJustVerified = pendingWakeAttempt?.matches(tv) == true
+        if let saved = savedTVs.first(where: { $0.stableDeviceKey == tv.stableDeviceKey }) {
             saved.recordConnection(
                 to: tv,
                 at: now,
@@ -313,11 +317,13 @@ struct HomeView: View {
             let canPersistWakeMetadata = tv.networkConnection == .wireless
             modelContext.insert(
                 SavedTV(
+                    brand: tv.brand,
                     reportedDeviceID: tv.reportedDeviceID,
-                    displayName: "Samsung TV",
+                    displayName: tv.brand.defaultDeviceName,
                     modelName: tv.modelName,
                     firmwareVersion: tv.firmwareVersion,
                     lastKnownAddress: tv.address.rawValue,
+                    controlPort: tv.controlPort,
                     macAddress: canPersistWakeMetadata ? tv.macAddress?.persistedValue : nil,
                     wakeWasVerified: canPersistWakeMetadata && wakeWasJustVerified,
                     lastSeenAt: now,
@@ -337,11 +343,27 @@ struct HomeView: View {
                 "The TV is connected, but Hafa Remote could not remember it for the next launch."
         }
     }
+
+    private func backfillLegacySavedTVsIfNeeded() {
+        let recordsNeedingBackfill = savedTVs.filter { $0.stableDeviceID == nil }
+        guard !recordsNeedingBackfill.isEmpty else { return }
+        SavedTVLegacyIdentityMigration.apply(to: savedTVs, in: modelContext)
+        do {
+            try modelContext.save()
+        } catch {
+            persistenceWarning =
+                "Hafa Remote could not finish updating a saved TV. Reconnect it to keep it available."
+        }
+    }
 }
 
-private struct PendingWakeAttempt: Equatable {
+struct PendingWakeAttempt: Equatable {
     let id = UUID()
-    let reportedDeviceID: String
+    let stableDeviceKey: String
+
+    func matches(_ tv: ConnectedTV) -> Bool {
+        stableDeviceKey == tv.stableDeviceKey
+    }
 }
 
 struct SavedTVRestorationPresentation: Equatable {

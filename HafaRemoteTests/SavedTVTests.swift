@@ -12,11 +12,13 @@ struct SavedTVTests {
         let container = try ModelContainer(for: SavedTV.self, configurations: configuration)
         let context = container.mainContext
         let saved = SavedTV(
+            brand: .sony,
             reportedDeviceID: "synthetic-device-id",
             displayName: "Living Room",
             modelName: "Q70AA",
             firmwareVersion: "2210",
             lastKnownAddress: "192.168.10.20",
+            controlPort: 6466,
             macAddress: "02:00:5E:10:00:01",
             wakeWasVerified: true,
             lastSeenAt: Date(timeIntervalSince1970: 100),
@@ -29,16 +31,269 @@ struct SavedTVTests {
         let fetched = try restoredContext.fetch(FetchDescriptor<SavedTV>())
 
         #expect(fetched.count == 1)
+        #expect(fetched.first?.brand == .sony)
+        #expect(fetched.first?.stableDeviceKey == "sony:synthetic-device-id")
         #expect(fetched.first?.reportedDeviceID == "synthetic-device-id")
         #expect(fetched.first?.displayName == "Living Room")
         #expect(fetched.first?.modelName == "Q70AA")
         #expect(fetched.first?.firmwareVersion == "2210")
         #expect(fetched.first?.validatedAddress == (try PrivateIPv4Address("192.168.10.20")))
+        #expect(fetched.first?.validatedControlPort == 6466)
         #expect(fetched.first?.validatedMACAddress == (try SamsungMACAddress("02:00:5E:10:00:01")))
         #expect(fetched.first?.wakeWasVerified == true)
         #expect(fetched.first?.lastSeenAt == Date(timeIntervalSince1970: 100))
         #expect(fetched.first?.lastUsedAt == Date(timeIntervalSince1970: 200))
         #expect(fetched.first?.description == "SavedTV(redacted)")
+    }
+
+    @Test("Existing Samsung records keep a safe brand default")
+    func defaultsLegacyRecordsToSamsung() {
+        let saved = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.20"
+        )
+
+        #expect(saved.brand == .samsung)
+        #expect(saved.stableDeviceKey == "samsung:synthetic-device-id")
+        #expect(saved.validatedControlPort == nil)
+    }
+
+    @MainActor
+    @Test("A legacy-shaped on-disk record receives its stable Samsung identity")
+    func backfillsPersistedLegacyIdentity() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "hafa-remote-legacy-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appending(path: "SavedTV.store")
+        let schema = Schema([SavedTV.self])
+
+        do {
+            let configuration = ModelConfiguration(schema: schema, url: storeURL)
+            let container = try ModelContainer(for: schema, configurations: configuration)
+            let legacyRecord = SavedTV(
+                reportedDeviceID: "legacy-device-id",
+                displayName: "Living Room",
+                modelName: "Q70AA",
+                firmwareVersion: nil,
+                lastKnownAddress: "192.168.10.20"
+            )
+            legacyRecord.stableDeviceID = nil
+            container.mainContext.insert(legacyRecord)
+            try container.mainContext.save()
+        }
+
+        do {
+            let configuration = ModelConfiguration(schema: schema, url: storeURL)
+            let container = try ModelContainer(for: schema, configurations: configuration)
+            let records = try container.mainContext.fetch(FetchDescriptor<SavedTV>())
+            let record = try #require(records.first)
+            #expect(record.stableDeviceID == nil)
+            #expect(record.brand == .samsung)
+            #expect(record.validatedControlPort == nil)
+
+            record.backfillLegacyIdentityIfNeeded()
+            try container.mainContext.save()
+        }
+
+        let configuration = ModelConfiguration(schema: schema, url: storeURL)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let records = try container.mainContext.fetch(FetchDescriptor<SavedTV>())
+        let migrated = try #require(records.first)
+        #expect(migrated.brand == .samsung)
+        #expect(migrated.stableDeviceID == "samsung:legacy-device-id")
+        #expect(migrated.validatedControlPort == nil)
+    }
+
+    @MainActor
+    @Test("Duplicate legacy Samsung identities are merged before stable backfill")
+    func deduplicatesPersistedLegacyIdentities() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "hafa-remote-duplicates-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appending(path: "SavedTV.store")
+        let schema = Schema([SavedTV.self])
+
+        do {
+            let configuration = ModelConfiguration(schema: schema, url: storeURL)
+            let container = try ModelContainer(for: schema, configurations: configuration)
+            let older = SavedTV(
+                reportedDeviceID: "duplicate-device-id",
+                displayName: "Older record",
+                modelName: "Q70AA",
+                firmwareVersion: nil,
+                lastKnownAddress: "192.168.10.20",
+                lastUsedAt: Date(timeIntervalSince1970: 100)
+            )
+            let newer = SavedTV(
+                reportedDeviceID: "duplicate-device-id",
+                displayName: "Newer record",
+                modelName: "Q70AA",
+                firmwareVersion: nil,
+                lastKnownAddress: "192.168.10.21",
+                lastUsedAt: Date(timeIntervalSince1970: 200)
+            )
+            older.stableDeviceID = nil
+            newer.stableDeviceID = nil
+            container.mainContext.insert(older)
+            container.mainContext.insert(newer)
+            try container.mainContext.save()
+        }
+
+        do {
+            let configuration = ModelConfiguration(schema: schema, url: storeURL)
+            let container = try ModelContainer(for: schema, configurations: configuration)
+            let records = try container.mainContext.fetch(FetchDescriptor<SavedTV>())
+            #expect(records.count == 2)
+
+            #expect(
+                SavedTVLegacyIdentityMigration.apply(
+                    to: records,
+                    in: container.mainContext
+                )
+            )
+            try container.mainContext.save()
+        }
+
+        let configuration = ModelConfiguration(schema: schema, url: storeURL)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let records = try container.mainContext.fetch(FetchDescriptor<SavedTV>())
+        let survivor = try #require(records.first)
+        #expect(records.count == 1)
+        #expect(survivor.displayName == "Newer record")
+        #expect(survivor.lastKnownAddress == "192.168.10.21")
+        #expect(survivor.stableDeviceID == "samsung:duplicate-device-id")
+    }
+
+    @Test("Persisted control port zero is rejected")
+    func rejectsControlPortZero() {
+        let saved = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "TV",
+            modelName: "TEST_MODEL",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.20",
+            controlPort: 0
+        )
+
+        #expect(saved.validatedControlPort == nil)
+    }
+
+    @Test("Brand-scoped identity prevents cross-brand device collisions")
+    @MainActor
+    func scopesIdentityByBrand() throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let samsung = ConnectedTV(
+            brand: .samsung,
+            reportedDeviceID: "synthetic-device-id",
+            address: address,
+            modelName: "Q70AA",
+            firmwareVersion: nil
+        )
+        let vizio = ConnectedTV(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-device-id",
+            address: address,
+            controlPort: 7345,
+            modelName: "V-Series",
+            firmwareVersion: nil
+        )
+
+        #expect(samsung.stableDeviceKey != vizio.stableDeviceKey)
+        #expect(vizio.stableDeviceKey == "vizio:synthetic-device-id")
+
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: SavedTV.self, configurations: configuration)
+        let context = container.mainContext
+        context.insert(
+            SavedTV(
+                brand: .samsung,
+                reportedDeviceID: samsung.reportedDeviceID,
+                displayName: "Samsung TV",
+                modelName: samsung.modelName,
+                firmwareVersion: nil,
+                lastKnownAddress: samsung.address.rawValue
+            ))
+        context.insert(
+            SavedTV(
+                brand: .vizio,
+                reportedDeviceID: vizio.reportedDeviceID,
+                displayName: "Vizio TV",
+                modelName: vizio.modelName,
+                firmwareVersion: nil,
+                lastKnownAddress: vizio.address.rawValue,
+                controlPort: vizio.controlPort
+            ))
+        try context.save()
+
+        let savedTVs = try context.fetch(FetchDescriptor<SavedTV>())
+        #expect(
+            Set(savedTVs.map(\.stableDeviceKey)) == Set([samsung.stableDeviceKey, vizio.stableDeviceKey]))
+    }
+
+    @Test("Samsung wake requires an explicitly wireless connection")
+    func scopesSamsungWakeToConfirmedWirelessConnections() throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let unavailable = ConnectedTV(
+            brand: .samsung,
+            reportedDeviceID: "synthetic-device-id",
+            address: address,
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            networkConnection: .unavailable,
+            macAddress: try TVMACAddress("02:00:5E:10:00:01")
+        )
+        let wireless = ConnectedTV(
+            brand: .samsung,
+            reportedDeviceID: "synthetic-device-id",
+            address: address,
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            networkConnection: .wireless,
+            macAddress: try TVMACAddress("02:00:5E:10:00:01")
+        )
+        let otherBrand = ConnectedTV(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-device-id",
+            address: address,
+            modelName: "V-Series",
+            firmwareVersion: nil,
+            networkConnection: .wireless,
+            macAddress: try TVMACAddress("02:00:5E:10:00:01")
+        )
+
+        #expect(!unavailable.isEligibleForSamsungWake)
+        #expect(wireless.isEligibleForSamsungWake)
+        #expect(!otherBrand.isEligibleForSamsungWake)
+    }
+
+    @Test("A pending wake only matches the same brand-scoped TV identity")
+    func scopesPendingWakeByStableDeviceKey() throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let samsung = ConnectedTV(
+            brand: .samsung,
+            reportedDeviceID: "shared-device-id",
+            address: address,
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            networkConnection: .wireless
+        )
+        let vizio = ConnectedTV(
+            brand: .vizio,
+            reportedDeviceID: "shared-device-id",
+            address: address,
+            modelName: "V-Series",
+            firmwareVersion: nil,
+            networkConnection: .wireless
+        )
+        let attempt = PendingWakeAttempt(stableDeviceKey: samsung.stableDeviceKey)
+
+        #expect(attempt.matches(samsung))
+        #expect(!attempt.matches(vizio))
     }
 
     @Test("An invalid persisted host is never reused for a connection")

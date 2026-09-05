@@ -1,38 +1,14 @@
 import Foundation
 
-struct PairedSamsungTV: Equatable, Sendable {
-    let reportedDeviceID: String
-    let address: PrivateIPv4Address
-    let modelName: String
-    let firmwareVersion: String?
-    let networkConnection: SamsungNetworkConnection
-    let macAddress: SamsungMACAddress?
-
-    init(
-        reportedDeviceID: String,
-        address: PrivateIPv4Address,
-        modelName: String,
-        firmwareVersion: String?,
-        networkConnection: SamsungNetworkConnection = .unavailable,
-        macAddress: SamsungMACAddress? = nil
-    ) {
-        self.reportedDeviceID = reportedDeviceID
-        self.address = address
-        self.modelName = modelName
-        self.firmwareVersion = firmwareVersion
-        self.networkConnection = networkConnection
-        self.macAddress = macAddress
-    }
-}
-
 protocol SamsungPairingCoordinating: Sendable {
     func pair(
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
-    ) async throws -> PairedSamsungTV
+    ) async throws -> ConnectedTV
     func send(_ command: RemoteCommand) async throws
     func sendText(_ input: RemoteTextInput) async throws
     func forget(addressText: String) async throws
+    func forget(addressText: String, reportedDeviceID: String?) async throws
     func disconnect() async
 }
 
@@ -44,6 +20,10 @@ extension SamsungPairingCoordinating {
     func sendText(_ input: RemoteTextInput) async throws {
         throw TVDriverError.unsupportedTextInput
     }
+
+    func forget(addressText: String, reportedDeviceID: String?) async throws {
+        try await forget(addressText: addressText)
+    }
 }
 
 /// Coordinates capability validation, secure connection, and credential persistence.
@@ -52,6 +32,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
     private let credentialStore: any SamsungPairingCredentialStoring
     private let transport: any SamsungTransporting
     private var activeAttemptID: SamsungConnectionAttemptID?
+    private var mostRecentIdentityByAddress: [PrivateIPv4Address: SamsungPairingCredentialIdentity] = [:]
 
     init(
         deviceInfoProvider: any SamsungDeviceInfoProviding,
@@ -66,7 +47,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
     func pair(
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void = {}
-    ) async throws -> PairedSamsungTV {
+    ) async throws -> ConnectedTV {
         guard activeAttemptID == nil else {
             throw SamsungPairingCoordinatorError.pairingInProgress
         }
@@ -80,6 +61,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
 
         let transport = transport
         var attemptedAddress: PrivateIPv4Address?
+        var attemptedIdentity: SamsungPairingCredentialIdentity?
         var previousCredential: SamsungPairingCredential?
         var credentialSaveStarted = false
         return try await withTaskCancellationHandler {
@@ -94,8 +76,16 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                 guard deviceInfo.supportsTokenAuthentication else {
                     throw SamsungPairingCoordinatorError.unsupportedTokenAuthentication
                 }
+                let identity = try SamsungPairingCredentialIdentity(
+                    reportedDeviceID: deviceInfo.reportedDeviceID
+                )
+                attemptedIdentity = identity
+                mostRecentIdentityByAddress[address] = identity
 
-                let existingCredential = try await credentialStore.credential(for: address)
+                let existingCredential = try await credentialStore.credential(
+                    for: identity,
+                    discardingLegacyCredentialFor: address
+                )
                 previousCredential = existingCredential
                 try Task.checkCancellation()
                 if existingCredential == nil {
@@ -116,10 +106,11 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                 }
                 try Task.checkCancellation()
                 credentialSaveStarted = true
-                try await credentialStore.save(credential, for: address)
+                try await credentialStore.save(credential, for: identity)
                 try Task.checkCancellation()
 
-                return PairedSamsungTV(
+                return ConnectedTV(
+                    brand: .samsung,
                     reportedDeviceID: deviceInfo.reportedDeviceID,
                     address: address,
                     modelName: deviceInfo.modelName,
@@ -136,11 +127,14 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                 // suspension resumes. This ordered cleanup closes anything that
                 // was created in that interval before pair exits.
                 await transport.disconnect(attemptID: attemptID)
-                if credentialSaveStarted, let attemptedAddress {
+                if credentialSaveStarted, let attemptedAddress, let attemptedIdentity {
                     if let previousCredential {
-                        try? await credentialStore.save(previousCredential, for: attemptedAddress)
+                        try? await credentialStore.save(previousCredential, for: attemptedIdentity)
                     } else {
-                        try? await credentialStore.removeCredential(for: attemptedAddress)
+                        try? await credentialStore.removeCredential(
+                            for: attemptedIdentity,
+                            legacyAddress: attemptedAddress
+                        )
                     }
                 }
                 throw CancellationError()
@@ -161,9 +155,25 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
     }
 
     func forget(addressText: String) async throws {
+        try await forget(addressText: addressText, reportedDeviceID: nil)
+    }
+
+    func forget(addressText: String, reportedDeviceID: String?) async throws {
         let address = try PrivateIPv4Address(addressText.trimmingCharacters(in: .whitespacesAndNewlines))
         await transport.disconnect()
-        try await credentialStore.removeCredential(for: address)
+        let persistedIdentity = try reportedDeviceID.map {
+            try SamsungPairingCredentialIdentity(reportedDeviceID: $0)
+        }
+        if let identity = persistedIdentity {
+            try await credentialStore.removeCredential(for: identity, legacyAddress: address)
+            mostRecentIdentityByAddress[address] = nil
+        } else {
+            // No stable identity is available, so the store may only discard the
+            // unsafe address-keyed alpha credential. A discovery request is never
+            // required to forget locally held authentication material.
+            try await credentialStore.removeLegacyCredential(for: address)
+            mostRecentIdentityByAddress[address] = nil
+        }
     }
 
     func disconnect() async {

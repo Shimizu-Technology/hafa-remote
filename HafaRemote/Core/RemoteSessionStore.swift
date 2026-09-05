@@ -6,7 +6,7 @@ import Observation
 @Observable
 final class RemoteSessionStore {
     private(set) var state: RemoteSessionState = .idle
-    private(set) var lastConnectedTV: PairedSamsungTV?
+    private(set) var lastConnectedTV: ConnectedTV?
     private var acceptsConnectedTVUpdates = true
     private var projectionRevision = 0
 
@@ -48,7 +48,7 @@ final class RemoteSessionStore {
         self.init(controller: RemoteSessionController(driver: coordinator))
     }
 
-    var connectedTV: PairedSamsungTV? {
+    var connectedTV: ConnectedTV? {
         guard case .connected(let tv) = state else { return nil }
         return tv
     }
@@ -67,11 +67,11 @@ final class RemoteSessionStore {
     func connectAndWait(
         to addressText: String,
         timeout: Duration
-    ) async throws -> PairedSamsungTV {
+    ) async throws -> ConnectedTV {
         let states = await controller.states()
         let connectionWaitClock = connectionWaitClock
 
-        return try await withThrowingTaskGroup(of: PairedSamsungTV?.self) { group in
+        return try await withThrowingTaskGroup(of: ConnectedTV?.self) { group in
             group.addTask {
                 await self.connect(to: addressText)
                 try Task.checkCancellation()
@@ -119,11 +119,14 @@ final class RemoteSessionStore {
         await controller.disconnect()
     }
 
-    func forgetPairing(for addressText: String) async throws {
+    func forgetPairing(for addressText: String, reportedDeviceID: String? = nil) async throws {
         projectionRevision &+= 1
         acceptsConnectedTVUpdates = false
         lastConnectedTV = nil
-        try await controller.forgetPairing(for: addressText)
+        try await controller.forgetPairing(
+            for: addressText,
+            reportedDeviceID: reportedDeviceID
+        )
     }
 
     func applicationDidEnterBackground() async {

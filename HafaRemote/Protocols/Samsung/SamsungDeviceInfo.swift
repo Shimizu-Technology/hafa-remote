@@ -1,11 +1,5 @@
 import Foundation
 
-enum SamsungNetworkConnection: Equatable, Sendable {
-    case unavailable
-    case wireless
-    case wired
-}
-
 /// Capability details read from a Samsung TV before pairing.
 /// The optional MAC is protected local metadata and must never be logged.
 struct SamsungDeviceInfo: Equatable, Sendable {

@@ -16,13 +16,18 @@ struct SamsungSetupView: View {
     @State private var recoveryTask: Task<Void, Never>?
     @State private var repairTask: Task<Void, Never>?
     let session: RemoteSessionStore
+    let initialAddress: String
+    let initialReportedDeviceID: String?
 
     init(
         session: RemoteSessionStore,
         initialAddress: String = "",
+        initialReportedDeviceID: String? = nil,
         discovery: SamsungDiscoveryStore = SamsungDiscoveryStore()
     ) {
         self.session = session
+        self.initialAddress = initialAddress
+        self.initialReportedDeviceID = initialReportedDeviceID
         _address = State(initialValue: initialAddress)
         _discovery = State(initialValue: discovery)
     }
@@ -434,7 +439,10 @@ struct SamsungSetupView: View {
         isForgettingPairing = true
         defer { isForgettingPairing = false }
         do {
-            try await session.forgetPairing(for: address)
+            try await session.forgetPairing(
+                for: address,
+                reportedDeviceID: address == initialAddress ? initialReportedDeviceID : nil
+            )
             try Task.checkCancellation()
             await session.connect(to: address)
         } catch is CancellationError {

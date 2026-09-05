@@ -13,7 +13,7 @@ struct SamsungWakeOnLANTests {
         #expect(colon == hyphen)
         #expect(hyphen == compact)
         #expect(colon.persistedValue == "02:00:5E:10:00:01")
-        #expect(colon.description == "SamsungMACAddress(redacted)")
+        #expect(colon.description == "TVMACAddress(redacted)")
     }
 
     @Test(

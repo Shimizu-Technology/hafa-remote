@@ -1,55 +1,6 @@
 import Foundation
 @preconcurrency import Network
 
-/// A validated unicast hardware address used only for local-network wake requests.
-struct SamsungMACAddress: Equatable, Hashable, Sendable, CustomStringConvertible {
-    let octets: [UInt8]
-
-    init(_ value: String) throws {
-        let compact = value.filter { $0 != ":" && $0 != "-" }
-        guard compact.count == 12, compact.allSatisfy(\.isHexDigit) else {
-            throw SamsungMACAddressError.invalid
-        }
-
-        var parsed: [UInt8] = []
-        parsed.reserveCapacity(6)
-        var index = compact.startIndex
-        for _ in 0..<6 {
-            let next = compact.index(index, offsetBy: 2)
-            guard let octet = UInt8(compact[index..<next], radix: 16) else {
-                throw SamsungMACAddressError.invalid
-            }
-            parsed.append(octet)
-            index = next
-        }
-
-        guard
-            parsed.contains(where: { $0 != 0 }),
-            parsed.contains(where: { $0 != 0xFF }),
-            parsed[0] & 1 == 0
-        else {
-            throw SamsungMACAddressError.invalid
-        }
-        octets = parsed
-    }
-
-    var persistedValue: String {
-        octets.map { String(format: "%02X", $0) }.joined(separator: ":")
-    }
-
-    var description: String {
-        "SamsungMACAddress(redacted)"
-    }
-}
-
-enum SamsungMACAddressError: LocalizedError, Equatable, Sendable {
-    case invalid
-
-    var errorDescription: String? {
-        "The TV did not provide a usable network address for power on."
-    }
-}
-
 enum SamsungWakeOnLANError: LocalizedError, Equatable, Sendable {
     case signalNotSent
 
