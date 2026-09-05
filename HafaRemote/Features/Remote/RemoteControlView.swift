@@ -34,10 +34,9 @@ struct RemoteControlView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .preferredColorScheme(.dark)
-        .confirmationDialog(
+        .alert(
             "Turn off \(tvName)?",
-            isPresented: $isConfirmingPowerOff,
-            titleVisibility: .visible
+            isPresented: $isConfirmingPowerOff
         ) {
             Button("Turn Off", role: .destructive) {
                 send(.powerOff)
@@ -177,6 +176,7 @@ struct RemoteControlView: View {
                     systemImage: "speaker.minus.fill",
                     label: "Down",
                     hint: "Lowers volume. Hold to repeat.",
+                    accessibilityLabel: "Volume down",
                     repeats: true
                 )
                 labeledControl(
@@ -190,6 +190,7 @@ struct RemoteControlView: View {
                     systemImage: "speaker.plus.fill",
                     label: "Up",
                     hint: "Raises volume. Hold to repeat.",
+                    accessibilityLabel: "Volume up",
                     repeats: true
                 )
             }
@@ -244,13 +245,14 @@ struct RemoteControlView: View {
         systemImage: String,
         label: String,
         hint: String,
+        accessibilityLabel: String? = nil,
         repeats: Bool = false
     ) -> some View {
         VStack(spacing: 7) {
             RemoteControlButton(
                 command: command,
                 systemImage: systemImage,
-                accessibilityLabel: label,
+                accessibilityLabel: accessibilityLabel ?? label,
                 accessibilityHint: hint,
                 isEnabled: isConnected,
                 repeatsWhileHeld: repeats,
@@ -291,6 +293,7 @@ struct RemoteControlView: View {
 
 #if DEBUG
     struct RemoteControlTestHarness: View {
+        @Environment(\.dynamicTypeSize) private var dynamicTypeSize
         @State private var lastCommand = "none"
 
         var body: some View {
@@ -305,10 +308,14 @@ struct RemoteControlView: View {
                 }
             }
             .overlay(alignment: .bottomTrailing) {
-                Text(lastCommand)
-                    .font(.caption2)
-                    .accessibilityIdentifier("lastRemoteCommand")
-                    .opacity(0.01)
+                VStack {
+                    Text(lastCommand)
+                        .accessibilityIdentifier("lastRemoteCommand")
+                    Text(dynamicTypeSize == .accessibility5 ? "accessibility5" : "not-largest")
+                        .accessibilityIdentifier("currentDynamicTypeSize")
+                }
+                .font(.caption2)
+                .opacity(0.01)
             }
         }
     }

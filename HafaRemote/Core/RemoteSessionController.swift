@@ -143,12 +143,12 @@ actor RemoteSessionController {
         let clock = clock
         let timeout = configuration.commandTimeout
         let task = Task {
-            try await commandSerializer.perform {
-                try await RemoteSessionTimeout.run(
-                    operation: .send,
-                    timeout: timeout,
-                    clock: clock
-                ) {
+            try await RemoteSessionTimeout.run(
+                operation: .send,
+                timeout: timeout,
+                clock: clock
+            ) {
+                try await commandSerializer.perform {
                     try await driver.send(command)
                 }
             }
@@ -168,6 +168,11 @@ actor RemoteSessionController {
             commandTasks[commandID] = nil
             let wasCancelled = Task.isCancelled || error is CancellationError
             if generation == commandGeneration, !wasCancelled {
+                let queuedCommands = Array(commandTasks.values)
+                commandTasks.removeAll()
+                for queuedCommand in queuedCommands {
+                    queuedCommand.cancel()
+                }
                 let shouldReconnect: Bool
                 if let timeoutError = error as? RemoteSessionControllerError {
                     transition(to: .failed(.timedOut(timeoutError.operation)))
@@ -213,8 +218,18 @@ actor RemoteSessionController {
         reconnectAttempt = 0
         transition(to: .idle)
         await cancelInFlightWork()
-        await disconnectDriverWithinLimit()
-        try Task.checkCancellation()
+        let didFinishTeardown = await disconnectDriverWithinLimit()
+        if Task.isCancelled {
+            finishPairingRemoval(id: removalID)
+            throw CancellationError()
+        }
+        guard didFinishTeardown else {
+            finishPairingRemoval(id: removalID)
+            if generation == removalGeneration {
+                transition(to: .failed(.timedOut(.disconnect)))
+            }
+            throw RemoteSessionControllerError.timedOut(.disconnect)
+        }
         let driver = driver
         let clock = clock
         let timeout = configuration.pairingRemovalTimeout
@@ -500,8 +515,11 @@ actor RemoteSessionController {
 
     @discardableResult
     private func disconnectDriverWithinLimit() async -> Bool {
-        if let driverTeardownTask {
-            return await waitForDriverTeardownWithinLimit(task: driverTeardownTask)
+        if let driverTeardownTask, let driverTeardownID {
+            return await waitForDriverTeardownWithinLimit(
+                task: driverTeardownTask,
+                id: driverTeardownID
+            )
         }
 
         let driver = driver
@@ -516,15 +534,21 @@ actor RemoteSessionController {
             await self?.finishDriverTeardown(id: teardownID)
         }
 
-        return await waitForDriverTeardownWithinLimit(task: task)
+        return await waitForDriverTeardownWithinLimit(task: task, id: teardownID)
     }
 
     private func waitForDriverTeardownWithinLimit() async -> Bool {
-        guard let driverTeardownTask else { return true }
-        return await waitForDriverTeardownWithinLimit(task: driverTeardownTask)
+        guard let driverTeardownTask, let driverTeardownID else { return true }
+        return await waitForDriverTeardownWithinLimit(
+            task: driverTeardownTask,
+            id: driverTeardownID
+        )
     }
 
-    private func waitForDriverTeardownWithinLimit(task: Task<Void, Never>) async -> Bool {
+    private func waitForDriverTeardownWithinLimit(
+        task: Task<Void, Never>,
+        id: UUID
+    ) async -> Bool {
         let clock = clock
         let timeout = configuration.disconnectTimeout
         do {
@@ -535,6 +559,7 @@ actor RemoteSessionController {
             ) {
                 await task.value
             }
+            finishDriverTeardown(id: id)
             return true
         } catch {
             task.cancel()

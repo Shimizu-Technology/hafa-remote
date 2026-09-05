@@ -72,7 +72,10 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Turn off Living Room TV?"].waitForExistence(timeout: 2))
         XCTAssertTrue(app.buttons["Turn Off"].exists)
 
-        XCTAssertEqual(app.staticTexts["lastRemoteCommand"].label, "none")
+        app.buttons["Cancel"].tap()
+        let commandOutput = app.staticTexts["lastRemoteCommand"]
+        XCTAssertTrue(commandOutput.waitForExistence(timeout: 2))
+        XCTAssertEqual(commandOutput.label, "none")
     }
 
     /// The scrollable remote must remain usable at the largest accessibility text size.
@@ -82,10 +85,13 @@ final class HafaRemoteUITests: XCTestCase {
         app.launchArguments += [
             "-ui-testing-remote",
             "-UIPreferredContentSizeCategoryName",
-            "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge",
+            "UICTContentSizeCategoryAccessibilityXXXL",
         ]
         app.launch()
 
+        let dynamicTypeProbe = app.staticTexts["currentDynamicTypeSize"]
+        XCTAssertTrue(dynamicTypeProbe.waitForExistence(timeout: 5))
+        XCTAssertEqual(dynamicTypeProbe.label, "accessibility5")
         XCTAssertTrue(app.buttons["remote-powerOff"].waitForExistence(timeout: 5))
         let keyboard = app.buttons["remote-keyboard"]
         XCTAssertTrue(keyboard.waitForExistence(timeout: 2))
