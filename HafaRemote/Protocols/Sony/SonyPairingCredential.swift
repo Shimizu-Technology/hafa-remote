@@ -85,7 +85,10 @@ struct SystemSonyPairingCredentialKeychain: SonyPairingCredentialKeychain {
 
     func save(_ data: Data, for account: String) throws {
         let baseQuery = query(account: account, returnData: false)
-        let attributes = [kSecValueData as String: data]
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+        ]
         let updateStatus = SecItemUpdate(baseQuery as CFDictionary, attributes as CFDictionary)
         if updateStatus == errSecSuccess { return }
         guard updateStatus == errSecItemNotFound else {
@@ -136,7 +139,7 @@ actor KeychainSonyPairingCredentialStore: SonyPairingCredentialStoring {
         guard let credential = try? JSONDecoder().decode(SonyPairingCredential.self, from: data),
             credential == candidate
         else {
-            try keychain.remove(account: candidate.reportedDeviceID)
+            try? keychain.remove(account: candidate.reportedDeviceID)
             throw SonyKeychainError.invalidStoredCredential
         }
         return credential

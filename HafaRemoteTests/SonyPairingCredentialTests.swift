@@ -75,6 +75,18 @@ struct SonyPairingCredentialTests {
         #expect(keychain.data(for: credential.reportedDeviceID) == nil)
     }
 
+    @Test("A cleanup failure cannot hide the invalid stored credential state")
+    func reportsInvalidCredentialWhenCleanupFails() async throws {
+        let fingerprint = Data(repeating: 14, count: 32)
+        let store = KeychainSonyPairingCredentialStore(
+            keychain: RemovalFailingSonyPairingCredentialKeychain()
+        )
+
+        await #expect(throws: SonyKeychainError.invalidStoredCredential) {
+            try await store.credential(for: fingerprint)
+        }
+    }
+
     @Test("A deleted corrupt record falls through to physical-TV pairing")
     func corruptRecordBecomesMissingCredential() async throws {
         let fingerprint = Data(repeating: 12, count: 32)
@@ -99,6 +111,18 @@ struct SonyPairingCredentialTests {
                 fingerprint: Data(repeating: 13, count: 32)
             )
         }
+    }
+}
+
+private struct RemovalFailingSonyPairingCredentialKeychain: SonyPairingCredentialKeychain {
+    func data(for account: String) -> Data? {
+        Data("not-json".utf8)
+    }
+
+    func save(_ data: Data, for account: String) {}
+
+    func remove(account: String) throws {
+        throw SonyKeychainError.deleteFailed(-50)
     }
 }
 
