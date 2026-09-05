@@ -60,10 +60,16 @@ final class SavedTV: CustomStringConvertible {
         case .wired:
             macAddress = nil
             wakeWasVerified = false
-        case .wireless, .unavailable:
+        case .wireless:
             if let macAddress = tv.macAddress {
-                self.macAddress = macAddress.persistedValue
+                let incomingMACAddress = macAddress.persistedValue
+                if self.macAddress != incomingMACAddress {
+                    wakeWasVerified = false
+                    self.macAddress = incomingMACAddress
+                }
             }
+        case .unavailable:
+            break
         }
         lastSeenAt = date
         lastUsedAt = date

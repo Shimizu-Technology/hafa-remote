@@ -68,6 +68,7 @@ struct SavedTVTests {
             address: try PrivateIPv4Address("192.168.10.42"),
             modelName: "Q70AA",
             firmwareVersion: "1002",
+            networkConnection: .wireless,
             macAddress: try SamsungMACAddress("02:00:5E:10:00:02")
         )
 
@@ -101,6 +102,32 @@ struct SavedTVTests {
         saved.recordConnection(to: reconnectedTV)
 
         #expect(saved.macAddress == "02:00:5E:10:00:01")
+    }
+
+    @Test("A changed wireless MAC invalidates prior wake verification")
+    func invalidatesWakeVerificationWhenWirelessMACChanges() throws {
+        let saved = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.20",
+            macAddress: "02:00:5E:10:00:01",
+            wakeWasVerified: true
+        )
+        let reconnectedTV = PairedSamsungTV(
+            reportedDeviceID: "synthetic-device-id",
+            address: try PrivateIPv4Address("192.168.10.42"),
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            networkConnection: .wireless,
+            macAddress: try SamsungMACAddress("02:00:5E:10:00:02")
+        )
+
+        saved.recordConnection(to: reconnectedTV)
+
+        #expect(saved.macAddress == "02:00:5E:10:00:02")
+        #expect(!saved.wakeWasVerified)
     }
 
     @Test("An explicit wired reconnect clears stale wireless wake metadata")

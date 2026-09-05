@@ -309,6 +309,7 @@ struct HomeView: View {
                 saved.wakeWasVerified = true
             }
         } else {
+            let canPersistWakeMetadata = tv.networkConnection == .wireless
             modelContext.insert(
                 SavedTV(
                     reportedDeviceID: tv.reportedDeviceID,
@@ -316,8 +317,8 @@ struct HomeView: View {
                     modelName: tv.modelName,
                     firmwareVersion: tv.firmwareVersion,
                     lastKnownAddress: tv.address.rawValue,
-                    macAddress: tv.macAddress?.persistedValue,
-                    wakeWasVerified: wakeWasJustVerified,
+                    macAddress: canPersistWakeMetadata ? tv.macAddress?.persistedValue : nil,
+                    wakeWasVerified: canPersistWakeMetadata && wakeWasJustVerified,
                     lastSeenAt: now,
                     lastUsedAt: now
                 )
