@@ -22,6 +22,7 @@ struct VizioTrustPolicy: Sendable {
     private let address: PrivateIPv4Address
     private let port: UInt16
     private let mode: VizioTrustMode
+    private var observedPairingFingerprint: Data?
     private(set) var candidateFingerprint: Data?
 
     init(address: PrivateIPv4Address, port: UInt16, mode: VizioTrustMode) {
@@ -41,14 +42,33 @@ struct VizioTrustPolicy: Sendable {
         guard let presentedFingerprint else {
             return .reject(.missingCertificate)
         }
-        if case .reconnect(let expected) = mode, expected != presentedFingerprint {
-            return .reject(.certificateChanged)
+        switch mode {
+        case .selectedPairingCandidate:
+            if let observedPairingFingerprint,
+                observedPairingFingerprint != presentedFingerprint
+            {
+                return .reject(.certificateChanged)
+            }
+            observedPairingFingerprint = presentedFingerprint
+        case .reconnect(let expected):
+            guard expected == presentedFingerprint else {
+                return .reject(.certificateChanged)
+            }
         }
-        if let candidateFingerprint, candidateFingerprint != presentedFingerprint {
-            return .reject(.certificateChanged)
-        }
-        candidateFingerprint = presentedFingerprint
         return .accept
+    }
+
+    mutating func confirmDeviceAttestedPairing() -> Bool {
+        // The candidate certificate remains provisional until the selected physical TV
+        // accepts the PIN that it displayed. Only the coordinator may call this after a
+        // successful /pairing/pair response; failed and cancelled ceremonies persist nothing.
+        guard case .selectedPairingCandidate = mode,
+            let observedPairingFingerprint
+        else {
+            return false
+        }
+        candidateFingerprint = observedPairingFingerprint
+        return true
     }
 }
 
@@ -67,6 +87,16 @@ final class VizioTrustDelegate: NSObject, URLSessionDelegate, @unchecked Sendabl
 
     var failure: VizioTrustFailure? {
         lock.withLock { storedFailure }
+    }
+
+    override var description: String {
+        "VizioTrustDelegate(redacted)"
+    }
+
+    func confirmDeviceAttestedPairing() -> Bool {
+        lock.withLock {
+            policy.confirmDeviceAttestedPairing()
+        }
     }
 
     func urlSession(

@@ -2,6 +2,7 @@ import Foundation
 
 enum VizioProtocolError: Error, Equatable, Sendable {
     case invalidResponse
+    case invalidPairingTransition
     case rejected(String)
     case unsupportedCommand
 }
@@ -14,6 +15,40 @@ struct VizioPairingChallenge: Equatable, Sendable {
 struct VizioRemoteKey: Equatable, Sendable {
     let codeSet: Int
     let code: Int
+}
+
+enum VizioPairingState: Equatable, Sendable {
+    case idle
+    case awaitingPIN(VizioPairingChallenge)
+    case paired
+    case cancelled
+    case failed
+}
+
+enum VizioPairingEvent: Equatable, Sendable {
+    case receivedChallenge(VizioPairingChallenge)
+    case acceptedPIN
+    case cancelled
+    case failed
+}
+
+struct VizioPairingStateMachine: Sendable {
+    private(set) var state: VizioPairingState = .idle
+
+    mutating func apply(_ event: VizioPairingEvent) throws {
+        switch (state, event) {
+        case (.idle, .receivedChallenge(let challenge)):
+            state = .awaitingPIN(challenge)
+        case (.awaitingPIN, .acceptedPIN):
+            state = .paired
+        case (.idle, .cancelled), (.awaitingPIN, .cancelled):
+            state = .cancelled
+        case (.idle, .failed), (.awaitingPIN, .failed):
+            state = .failed
+        default:
+            throw VizioProtocolError.invalidPairingTransition
+        }
+    }
 }
 
 enum VizioProtocolCodec {
@@ -108,7 +143,10 @@ enum VizioProtocolCodec {
         let response = try decode(VizioPairingTokenResponse.self, from: data)
         try requireSuccess(response.status)
         let token = response.item.authToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !token.isEmpty, token.utf8.count <= 512 else {
+        guard !token.isEmpty,
+            token.utf8.count <= 512,
+            token.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) })
+        else {
             throw VizioProtocolError.invalidResponse
         }
         return token
