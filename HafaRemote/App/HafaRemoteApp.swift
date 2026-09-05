@@ -26,6 +26,15 @@ struct HafaRemoteApp: App {
                             backend: TVDiscoveryFixtureBackend(fixture: .television)
                         )
                     )
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-sony-pairing") {
+                    HomeView(
+                        session: RemoteSessionStore(
+                            controller: RemoteSessionController(driver: SonyPairingUIFixtureDriver())
+                        ),
+                        discovery: TVDiscoveryStore(
+                            backend: TVDiscoveryFixtureBackend(fixture: .sonyTelevision)
+                        )
+                    )
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-discovery-empty") {
                     HomeView(
                         discovery: TVDiscoveryStore(

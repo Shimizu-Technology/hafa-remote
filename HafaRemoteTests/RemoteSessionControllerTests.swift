@@ -735,6 +735,39 @@ struct RemoteSessionControllerTests {
         #expect(await session.state == .unsupported)
     }
 
+    @Test(
+        "Sony protocol timeouts remain explicit and retry on schedule",
+        arguments: [
+            MockConnectionFailure.sonyPairingTimedOut,
+            MockConnectionFailure.sonyRemoteHandshakeTimedOut,
+        ])
+    private func sonyTimeoutSchedulesReconnect(_ failure: MockConnectionFailure) async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-sony-tv",
+            model: "Sony BRAVIA"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [
+                .failure(failure),
+                .success(tv: tv, announcesPairing: false),
+            ]
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(reconnectDelays: [.seconds(2)])
+        )
+
+        await session.connect(to: tv.address.rawValue)
+
+        #expect(await session.state == .failed(.timedOut(.connect)))
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await session.state == .connected(tv) }
+        #expect(await driver.connectCallCount == 2)
+    }
+
     @Test("Reconnect attempts stop after the configured bound")
     func reconnectAttemptsAreBounded() async {
         let clock = ManualRemoteSessionClock()
@@ -892,6 +925,40 @@ struct RemoteSessionControllerTests {
         var starts = driver.connectionStarts.makeAsyncIterator()
         _ = await starts.next()
         await resume(clock: clock, duration: .seconds(5))
+        await connection.value
+
+        #expect(await session.state == .failed(.timedOut(.connect)))
+        #expect(await driver.cancelledConnectionCount == 1)
+    }
+
+    @Test("The longer pairing deadline starts only after the TV requests approval")
+    func pairingExtendsConnectionDeadline() async {
+        let clock = ManualRemoteSessionClock()
+        let driver = SuspendedRemoteSessionDriver(announcesPairing: true)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                connectionTimeout: .seconds(5),
+                pairingTimeout: .seconds(20),
+                reconnectDelays: []
+            )
+        )
+
+        let connection = Task {
+            await session.connect(to: "192.168.10.20")
+        }
+        var starts = driver.connectionStarts.makeAsyncIterator()
+        _ = await starts.next()
+        await waitUntil {
+            let state = await session.state
+            let pendingSleeps = await clock.pendingSleeps
+            return state == .pairing
+                && pendingSleeps.contains(.seconds(20))
+                && !pendingSleeps.contains(.seconds(5))
+        }
+
+        await resume(clock: clock, duration: .seconds(20))
         await connection.value
 
         #expect(await session.state == .failed(.timedOut(.connect)))
@@ -1139,6 +1206,8 @@ private enum MockConnectionFailure: Sendable {
     case savedPairingRejected
     case certificateChanged
     case unsupported
+    case sonyPairingTimedOut
+    case sonyRemoteHandshakeTimedOut
 }
 
 private enum MockConnectionOutcome: Sendable {
@@ -1189,6 +1258,10 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
             throw SamsungPairingCoordinatorError.certificateChanged
         case .failure(.unsupported):
             throw SamsungPairingCoordinatorError.unsupportedTokenAuthentication
+        case .failure(.sonyPairingTimedOut):
+            throw SonyPairingCoordinatorError.pairingTimedOut
+        case .failure(.sonyRemoteHandshakeTimedOut):
+            throw SonyPairingCoordinatorError.remoteHandshakeTimedOut
         }
     }
 
@@ -1288,10 +1361,12 @@ private actor SuspendedRemoteSessionDriver: RemoteSessionDriving {
     nonisolated let connectionStarts: AsyncStream<Void>
     private let connectionStartsContinuation: AsyncStream<Void>.Continuation
     private var continuations: [UUID: CheckedContinuation<Void, Error>] = [:]
+    private let announcesPairing: Bool
     private(set) var cancelledConnectionCount = 0
     private(set) var connectionStartCount = 0
 
-    init() {
+    init(announcesPairing: Bool = false) {
+        self.announcesPairing = announcesPairing
         let (stream, continuation) = AsyncStream<Void>.makeStream()
         connectionStarts = stream
         connectionStartsContinuation = continuation
@@ -1302,6 +1377,9 @@ private actor SuspendedRemoteSessionDriver: RemoteSessionDriving {
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> PairedSamsungTV {
         connectionStartCount += 1
+        if announcesPairing {
+            await onWaitingForApproval()
+        }
         let id = UUID()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -1736,6 +1814,7 @@ private func testTV(
 
 private func testConfiguration(
     connectionTimeout: Duration = .seconds(10),
+    pairingTimeout: Duration = .seconds(60),
     commandTimeout: Duration = .seconds(2),
     disconnectTimeout: Duration = .seconds(1),
     pairingRemovalTimeout: Duration = .seconds(3),
@@ -1743,6 +1822,7 @@ private func testConfiguration(
 ) -> RemoteSessionConfiguration {
     RemoteSessionConfiguration(
         connectionTimeout: connectionTimeout,
+        pairingTimeout: pairingTimeout,
         commandTimeout: commandTimeout,
         disconnectTimeout: disconnectTimeout,
         pairingRemovalTimeout: pairingRemovalTimeout,

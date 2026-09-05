@@ -119,6 +119,15 @@ struct ConnectedTV: Equatable, Sendable {
         "\(brand.rawValue):\(reportedDeviceID)"
     }
 
+    var connectionTarget: TVConnectionTarget {
+        TVConnectionTarget(
+            brand: brand,
+            reportedDeviceID: reportedDeviceID,
+            address: address,
+            controlPort: controlPort
+        )
+    }
+
     var isEligibleForSamsungWake: Bool {
         brand == .samsung && networkConnection == .wireless
     }

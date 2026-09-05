@@ -64,6 +64,16 @@ final class SavedTV: CustomStringConvertible {
         return UInt16(exactly: controlPort)
     }
 
+    var connectionTarget: TVConnectionTarget? {
+        guard let address = validatedAddress else { return nil }
+        return TVConnectionTarget(
+            brand: brand,
+            reportedDeviceID: reportedDeviceID,
+            address: address,
+            controlPort: validatedControlPort
+        )
+    }
+
     var validatedMACAddress: TVMACAddress? {
         macAddress.flatMap { try? TVMACAddress($0) }
     }

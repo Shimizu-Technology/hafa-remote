@@ -2,6 +2,7 @@ import Foundation
 
 protocol RemoteSessionDriving: TVDriver {
     var brand: TVBrand { get }
+    func supports(_ brand: TVBrand) -> Bool
     func connect(
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
@@ -11,7 +12,8 @@ protocol RemoteSessionDriving: TVDriver {
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> ConnectedTV
     func forget(addressText: String) async throws
-    func forget(addressText: String, reportedDeviceID: String?) async throws
+    func forget(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws
+    func submitPairingCode(_ code: String) async throws
 }
 
 extension RemoteSessionDriving {
@@ -27,8 +29,16 @@ extension RemoteSessionDriving {
         )
     }
 
-    func forget(addressText: String, reportedDeviceID: String?) async throws {
+    func forget(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws {
         try await forget(addressText: addressText)
+    }
+
+    func supports(_ brand: TVBrand) -> Bool {
+        brand == self.brand
+    }
+
+    func submitPairingCode(_ code: String) async throws {
+        throw MultiBrandSessionDriverError.pairingCodeNotExpected
     }
 }
 
@@ -73,6 +83,7 @@ struct ContinuousRemoteSessionClock: RemoteSessionClock {
 
 struct RemoteSessionConfiguration: Equatable, Sendable {
     let connectionTimeout: Duration
+    let pairingTimeout: Duration
     let commandTimeout: Duration
     let disconnectTimeout: Duration
     let pairingRemovalTimeout: Duration
@@ -80,6 +91,7 @@ struct RemoteSessionConfiguration: Equatable, Sendable {
 
     static let production = RemoteSessionConfiguration(
         connectionTimeout: .seconds(12),
+        pairingTimeout: .seconds(60),
         commandTimeout: .seconds(3),
         disconnectTimeout: .seconds(2),
         pairingRemovalTimeout: .seconds(3),
@@ -155,7 +167,7 @@ actor RemoteSessionController {
     }
 
     func connect(to target: TVConnectionTarget) async {
-        guard target.brand == driver.brand else {
+        guard driver.supports(target.brand) else {
             generation = UUID()
             targetAddressText = nil
             connectionTarget = nil
@@ -207,6 +219,10 @@ actor RemoteSessionController {
         try await performSend {
             try await driver.sendText(input)
         }
+    }
+
+    func submitPairingCode(_ code: String) async throws {
+        try await driver.submitPairingCode(code)
     }
 
     private func performSend(
@@ -286,7 +302,11 @@ actor RemoteSessionController {
         await disconnectDriverWithinLimit()
     }
 
-    func forgetPairing(for addressText: String, reportedDeviceID: String? = nil) async throws {
+    func forgetPairing(
+        for addressText: String,
+        reportedDeviceID: String? = nil,
+        brand: TVBrand = .samsung
+    ) async throws {
         try await waitForPairingRemoval()
         try Task.checkCancellation()
         let removalID = UUID()
@@ -317,7 +337,8 @@ actor RemoteSessionController {
         let driverTask = Task {
             try await driver.forget(
                 addressText: addressText,
-                reportedDeviceID: reportedDeviceID
+                reportedDeviceID: reportedDeviceID,
+                brand: brand
             )
         }
         Task { [weak self] in
@@ -474,15 +495,17 @@ actor RemoteSessionController {
         connectionID = id
         let driver = driver
         let clock = clock
-        let timeout = configuration.connectionTimeout
+        let connectionTimeout = configuration.connectionTimeout
+        let pairingTimeout = configuration.pairingTimeout
         let connectionTarget = connectionTarget
         let task = Task { [weak self] in
-            try await RemoteSessionTimeout.run(
+            try await RemoteSessionTimeout.runWithExtendableDeadline(
                 operation: .connect,
-                timeout: timeout,
+                initialTimeout: connectionTimeout,
                 clock: clock
-            ) {
+            ) { extendDeadline in
                 let onWaitingForApproval: @MainActor @Sendable () async -> Void = {
+                    extendDeadline(pairingTimeout)
                     await self?.setPairingState(
                         generation: requestedGeneration,
                         connectionID: id
@@ -539,12 +562,25 @@ actor RemoteSessionController {
         } else if error as? SamsungConnectionError == .pairingTimedOut {
             transition(to: .failed(.timedOut(.connect)))
             scheduleReconnect(generation: requestedGeneration)
+        } else if error as? SonyPairingCoordinatorError == .pairingTimedOut
+            || error as? SonyPairingCoordinatorError == .remoteHandshakeTimedOut
+        {
+            transition(to: .failed(.timedOut(.connect)))
+            scheduleReconnect(generation: requestedGeneration)
         } else if error as? SamsungConnectionError == .denied {
             transition(to: .denied)
         } else if error as? SamsungPairingCoordinatorError == .savedPairingRejected {
             transition(to: .savedPairingRejected)
         } else if error as? SamsungPairingCoordinatorError == .certificateChanged {
             transition(to: .certificateChanged)
+        } else if error as? SonyPairingCoordinatorError == .certificateChanged
+            || error as? SonyTLSChannelError == .certificateChanged
+        {
+            transition(to: .certificateChanged)
+        } else if error as? SonyPairingCoordinatorError == .invalidPairingCode
+            || error as? SonyPairingCoordinatorError == .pairingRejected
+        {
+            transition(to: .denied)
         } else if Self.isUnsupportedError(error) {
             transition(to: .unsupported)
         } else if Self.isOfflineError(error) {
@@ -682,11 +718,18 @@ actor RemoteSessionController {
 
     private static func isUnsupportedError(_ error: Error) -> Bool {
         error as? SamsungPairingCoordinatorError == .unsupportedTokenAuthentication
+            || error as? SonyPairingCoordinatorError == .unsupportedDevice
+            || error as? MultiBrandSessionDriverError == .unsupportedBrand
     }
 
     private static func isOfflineError(_ error: Error) -> Bool {
-        guard let error = error as? SamsungConnectionError else { return false }
-        return error == .unavailable || error == .notConnected
+        if let error = error as? SamsungConnectionError {
+            return error == .unavailable || error == .notConnected
+        }
+        if let error = error as? SonyTLSChannelError {
+            return error == .unavailable || error == .connectionClosed
+        }
+        return false
     }
 }
 
@@ -731,6 +774,100 @@ private enum RemoteSessionTimeout {
             timeoutTask.cancel()
             race.resolve(.failure(CancellationError()))
         }
+    }
+
+    static func runWithExtendableDeadline<Value: Sendable>(
+        operation: RemoteSessionOperation,
+        initialTimeout: Duration,
+        clock: any RemoteSessionClock,
+        work:
+            @escaping @Sendable (
+                @escaping @Sendable (Duration) -> Void
+            ) async throws -> Value
+    ) async throws -> Value {
+        let race = RemoteSessionTimeoutRace<Value>()
+        let deadline = RemoteSessionResettableDeadline()
+        let expire: @Sendable () -> Void = {
+            race.resolve(.failure(RemoteSessionControllerError.timedOut(operation)))
+        }
+        deadline.arm(timeout: initialTimeout, clock: clock, onExpire: expire)
+
+        let workTask = Task {
+            do {
+                let value = try await work { timeout in
+                    deadline.arm(timeout: timeout, clock: clock, onExpire: expire)
+                }
+                race.resolve(.success(value))
+            } catch {
+                race.resolve(.failure(error))
+            }
+        }
+
+        defer {
+            workTask.cancel()
+            deadline.cancel()
+        }
+
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                race.install(continuation)
+            }
+        } onCancel: {
+            workTask.cancel()
+            deadline.cancel()
+            race.resolve(.failure(CancellationError()))
+        }
+    }
+}
+
+/// Owns one replaceable deadline without structurally awaiting cancellation-hostile work.
+private final class RemoteSessionResettableDeadline: @unchecked Sendable {
+    private let lock = NSLock()
+    private var generation = 0
+    private var task: Task<Void, Never>?
+
+    deinit {
+        cancel()
+    }
+
+    func arm(
+        timeout: Duration,
+        clock: any RemoteSessionClock,
+        onExpire: @escaping @Sendable () -> Void
+    ) {
+        lock.lock()
+        generation &+= 1
+        let requestedGeneration = generation
+        let previousTask = task
+        task = Task { [weak self] in
+            do {
+                try await clock.sleep(for: timeout)
+                try Task.checkCancellation()
+                guard self?.claimExpiry(generation: requestedGeneration) == true else { return }
+                onExpire()
+            } catch {
+                return
+            }
+        }
+        lock.unlock()
+        previousTask?.cancel()
+    }
+
+    func cancel() {
+        lock.lock()
+        generation &+= 1
+        let task = task
+        self.task = nil
+        lock.unlock()
+        task?.cancel()
+    }
+
+    private func claimExpiry(generation requestedGeneration: Int) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard generation == requestedGeneration else { return false }
+        task = nil
+        return true
     }
 }
 
