@@ -36,6 +36,7 @@ struct SamsungPairingCoordinatorTests {
         let approvalCount = await approvalRecorder.count
 
         #expect(tv.modelName == "TEST_MODEL_2021")
+        #expect(tv.reportedDeviceID == "synthetic-device-id")
         #expect(savedCredential == issuedCredential)
         #expect(approvalCount == 1)
     }

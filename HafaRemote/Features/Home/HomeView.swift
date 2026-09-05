@@ -54,7 +54,10 @@ struct HomeView: View {
         .sheet(isPresented: $isShowingSetup) {
             SamsungSetupView(
                 session: session,
-                initialAddress: session.lastConnectedTV?.address.rawValue ?? ""
+                initialAddress:
+                    session.lastConnectedTV?.address.rawValue
+                    ?? savedTVs.first?.lastKnownAddress
+                    ?? ""
             )
         }
         .alert(
@@ -212,8 +215,9 @@ struct HomeView: View {
 
     private func restoreLastUsedTVIfNeeded() async {
         guard !didAttemptInitialRestore else { return }
-        guard let address = savedTVs.first?.validatedAddress else { return }
+        guard let savedTV = savedTVs.first else { return }
         didAttemptInitialRestore = true
+        guard let address = savedTV.validatedAddress else { return }
         isRestoringSavedTV = true
         defer { isRestoringSavedTV = false }
         await session.connect(to: address.rawValue)

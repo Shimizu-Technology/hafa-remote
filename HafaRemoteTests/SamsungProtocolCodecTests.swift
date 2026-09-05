@@ -188,6 +188,35 @@ struct SamsungProtocolCodecTests {
         )
     }
 
+    @Test("Device parser falls back to the Samsung DUID")
+    func parsesDeviceInfoDUIDFallback() throws {
+        let response = Data(
+            #"{"device":{"id":"   ","duid":" synthetic-duid ","modelName":"TEST_MODEL_2021","TokenAuthSupport":"true"}}"#
+                .utf8
+        )
+
+        let info = try SamsungDeviceInfoParser.parse(response)
+
+        #expect(info.reportedDeviceID == "synthetic-duid")
+    }
+
+    @Test("Device parser rejects responses without a stable identifier")
+    func rejectsMissingDeviceIdentifiers() {
+        let responses = [
+            Data(#"{"device":{"modelName":"TEST_MODEL_2021","TokenAuthSupport":"true"}}"#.utf8),
+            Data(
+                #"{"device":{"id":" ","duid":"  ","modelName":"TEST_MODEL_2021","TokenAuthSupport":"true"}}"#
+                    .utf8
+            ),
+        ]
+
+        for response in responses {
+            #expect(throws: SamsungDeviceInfoError.invalidResponse) {
+                try SamsungDeviceInfoParser.parse(response)
+            }
+        }
+    }
+
     @Test("Pairing credentials reject control characters and malformed pins")
     func validatesCredentialShape() {
         #expect(throws: SamsungPairingCredentialError.invalidToken) {
