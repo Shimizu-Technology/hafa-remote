@@ -553,6 +553,11 @@ actor RemoteSessionController {
         } else if error as? SamsungConnectionError == .pairingTimedOut {
             transition(to: .failed(.timedOut(.connect)))
             scheduleReconnect(generation: requestedGeneration)
+        } else if error as? SonyPairingCoordinatorError == .pairingTimedOut
+            || error as? SonyPairingCoordinatorError == .remoteHandshakeTimedOut
+        {
+            transition(to: .failed(.timedOut(.connect)))
+            scheduleReconnect(generation: requestedGeneration)
         } else if error as? SamsungConnectionError == .denied {
             transition(to: .denied)
         } else if error as? SamsungPairingCoordinatorError == .savedPairingRejected {

@@ -735,6 +735,39 @@ struct RemoteSessionControllerTests {
         #expect(await session.state == .unsupported)
     }
 
+    @Test(
+        "Sony protocol timeouts remain explicit and retry on schedule",
+        arguments: [
+            MockConnectionFailure.sonyPairingTimedOut,
+            MockConnectionFailure.sonyRemoteHandshakeTimedOut,
+        ])
+    private func sonyTimeoutSchedulesReconnect(_ failure: MockConnectionFailure) async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-sony-tv",
+            model: "Sony BRAVIA"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [
+                .failure(failure),
+                .success(tv: tv, announcesPairing: false),
+            ]
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(reconnectDelays: [.seconds(2)])
+        )
+
+        await session.connect(to: tv.address.rawValue)
+
+        #expect(await session.state == .failed(.timedOut(.connect)))
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await session.state == .connected(tv) }
+        #expect(await driver.connectCallCount == 2)
+    }
+
     @Test("Reconnect attempts stop after the configured bound")
     func reconnectAttemptsAreBounded() async {
         let clock = ManualRemoteSessionClock()
@@ -1139,6 +1172,8 @@ private enum MockConnectionFailure: Sendable {
     case savedPairingRejected
     case certificateChanged
     case unsupported
+    case sonyPairingTimedOut
+    case sonyRemoteHandshakeTimedOut
 }
 
 private enum MockConnectionOutcome: Sendable {
@@ -1189,6 +1224,10 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
             throw SamsungPairingCoordinatorError.certificateChanged
         case .failure(.unsupported):
             throw SamsungPairingCoordinatorError.unsupportedTokenAuthentication
+        case .failure(.sonyPairingTimedOut):
+            throw SonyPairingCoordinatorError.pairingTimedOut
+        case .failure(.sonyRemoteHandshakeTimedOut):
+            throw SonyPairingCoordinatorError.remoteHandshakeTimedOut
         }
     }
 
