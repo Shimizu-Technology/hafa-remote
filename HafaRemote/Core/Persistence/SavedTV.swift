@@ -121,3 +121,38 @@ final class SavedTV: CustomStringConvertible {
         lastUsedAt = date
     }
 }
+
+/// Repairs internal-alpha records before later code relies on stable identity uniqueness.
+@MainActor
+enum SavedTVLegacyIdentityMigration {
+    @discardableResult
+    static func apply(to records: [SavedTV], in context: ModelContext) -> Bool {
+        var changed = false
+        let groups = Dictionary(grouping: records, by: \.stableDeviceKey)
+
+        for recordsWithSameIdentity in groups.values {
+            let ordered = recordsWithSameIdentity.sorted(by: preferredSurvivor)
+            guard let survivor = ordered.first else { continue }
+
+            for duplicate in ordered.dropFirst() {
+                context.delete(duplicate)
+                changed = true
+            }
+            if survivor.stableDeviceID == nil {
+                survivor.backfillLegacyIdentityIfNeeded()
+                changed = true
+            }
+        }
+        return changed
+    }
+
+    private static func preferredSurvivor(_ lhs: SavedTV, _ rhs: SavedTV) -> Bool {
+        if (lhs.stableDeviceID != nil) != (rhs.stableDeviceID != nil) {
+            return lhs.stableDeviceID != nil
+        }
+        if lhs.lastUsedAt != rhs.lastUsedAt {
+            return lhs.lastUsedAt > rhs.lastUsedAt
+        }
+        return lhs.id.uuidString < rhs.id.uuidString
+    }
+}

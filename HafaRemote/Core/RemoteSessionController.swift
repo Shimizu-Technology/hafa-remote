@@ -6,6 +6,13 @@ protocol RemoteSessionDriving: TVDriver {
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> ConnectedTV
     func forget(addressText: String) async throws
+    func forget(addressText: String, reportedDeviceID: String?) async throws
+}
+
+extension RemoteSessionDriving {
+    func forget(addressText: String, reportedDeviceID: String?) async throws {
+        try await forget(addressText: addressText)
+    }
 }
 
 extension SamsungPairingCoordinator: RemoteSessionDriving {
@@ -221,7 +228,7 @@ actor RemoteSessionController {
         await disconnectDriverWithinLimit()
     }
 
-    func forgetPairing(for addressText: String) async throws {
+    func forgetPairing(for addressText: String, reportedDeviceID: String? = nil) async throws {
         try await waitForPairingRemoval()
         try Task.checkCancellation()
         let removalID = UUID()
@@ -249,7 +256,10 @@ actor RemoteSessionController {
         let clock = clock
         let timeout = configuration.pairingRemovalTimeout
         let driverTask = Task {
-            try await driver.forget(addressText: addressText)
+            try await driver.forget(
+                addressText: addressText,
+                reportedDeviceID: reportedDeviceID
+            )
         }
         Task { [weak self] in
             _ = await driverTask.result

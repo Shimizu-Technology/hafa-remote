@@ -108,6 +108,67 @@ struct SavedTVTests {
         #expect(migrated.validatedControlPort == nil)
     }
 
+    @MainActor
+    @Test("Duplicate legacy Samsung identities are merged before stable backfill")
+    func deduplicatesPersistedLegacyIdentities() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "hafa-remote-duplicates-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appending(path: "SavedTV.store")
+        let schema = Schema([SavedTV.self])
+
+        do {
+            let configuration = ModelConfiguration(schema: schema, url: storeURL)
+            let container = try ModelContainer(for: schema, configurations: configuration)
+            let older = SavedTV(
+                reportedDeviceID: "duplicate-device-id",
+                displayName: "Older record",
+                modelName: "Q70AA",
+                firmwareVersion: nil,
+                lastKnownAddress: "192.168.10.20",
+                lastUsedAt: Date(timeIntervalSince1970: 100)
+            )
+            let newer = SavedTV(
+                reportedDeviceID: "duplicate-device-id",
+                displayName: "Newer record",
+                modelName: "Q70AA",
+                firmwareVersion: nil,
+                lastKnownAddress: "192.168.10.21",
+                lastUsedAt: Date(timeIntervalSince1970: 200)
+            )
+            older.stableDeviceID = nil
+            newer.stableDeviceID = nil
+            container.mainContext.insert(older)
+            container.mainContext.insert(newer)
+            try container.mainContext.save()
+        }
+
+        do {
+            let configuration = ModelConfiguration(schema: schema, url: storeURL)
+            let container = try ModelContainer(for: schema, configurations: configuration)
+            let records = try container.mainContext.fetch(FetchDescriptor<SavedTV>())
+            #expect(records.count == 2)
+
+            #expect(
+                SavedTVLegacyIdentityMigration.apply(
+                    to: records,
+                    in: container.mainContext
+                )
+            )
+            try container.mainContext.save()
+        }
+
+        let configuration = ModelConfiguration(schema: schema, url: storeURL)
+        let container = try ModelContainer(for: schema, configurations: configuration)
+        let records = try container.mainContext.fetch(FetchDescriptor<SavedTV>())
+        let survivor = try #require(records.first)
+        #expect(records.count == 1)
+        #expect(survivor.displayName == "Newer record")
+        #expect(survivor.lastKnownAddress == "192.168.10.21")
+        #expect(survivor.stableDeviceID == "samsung:duplicate-device-id")
+    }
+
     @Test("Persisted control port zero is rejected")
     func rejectsControlPortZero() {
         let saved = SavedTV(

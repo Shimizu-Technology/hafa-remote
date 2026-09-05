@@ -237,7 +237,7 @@ README.md
 - `RemoteCommand`: semantic commands such as `.move(.up)`, `.select`, `.volume(.up)`, and `.powerOff`
 - `TVCapability`: navigation, playback, volume, mute, text input, power off, and wake
 - `RemoteSessionState`: the explicit connection states defined above
-- `SavedTV`: stable local ID, reported device identifier when available, display name, room, model, last-known host, optional MAC address, last-seen time, capabilities, and trust metadata
+- `SavedTV`: stable local ID, brand-scoped reported device identifier, display name, model, last-known host and optional control port, optional MAC address, wake verification, and last-seen/last-used times
 - `PairingTokenStore`: Keychain-only access keyed by the stable local device ID
 
 The UI must never send raw protocol keys directly. Only the active brand driver maps semantic commands to its television protocol.

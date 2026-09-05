@@ -74,6 +74,9 @@ struct HomeView: View {
                     session.lastConnectedTV?.address.rawValue
                     ?? savedTVs.first?.lastKnownAddress
                     ?? "",
+                initialReportedDeviceID:
+                    session.lastConnectedTV?.reportedDeviceID
+                    ?? savedTVs.first?.reportedDeviceID,
                 discovery: discovery
             )
         }
@@ -344,9 +347,7 @@ struct HomeView: View {
     private func backfillLegacySavedTVsIfNeeded() {
         let recordsNeedingBackfill = savedTVs.filter { $0.stableDeviceID == nil }
         guard !recordsNeedingBackfill.isEmpty else { return }
-        for savedTV in recordsNeedingBackfill {
-            savedTV.backfillLegacyIdentityIfNeeded()
-        }
+        SavedTVLegacyIdentityMigration.apply(to: savedTVs, in: modelContext)
         do {
             try modelContext.save()
         } catch {

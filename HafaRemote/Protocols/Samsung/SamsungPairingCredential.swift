@@ -85,7 +85,7 @@ enum SamsungPairingCredentialIdentityError: LocalizedError, Equatable, Sendable 
 protocol SamsungPairingCredentialStoring: Sendable {
     func credential(
         for identity: SamsungPairingCredentialIdentity,
-        migratingLegacyCredentialFor address: PrivateIPv4Address
+        discardingLegacyCredentialFor address: PrivateIPv4Address
     ) async throws -> SamsungPairingCredential?
     func save(
         _ credential: SamsungPairingCredential,
@@ -95,6 +95,7 @@ protocol SamsungPairingCredentialStoring: Sendable {
         for identity: SamsungPairingCredentialIdentity,
         legacyAddress: PrivateIPv4Address
     ) async throws
+    func removeLegacyCredential(for address: PrivateIPv4Address) async throws
 }
 
 /// Stores pairing tokens and certificate pins in this device's data-protection Keychain.
@@ -103,18 +104,14 @@ actor KeychainSamsungPairingCredentialStore: SamsungPairingCredentialStoring {
 
     func credential(
         for identity: SamsungPairingCredentialIdentity,
-        migratingLegacyCredentialFor address: PrivateIPv4Address
+        discardingLegacyCredentialFor address: PrivateIPv4Address
     ) throws -> SamsungPairingCredential? {
-        if let credential = try readCredential(accountMaterial: identity.stableDeviceKey) {
-            return credential
-        }
-        guard let legacyCredential = try readCredential(accountMaterial: address.rawValue) else {
-            return nil
-        }
-
-        try save(legacyCredential, for: identity)
+        let credential = try readCredential(accountMaterial: identity.stableDeviceKey)
+        // An address was the credential boundary in the internal alpha. It is not
+        // an identity: DHCP can assign that address to another television. Never
+        // present or migrate the legacy token; discard it and require approval.
         try deleteCredential(accountMaterial: address.rawValue)
-        return legacyCredential
+        return credential
     }
 
     func save(
@@ -130,6 +127,10 @@ actor KeychainSamsungPairingCredentialStore: SamsungPairingCredentialStoring {
     ) throws {
         try deleteCredential(accountMaterial: identity.stableDeviceKey)
         try deleteCredential(accountMaterial: legacyAddress.rawValue)
+    }
+
+    func removeLegacyCredential(for address: PrivateIPv4Address) throws {
+        try deleteCredential(accountMaterial: address.rawValue)
     }
 
     private func readCredential(accountMaterial: String) throws -> SamsungPairingCredential? {
