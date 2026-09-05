@@ -251,7 +251,10 @@ struct HomeView: View {
         if selection.selectedDeviceKey == nil {
             selection.selectWithoutConnecting(savedTVs.first?.stableDeviceKey)
         }
-        await restoration.restore(from: savedTVs) { target in
+        await restoration.restore(
+            from: savedTVs,
+            alreadyConnected: session.lastConnectedTV != nil
+        ) { target in
             await session.connect(to: target)
         }
     }
@@ -540,11 +543,16 @@ final class SavedTVRestorationCoordinator {
 
     func restore(
         from savedTVs: [SavedTV],
+        alreadyConnected: Bool = false,
         connect: @MainActor (TVConnectionTarget) async throws -> Void
     ) async {
         guard !didAttempt else { return }
-        didAttempt = true
+        if alreadyConnected {
+            didAttempt = true
+            return
+        }
         guard let target = savedTVs.first?.connectionTarget else { return }
+        didAttempt = true
 
         isRestoring = true
         defer { isRestoring = false }

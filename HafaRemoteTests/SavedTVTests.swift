@@ -460,8 +460,8 @@ struct SavedTVTests {
     }
 
     @MainActor
-    @Test("An empty initial restore is not retried after the first TV is paired")
-    func doesNotRestoreAgainWhenSavedTVsPopulate() async {
+    @Test("An empty initial query retries when saved TVs populate")
+    func retriesRestorationWhenSavedTVsPopulate() async {
         let restoration = SavedTVRestorationCoordinator()
         var connectionAttempts = 0
         let newlyPairedTV = SavedTV(
@@ -476,6 +476,30 @@ struct SavedTVTests {
             connectionAttempts += 1
         }
         await restoration.restore(from: [newlyPairedTV]) { _ in
+            connectionAttempts += 1
+        }
+
+        #expect(connectionAttempts == 1)
+        #expect(!restoration.isRestoring)
+    }
+
+    @MainActor
+    @Test("A connected first pairing is not restored when its saved record appears")
+    func doesNotRestoreNewlyPairedTV() async {
+        let restoration = SavedTVRestorationCoordinator()
+        let newlyPairedTV = SavedTV(
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Living Room",
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.168.10.20"
+        )
+        var connectionAttempts = 0
+
+        await restoration.restore(from: []) { _ in
+            connectionAttempts += 1
+        }
+        await restoration.restore(from: [newlyPairedTV], alreadyConnected: true) { _ in
             connectionAttempts += 1
         }
 
