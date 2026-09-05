@@ -457,7 +457,8 @@ struct RemoteSessionControllerTests {
 
     @Test("Connected sessions forward validated text without exposing its contents")
     func connectedSessionSendsText() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let driver = MockRemoteSessionDriver(
             outcomes: [.success(tv: tv, announcesPairing: false)]
         )
@@ -481,7 +482,8 @@ struct RemoteSessionControllerTests {
 
     @Test("Cancelling text delivery preserves the connected session")
     func callerCancellationStopsTextWithoutLosingSession() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let driver = SuspendedTextRemoteSessionDriver(tv: tv)
         let session = RemoteSessionController(driver: driver)
         await session.connect(to: tv.address.rawValue)
@@ -502,7 +504,8 @@ struct RemoteSessionControllerTests {
 
     @Test("An unavailable text destination goes offline and reconnects on schedule")
     func unavailableTextSendSchedulesReconnect() async throws {
-        let tv = try testTV(address: "192.168.10.20", model: "TEST_MODEL_A")
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
         let clock = ManualRemoteSessionClock()
         let driver = MockRemoteSessionDriver(
             outcomes: [
