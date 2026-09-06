@@ -84,6 +84,46 @@ struct VizioPairingCoordinatorTests {
         #expect(await prompt.count == 0)
     }
 
+    @Test("An unreadable first identity response stores no credential")
+    func mapsUnreadableProvisionalDeviceInfo() async throws {
+        let identity = try VizioPairingIdentity(reportedDeviceID: info.reportedDeviceID)
+        let store = InMemoryVizioCredentialStore()
+        let client = StubVizioHTTPClient(info: info, returnsInvalidDeviceInfo: true)
+        let coordinator = VizioPairingCoordinator(
+            credentialStore: store,
+            makeClient: VizioClientFactoryRecorder(clients: [client]).makeClient
+        )
+
+        await #expect(throws: VizioPairingCoordinatorError.unrecognizedDeviceInfo) {
+            try await coordinator.pair(target: target) { _ in "1234" }
+        }
+        #expect(await store.credential(for: identity) == nil)
+    }
+
+    @Test("An unreadable pinned identity response preserves the saved credential")
+    func mapsUnreadablePinnedDeviceInfo() async throws {
+        let fingerprint = Data(repeating: 8, count: 32)
+        let identity = try VizioPairingIdentity(reportedDeviceID: info.reportedDeviceID)
+        let credential = try VizioPairingCredential(
+            authToken: "remembered-token",
+            certificateSHA256: fingerprint,
+            clientID: "00000000-0000-4000-8000-000000000001"
+        )
+        let store = InMemoryVizioCredentialStore()
+        await store.save(credential, for: identity)
+        let provisional = StubVizioHTTPClient(info: info)
+        let pinned = StubVizioHTTPClient(info: info, returnsInvalidDeviceInfo: true)
+        let coordinator = VizioPairingCoordinator(
+            credentialStore: store,
+            makeClient: VizioClientFactoryRecorder(clients: [provisional, pinned]).makeClient
+        )
+
+        await #expect(throws: VizioPairingCoordinatorError.unrecognizedDeviceInfo) {
+            try await coordinator.pair(target: target) { _ in "1234" }
+        }
+        #expect(await store.credential(for: identity) == credential)
+    }
+
     @Test("Cancellation tells the TV to cancel pairing and stores no credential")
     func cancellationCancelsPairingWithoutPersistence() async throws {
         let client = StubVizioHTTPClient(info: info)
@@ -183,20 +223,38 @@ struct VizioPairingCredentialStoreTests {
 }
 
 struct VizioDeviceInfoCodecTests {
-    @Test("Device info yields a durable serial identity and display metadata")
-    func decodesDeviceInfo() throws {
+    @Test("Modern device info yields nested identity and display metadata")
+    func decodesModernDeviceInfo() throws {
         let response = Data(
-            #"{"STATUS":{"RESULT":"SUCCESS"},"ITEM":{"SERIAL_NUMBER":" serial-1 ","CAST_NAME":" Living Room ","MODEL_NAME":" VIZIO_TEST ","VERSION":" 1.2.3 "}}"#
+            #"{"STATUS":{"RESULT":"SUCCESS"},"ITEMS":[{"VALUE":{"CAST_NAME":"   ","MODEL_NAME":"INVALID","SYSTEM_INFO":{"SERIAL_NUMBER":"invalid-first"}}},{"CNAME":"deviceinfo","NAME":"VIZIO Device Info","TYPE":"T_VIZIO_DEVICE_INFO_V1","VALUE":{"API_VERSION":"3.3.3-test","CAST_NAME":" Living Room ","MODEL_NAME":" VIZIO_TEST ","SYSTEM_INFO":{"MODEL_NAME":"VIZIO_TEST","SERIAL_NUMBER":" synthetic-serial-1 ","VERSION":" 1.2.3 "}}}]}"#
                 .utf8
         )
 
         #expect(
             try VizioProtocolCodec.deviceInfo(from: response)
                 == VizioDeviceInfo(
-                    reportedDeviceID: "serial-1",
+                    reportedDeviceID: "synthetic-serial-1",
                     displayName: "Living Room",
                     modelName: "VIZIO_TEST",
                     firmwareVersion: "1.2.3"
+                )
+        )
+    }
+
+    @Test("Legacy singular device info remains compatible")
+    func decodesLegacyDeviceInfo() throws {
+        let response = Data(
+            #"{"STATUS":{"RESULT":"SUCCESS"},"ITEM":{"SERIAL_NUMBER":"synthetic-legacy-serial","CAST_NAME":"Office","MODEL_NAME":"VIZIO_LEGACY","VERSION":"9.8.7"}}"#
+                .utf8
+        )
+
+        #expect(
+            try VizioProtocolCodec.deviceInfo(from: response)
+                == VizioDeviceInfo(
+                    reportedDeviceID: "synthetic-legacy-serial",
+                    displayName: "Office",
+                    modelName: "VIZIO_LEGACY",
+                    firmwareVersion: "9.8.7"
                 )
         )
     }
@@ -249,7 +307,7 @@ struct VizioHTTPSClientRequestTests {
             switch request.url?.path {
             case "/state/device/deviceinfo":
                 body =
-                    #"{"STATUS":{"RESULT":"SUCCESS"},"ITEM":{"SERIAL_NUMBER":"serial-1","CAST_NAME":"Living Room","MODEL_NAME":"VIZIO_TEST","VERSION":"1.2.3"}}"#
+                    #"{"STATUS":{"RESULT":"SUCCESS"},"ITEMS":[{"VALUE":{"CAST_NAME":"Living Room","MODEL_NAME":"VIZIO_TEST","SYSTEM_INFO":{"SERIAL_NUMBER":"synthetic-serial-1","VERSION":"1.2.3"}}}]}"#
             case "/pairing/start":
                 body = #"{"STATUS":{"RESULT":"SUCCESS"},"ITEM":{"CHALLENGE_TYPE":1,"PAIRING_REQ_TOKEN":42}}"#
             case "/pairing/pair":
@@ -340,6 +398,7 @@ private actor StubVizioHTTPClient: VizioHTTPClienting {
     private let info: VizioDeviceInfo
     private let fingerprint: Data
     private let deviceInfoError: VizioHTTPSClientError?
+    private let returnsInvalidDeviceInfo: Bool
     private(set) var deviceInfoTokens: [String?] = []
     private(set) var finishedPIN: String?
     private(set) var confirmationCount = 0
@@ -350,16 +409,19 @@ private actor StubVizioHTTPClient: VizioHTTPClienting {
     init(
         info: VizioDeviceInfo,
         fingerprint: Data = Data(repeating: 1, count: 32),
-        deviceInfoError: VizioHTTPSClientError? = nil
+        deviceInfoError: VizioHTTPSClientError? = nil,
+        returnsInvalidDeviceInfo: Bool = false
     ) {
         self.info = info
         self.fingerprint = fingerprint
         self.deviceInfoError = deviceInfoError
+        self.returnsInvalidDeviceInfo = returnsInvalidDeviceInfo
     }
 
     func deviceInfo(authToken: String?) throws -> VizioDeviceInfo {
         deviceInfoTokens.append(authToken)
         if let deviceInfoError { throw deviceInfoError }
+        if returnsInvalidDeviceInfo { throw VizioProtocolError.invalidResponse }
         return info
     }
 

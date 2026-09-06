@@ -228,6 +228,19 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Acceptance evidence:** The Vizio is found without an address, PIN-pairs once, survives relaunch, passes the control soak, and either powers on repeatedly or shows an honest unavailable state.
 
+### HR-030 — Repair modern Vizio identity parsing
+
+**Evidence:** Household TestFlight build 2 discovers the Vizio but cannot begin pairing. Modern SmartCast device-information responses wrap metadata in `ITEMS[0].VALUE`, with serial and firmware fields under `SYSTEM_INFO`; build 2 only accepted a synthetic singular `ITEM` fixture.
+
+- [x] Decode the modern `ITEMS` envelope and nested `SYSTEM_INFO` identity fields.
+- [x] Retain the legacy singular `ITEM` response for older firmware.
+- [x] Replace the request-level test fixture with the modern wire shape.
+- [x] Preserve strict identity validation and privacy-safe synthetic fixtures.
+- [x] Give an otherwise unknown Vizio identity response a specific recovery message.
+- [ ] Confirm discovery, PIN pairing, first command, relaunch, and reconnect on the household Vizio.
+
+**Acceptance evidence:** Automated coverage proves modern and legacy response compatibility without weakening field validation. Household acceptance remains required before Vizio is described as validated.
+
 ## Phase 3 — External TestFlight
 
 ### HR-012 — Resolve each brand's distribution basis

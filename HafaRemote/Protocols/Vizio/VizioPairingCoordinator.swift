@@ -71,7 +71,12 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
                     nil
                 )
                 await cleanup.update(client: provisional)
-                let provisionalInfo = try await provisional.deviceInfo(authToken: nil)
+                let provisionalInfo: VizioDeviceInfo
+                do {
+                    provisionalInfo = try await provisional.deviceInfo(authToken: nil)
+                } catch VizioProtocolError.invalidResponse {
+                    throw VizioPairingCoordinatorError.unrecognizedDeviceInfo
+                }
                 try Task.checkCancellation()
                 let identity = try VizioPairingIdentity(
                     reportedDeviceID: provisionalInfo.reportedDeviceID
@@ -96,6 +101,8 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
                         )
                     } catch VizioProtocolError.rejected {
                         throw VizioPairingCoordinatorError.savedPairingRejected
+                    } catch VizioProtocolError.invalidResponse {
+                        throw VizioPairingCoordinatorError.unrecognizedDeviceInfo
                     }
                     guard confirmedInfo.reportedDeviceID == identity.reportedDeviceID else {
                         throw VizioPairingCoordinatorError.deviceIdentityChanged
@@ -244,6 +251,7 @@ enum VizioPairingCoordinatorError: LocalizedError, Equatable, Sendable {
     case pinRejected
     case certificateChanged
     case deviceIdentityChanged
+    case unrecognizedDeviceInfo
 
     var errorDescription: String? {
         switch self {
@@ -259,6 +267,8 @@ enum VizioPairingCoordinatorError: LocalizedError, Equatable, Sendable {
             "This Vizio TV's security identity changed. Forget it before pairing again."
         case .deviceIdentityChanged:
             "The Vizio TV identity changed during connection. Try discovering it again."
+        case .unrecognizedDeviceInfo:
+            "The Vizio TV responded, but Hafa Remote could not read its device information. Update the TV software, then scan again."
         }
     }
 }
