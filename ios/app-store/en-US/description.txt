@@ -1,6 +1,6 @@
 Hafa Remote is a straightforward iPhone remote for compatible Samsung, Sony, and Vizio smart TVs on the same local network.
 
-Open Add TV and Hafa Remote finds nearby compatible TVs automatically—no network address to type. Pair once, save each TV, and switch between rooms from the remote.
+Open Add TV and Hafa Remote finds nearby compatible TVs automatically—no network address to type. Pair once, save each TV, and switch between saved TVs from the remote.
 
 Everyday controls are close at hand:
 • D-pad and select

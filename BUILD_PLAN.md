@@ -147,7 +147,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 - [x] Refresh a saved TV's address when discovery finds its stable identity after a DHCP change.
 - [x] Add forget/re-pair actions that delete the associated Keychain token.
 - [x] Add deterministic tests for duplicate discovery, credential deletion, address refresh, and rapid switching.
-- [ ] Complete the ten-switch household hardware soak, including renamed TVs.
+- [ ] Complete the ten-switch household hardware soak.
 
 **Acceptance evidence:** Automated coverage proves that multiple TVs can be saved, switched rapidly, restored, rediscovered at a changed address, and forgotten without crossing brand identity, credentials, or commands. Editable names and the ten-switch household soak remain pending.
 
@@ -366,4 +366,4 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Immediate next action
 
-Merge the reviewed discovery and build 2 release PRs, upload the signed build from `main` to internal TestFlight, then run the Samsung, Sony, and Vizio household acceptance journeys.
+Merge the reviewed build 2 release PR, create the signed archive and exported IPA from `main`, and validate the reviewed bundle, version, entitlements, provisioning profile, and privacy manifest. Only after that validation passes, upload the same artifact to internal TestFlight and run the Samsung, Sony, and Vizio household acceptance journeys.
