@@ -168,10 +168,13 @@ enum VizioProtocolCodec {
     static func deviceInfo(from data: Data) throws -> VizioDeviceInfo {
         let response = try decode(VizioDeviceInfoResponse.self, from: data)
         try requireSuccess(response.status)
-        let reportedDeviceID = try validatedText(response.item.serialNumber, maximumBytes: 512)
-        let displayName = try validatedText(response.item.castName, maximumBytes: 80)
-        let modelName = try validatedText(response.item.modelName, maximumBytes: 80)
-        let firmware = response.item.firmwareVersion?
+        guard let item = response.preferredItem else {
+            throw VizioProtocolError.invalidResponse
+        }
+        let reportedDeviceID = try validatedText(item.serialNumber, maximumBytes: 512)
+        let displayName = try validatedText(item.castName, maximumBytes: 80)
+        let modelName = try validatedText(item.modelName, maximumBytes: 80)
+        let firmware = item.firmwareVersion?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if let firmware,
             firmware.utf8.count > 80
@@ -321,15 +324,30 @@ private struct VizioPairingTokenResponse: Decodable {
 
 private struct VizioDeviceInfoResponse: Decodable {
     let status: VizioStatus
-    let item: Item
+    let item: Item?
+    let items: [Item]
 
     struct Item: Decodable {
-        let serialNumber: String
-        let castName: String
-        let modelName: String
+        let value: Value?
+        let serialNumber: String?
+        let castName: String?
+        let modelName: String?
         let firmwareVersion: String?
 
+        var normalizedValue: Value? {
+            if let value { return value }
+            guard serialNumber != nil || castName != nil || modelName != nil else { return nil }
+            return Value(
+                serialNumber: serialNumber,
+                castName: castName,
+                modelName: modelName,
+                firmwareVersion: firmwareVersion,
+                systemInfo: nil
+            )
+        }
+
         enum CodingKeys: String, CodingKey {
+            case value = "VALUE"
             case serialNumber = "SERIAL_NUMBER"
             case castName = "CAST_NAME"
             case modelName = "MODEL_NAME"
@@ -337,8 +355,75 @@ private struct VizioDeviceInfoResponse: Decodable {
         }
     }
 
+    struct Value: Decodable {
+        let serialNumber: String?
+        let castName: String?
+        let modelName: String?
+        let firmwareVersion: String?
+        let systemInfo: SystemInfo?
+
+        var resolvedSerialNumber: String? { systemInfo?.serialNumber ?? serialNumber }
+        var resolvedModelName: String? { modelName ?? systemInfo?.modelName }
+        var resolvedFirmwareVersion: String? { systemInfo?.firmwareVersion ?? firmwareVersion }
+
+        enum CodingKeys: String, CodingKey {
+            case serialNumber = "SERIAL_NUMBER"
+            case castName = "CAST_NAME"
+            case modelName = "MODEL_NAME"
+            case firmwareVersion = "VERSION"
+            case systemInfo = "SYSTEM_INFO"
+        }
+    }
+
+    struct SystemInfo: Decodable {
+        let serialNumber: String?
+        let modelName: String?
+        let firmwareVersion: String?
+
+        enum CodingKeys: String, CodingKey {
+            case serialNumber = "SERIAL_NUMBER"
+            case modelName = "MODEL_NAME"
+            case firmwareVersion = "VERSION"
+        }
+    }
+
+    struct NormalizedItem {
+        let serialNumber: String
+        let castName: String
+        let modelName: String
+        let firmwareVersion: String?
+    }
+
+    var preferredItem: NormalizedItem? {
+        let values = items.compactMap(\.normalizedValue) + [item?.normalizedValue].compactMap { $0 }
+        guard
+            let value = values.first(where: {
+                $0.resolvedSerialNumber != nil && $0.castName != nil && $0.resolvedModelName != nil
+            }),
+            let serialNumber = value.resolvedSerialNumber,
+            let castName = value.castName,
+            let modelName = value.resolvedModelName
+        else {
+            return nil
+        }
+        return NormalizedItem(
+            serialNumber: serialNumber,
+            castName: castName,
+            modelName: modelName,
+            firmwareVersion: value.resolvedFirmwareVersion
+        )
+    }
+
     enum CodingKeys: String, CodingKey {
         case status = "STATUS"
         case item = "ITEM"
+        case items = "ITEMS"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decode(VizioStatus.self, forKey: .status)
+        item = try container.decodeIfPresent(Item.self, forKey: .item)
+        items = try container.decodeIfPresent([Item].self, forKey: .items) ?? []
     }
 }

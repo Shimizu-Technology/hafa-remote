@@ -183,20 +183,38 @@ struct VizioPairingCredentialStoreTests {
 }
 
 struct VizioDeviceInfoCodecTests {
-    @Test("Device info yields a durable serial identity and display metadata")
-    func decodesDeviceInfo() throws {
+    @Test("Modern device info yields nested identity and display metadata")
+    func decodesModernDeviceInfo() throws {
         let response = Data(
-            #"{"STATUS":{"RESULT":"SUCCESS"},"ITEM":{"SERIAL_NUMBER":" serial-1 ","CAST_NAME":" Living Room ","MODEL_NAME":" VIZIO_TEST ","VERSION":" 1.2.3 "}}"#
+            #"{"STATUS":{"RESULT":"SUCCESS"},"ITEMS":[{"CNAME":"deviceinfo","NAME":"VIZIO Device Info","TYPE":"T_VIZIO_DEVICE_INFO_V1","VALUE":{"API_VERSION":"3.3.3-test","CAST_NAME":" Living Room ","MODEL_NAME":" VIZIO_TEST ","SYSTEM_INFO":{"MODEL_NAME":"VIZIO_TEST","SERIAL_NUMBER":" synthetic-serial-1 ","VERSION":" 1.2.3 "}}}]}"#
                 .utf8
         )
 
         #expect(
             try VizioProtocolCodec.deviceInfo(from: response)
                 == VizioDeviceInfo(
-                    reportedDeviceID: "serial-1",
+                    reportedDeviceID: "synthetic-serial-1",
                     displayName: "Living Room",
                     modelName: "VIZIO_TEST",
                     firmwareVersion: "1.2.3"
+                )
+        )
+    }
+
+    @Test("Legacy singular device info remains compatible")
+    func decodesLegacyDeviceInfo() throws {
+        let response = Data(
+            #"{"STATUS":{"RESULT":"SUCCESS"},"ITEM":{"SERIAL_NUMBER":"synthetic-legacy-serial","CAST_NAME":"Office","MODEL_NAME":"VIZIO_LEGACY","VERSION":"9.8.7"}}"#
+                .utf8
+        )
+
+        #expect(
+            try VizioProtocolCodec.deviceInfo(from: response)
+                == VizioDeviceInfo(
+                    reportedDeviceID: "synthetic-legacy-serial",
+                    displayName: "Office",
+                    modelName: "VIZIO_LEGACY",
+                    firmwareVersion: "9.8.7"
                 )
         )
     }
@@ -249,7 +267,7 @@ struct VizioHTTPSClientRequestTests {
             switch request.url?.path {
             case "/state/device/deviceinfo":
                 body =
-                    #"{"STATUS":{"RESULT":"SUCCESS"},"ITEM":{"SERIAL_NUMBER":"serial-1","CAST_NAME":"Living Room","MODEL_NAME":"VIZIO_TEST","VERSION":"1.2.3"}}"#
+                    #"{"STATUS":{"RESULT":"SUCCESS"},"ITEMS":[{"VALUE":{"CAST_NAME":"Living Room","MODEL_NAME":"VIZIO_TEST","SYSTEM_INFO":{"SERIAL_NUMBER":"synthetic-serial-1","VERSION":"1.2.3"}}}]}"#
             case "/pairing/start":
                 body = #"{"STATUS":{"RESULT":"SUCCESS"},"ITEM":{"CHALLENGE_TYPE":1,"PAIRING_REQ_TOKEN":42}}"#
             case "/pairing/pair":
