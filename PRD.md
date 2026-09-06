@@ -33,7 +33,7 @@ Hafa Remote is an iPhone-only remote control for compatible Samsung, Sony, and V
 
 ## Audience and core job
 
-The primary user owns a mixed-brand set of smart TVs, has misplaced or does not want to use the physical remotes, and wants one immediate control surface from an iPhone on the same Wi-Fi network.
+The primary user owns a mixed-brand set of smart TVs, has misplaced or does not want to use the physical remotes, and wants one immediate control surface from an iPhone on the same local network. The iPhone uses Wi-Fi; a TV may use Wi-Fi or Ethernet.
 
 The core job is: **Open Hafa Remote, select the intended television if necessary, and control it within two seconds without encountering an ad, login, or paywall.**
 
