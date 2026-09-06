@@ -788,10 +788,59 @@ struct SavedTVTests {
         #expect(selection.selectedDeviceKey == "sony:second")
         #expect(!selection.isSwitching)
     }
+
+    @MainActor
+    @Test("Saved-TV recovery reconnects only when discovery finds the same TV at a new endpoint")
+    func savedTVRecoveryFollowsStableIdentity() async throws {
+        let cached = TVConnectionTarget(
+            brand: .vizio,
+            reportedDeviceID: "saved-vizio",
+            address: try PrivateIPv4Address("192.168.10.30"),
+            controlPort: 7_345
+        )
+        let moved = DiscoveredTV(
+            brand: .vizio,
+            reportedIdentifier: "saved-vizio",
+            displayName: "Office TV",
+            modelName: "SmartCast",
+            address: try PrivateIPv4Address("192.168.10.44"),
+            controlPort: 7_345
+        )
+        let backend = SavedTVRecoveryDiscoveryBackend(events: [.found(moved), .finished])
+        let recovery = SavedTVAddressRecoveryCoordinator(
+            discovery: TVDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
+        )
+        var connectedTargets: [TVConnectionTarget] = []
+
+        recovery.recover(stableDeviceKey: "vizio:saved-vizio", cachedTarget: cached) {
+            connectedTargets.append($0)
+        }
+
+        await waitForSelectionState { connectedTargets == [moved.connectionTarget] }
+        #expect(connectedTargets == [moved.connectionTarget])
+        #expect(!recovery.isRecovering)
+    }
 }
 
 private enum RestorationTestError: Error {
     case failed
+}
+
+@MainActor
+private final class SavedTVRecoveryDiscoveryBackend: TVDiscoveryBackend {
+    private let events: [TVDiscoveryBackendEvent]
+
+    init(events: [TVDiscoveryBackendEvent]) {
+        self.events = events
+    }
+
+    func start(
+        eventHandler: @escaping @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void
+    ) {
+        events.forEach(eventHandler)
+    }
+
+    func stop() {}
 }
 
 private actor SelectionCancellationGate {

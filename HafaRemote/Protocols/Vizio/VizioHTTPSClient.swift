@@ -116,6 +116,13 @@ actor VizioHTTPSClient: VizioHTTPClienting {
         throw TVDriverError.unsupportedTextInput
     }
 
+    func checkConnection() async throws {
+        guard let authToken else {
+            throw VizioHTTPSClientError.notConnected
+        }
+        _ = try await deviceInfo(authToken: authToken)
+    }
+
     func disconnect() {
         guard !isDisconnected else { return }
         isDisconnected = true

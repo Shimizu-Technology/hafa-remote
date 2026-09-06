@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var scenePhaseEvents = ScenePhaseEvents()
     @State private var restoration = SavedTVRestorationCoordinator()
     @State private var selection = SavedTVSelectionCoordinator()
+    @State private var addressRecovery = SavedTVAddressRecoveryCoordinator()
     @State private var alert: HomeAlert?
     @State private var pendingWakeAttempt: PendingWakeAttempt?
 
@@ -133,7 +134,7 @@ struct HomeView: View {
         } message: {
             Text(alert?.message ?? "")
         }
-        .task(id: savedTVs.first?.persistentModelID) {
+        .task(id: savedTVRevision) {
             backfillLegacySavedTVsIfNeeded()
             let reconciled = await SavedTVPendingRemovalRecovery.reconcile(
                 savedTVs,
@@ -155,13 +156,27 @@ struct HomeView: View {
             await restoreLastUsedTVIfNeeded()
         }
         .onChange(of: session.state) { _, state in
-            guard case .connected(let tv) = state else { return }
-            saveConnectedTV(tv)
+            switch state {
+            case .connected(let tv):
+                addressRecovery.cancel()
+                saveConnectedTV(tv)
+            case .offline:
+                recoverSelectedTVAddressIfNeeded()
+            case .failed(.timedOut(.connect)):
+                recoverSelectedTVAddressIfNeeded()
+            default:
+                break
+            }
         }
         .onChange(of: networkMonitor.isReachable) { _, isReachable in
             guard let isReachable else { return }
             Task {
                 await session.networkReachabilityChanged(isReachable: isReachable)
+            }
+        }
+        .onChange(of: isShowingSetup) { _, isShowing in
+            if isShowing {
+                addressRecovery.cancel()
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -171,6 +186,7 @@ struct HomeView: View {
             for await phase in scenePhaseEvents.stream {
                 switch phase {
                 case .background:
+                    addressRecovery.cancel()
                     await session.applicationDidEnterBackground()
                 case .active:
                     await session.applicationWillEnterForeground()
@@ -284,6 +300,7 @@ struct HomeView: View {
 
     private var statusLabel: String {
         if selection.isSwitching { return "Connecting" }
+        if addressRecovery.isRecovering { return "Finding TV…" }
         return switch session.state {
         case .connected:
             isPresentedTVConnected ? "Connected" : "Offline"
@@ -331,6 +348,16 @@ struct HomeView: View {
         savedTVs.filter { !$0.pendingCredentialRemoval }
     }
 
+    private var savedTVRevision: String {
+        savedTVs
+            .map {
+                let port = $0.controlPort.map(String.init) ?? "none"
+                return "\($0.stableDeviceKey)|\($0.lastKnownAddress)|\(port)|\($0.pendingCredentialRemoval)"
+            }
+            .sorted()
+            .joined(separator: ";")
+    }
+
     private var presentedTV: ConnectedTV? {
         if let selectedSavedTV {
             if session.connectedTV?.stableDeviceKey == selectedSavedTV.stableDeviceKey {
@@ -366,6 +393,7 @@ struct HomeView: View {
         guard savedTV.stableDeviceKey != selection.selectedDeviceKey || !isPresentedTVConnected
         else { return }
 
+        addressRecovery.cancel()
         selection.select(
             deviceKey: savedTV.stableDeviceKey,
             target: target,
@@ -376,6 +404,21 @@ struct HomeView: View {
                 await session.connect(to: target)
             }
         )
+    }
+
+    /// Treats a remembered IP as a cache and silently follows the same TV after DHCP changes.
+    private func recoverSelectedTVAddressIfNeeded() {
+        guard let savedTV = selectedSavedTV, let cachedTarget = savedTV.connectionTarget else {
+            return
+        }
+        let expectedDeviceKey = savedTV.stableDeviceKey
+        addressRecovery.recover(
+            stableDeviceKey: expectedDeviceKey,
+            cachedTarget: cachedTarget
+        ) { target in
+            guard selection.selectedDeviceKey == expectedDeviceKey else { return }
+            await session.connect(to: target)
+        }
     }
 
     /// Removes a saved TV while disrupting the active session only when that TV owns it.
@@ -1110,6 +1153,48 @@ final class SavedTVRestorationCoordinator {
         isRestoring = true
         defer { isRestoring = false }
         try? await connect(target)
+    }
+}
+
+@MainActor
+@Observable
+final class SavedTVAddressRecoveryCoordinator {
+    private(set) var isRecovering = false
+    private let discovery: TVDiscoveryStore
+    private var operationID: UUID?
+    private nonisolated let taskHolder = SavedTVSelectionTaskHolder()
+
+    init(discovery: TVDiscoveryStore = TVDiscoveryStore()) {
+        self.discovery = discovery
+    }
+
+    func recover(
+        stableDeviceKey: String,
+        cachedTarget: TVConnectionTarget,
+        connect: @escaping @MainActor (TVConnectionTarget) async -> Void
+    ) {
+        guard operationID == nil else { return }
+        let operationID = UUID()
+        self.operationID = operationID
+        isRecovering = true
+        taskHolder.install(
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let target = await discovery.findDevice(stableDeviceKey: stableDeviceKey)
+                guard !Task.isCancelled, self.operationID == operationID else { return }
+                self.operationID = nil
+                self.isRecovering = false
+                guard let target, target != cachedTarget else { return }
+                await connect(target)
+            }
+        )
+    }
+
+    func cancel() {
+        operationID = nil
+        isRecovering = false
+        taskHolder.cancel()
+        discovery.stop()
     }
 }
 

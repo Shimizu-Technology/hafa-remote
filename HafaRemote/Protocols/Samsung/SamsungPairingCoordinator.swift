@@ -7,6 +7,7 @@ protocol SamsungPairingCoordinating: Sendable {
     ) async throws -> ConnectedTV
     func send(_ command: RemoteCommand) async throws
     func sendText(_ input: RemoteTextInput) async throws
+    func checkConnection() async throws
     func forget(addressText: String) async throws
     func forget(addressText: String, reportedDeviceID: String?) async throws
     /// Deletes saved Samsung authentication material without requiring transport teardown.
@@ -15,6 +16,8 @@ protocol SamsungPairingCoordinating: Sendable {
 }
 
 extension SamsungPairingCoordinating {
+    func checkConnection() async throws {}
+
     func sendSelect() async throws {
         try await send(.select)
     }
@@ -159,6 +162,10 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
 
     func sendText(_ input: RemoteTextInput) async throws {
         try await transport.sendText(input)
+    }
+
+    func checkConnection() async throws {
+        try await transport.checkConnection()
     }
 
     func forget(addressText: String) async throws {

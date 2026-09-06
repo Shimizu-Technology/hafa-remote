@@ -146,6 +146,30 @@ actor SamsungCommandTransport: SamsungTransporting {
         }
     }
 
+    func checkConnection() async throws {
+        guard let webSocket else {
+            throw SamsungConnectionError.notConnected
+        }
+        do {
+            try await commandSerializer.perform {
+                try await withCheckedThrowingContinuation {
+                    (continuation: CheckedContinuation<Void, Error>) in
+                    webSocket.sendPing { error in
+                        if let error {
+                            continuation.resume(throwing: error)
+                        } else {
+                            continuation.resume()
+                        }
+                    }
+                }
+            }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw SamsungConnectionError.unavailable
+        }
+    }
+
     func disconnect() {
         disconnectCurrentSocket()
     }

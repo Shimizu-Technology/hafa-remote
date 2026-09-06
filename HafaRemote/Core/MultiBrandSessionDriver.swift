@@ -118,6 +118,19 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
         }
     }
 
+    func checkConnection() async throws {
+        switch activeBrand {
+        case .samsung:
+            try await samsung.checkConnection()
+        case .sony:
+            try await sony.checkConnection()
+        case .vizio:
+            try await vizio.checkConnection()
+        case .none:
+            throw MultiBrandSessionDriverError.notConnected
+        }
+    }
+
     func forget(addressText: String) async throws {
         try await forget(addressText: addressText, reportedDeviceID: nil, brand: .samsung)
     }

@@ -72,6 +72,11 @@ protocol TVDiscoveryBackend: AnyObject {
 @MainActor
 @Observable
 final class TVDiscoveryStore {
+    private struct IdentityWaiter {
+        let stableDeviceKey: String
+        let continuation: CheckedContinuation<TVConnectionTarget?, Never>
+    }
+
     private static let genericDisplayNames: Set<String> = [
         "android tv", "google tv", "samsung tv", "smart tv", "smartcast", "sony tv", "television",
         "tv", "vizio tv",
@@ -83,6 +88,7 @@ final class TVDiscoveryStore {
     @ObservationIgnored private let backend: any TVDiscoveryBackend
     @ObservationIgnored private let searchDuration: Duration
     @ObservationIgnored private var timeoutTask: Task<Void, Never>?
+    @ObservationIgnored private var identityWaiters: [UUID: IdentityWaiter] = [:]
 
     init(
         backend: (any TVDiscoveryBackend)? = nil,
@@ -122,6 +128,40 @@ final class TVDiscoveryStore {
 
     func stop() {
         stop(resetState: true)
+        finishIdentityWaiters()
+    }
+
+    /// Finds a previously saved TV by stable brand-scoped identity, regardless of its current IP.
+    func findDevice(stableDeviceKey: String) async -> TVConnectionTarget? {
+        if let match = televisions.first(where: { $0.id == stableDeviceKey }) {
+            return match.connectionTarget
+        }
+        if state != .searching {
+            start()
+        }
+        guard state == .searching else {
+            return televisions.first(where: { $0.id == stableDeviceKey })?.connectionTarget
+        }
+
+        let waiterID = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume(returning: nil)
+                } else if let match = televisions.first(where: { $0.id == stableDeviceKey }) {
+                    continuation.resume(returning: match.connectionTarget)
+                } else {
+                    identityWaiters[waiterID] = IdentityWaiter(
+                        stableDeviceKey: stableDeviceKey,
+                        continuation: continuation
+                    )
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.cancelIdentityWaiter(waiterID)
+            }
+        }
     }
 
     private func stop(resetState: Bool) {
@@ -178,20 +218,46 @@ final class TVDiscoveryStore {
                 return $0.brand.rawValue < $1.brand.rawValue
             }
             state = .results
+            resolveIdentityWaiters(with: television)
         case .finished:
             finishSearch()
         case .permissionDenied:
             stop(resetState: false)
             state = .permissionDenied
+            finishIdentityWaiters()
         case .failed:
             stop(resetState: false)
             state = .failed
+            finishIdentityWaiters()
         }
     }
 
     private func finishSearch() {
         stop(resetState: false)
         state = televisions.isEmpty ? .noResults : .results
+        finishIdentityWaiters()
+    }
+
+    private func resolveIdentityWaiters(with television: DiscoveredTV) {
+        let matches = identityWaiters.filter {
+            $0.value.stableDeviceKey == television.id
+        }
+        for (id, waiter) in matches {
+            identityWaiters[id] = nil
+            waiter.continuation.resume(returning: television.connectionTarget)
+        }
+    }
+
+    private func finishIdentityWaiters() {
+        let waiters = identityWaiters.values
+        identityWaiters.removeAll()
+        for waiter in waiters {
+            waiter.continuation.resume(returning: nil)
+        }
+    }
+
+    private func cancelIdentityWaiter(_ id: UUID) {
+        identityWaiters.removeValue(forKey: id)?.continuation.resume(returning: nil)
     }
 
     private static func displayNameScore(_ name: String) -> Int {

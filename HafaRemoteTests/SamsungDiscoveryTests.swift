@@ -293,6 +293,43 @@ struct SamsungDiscoveryTests {
     }
 
     @MainActor
+    @Test("A saved TV is resolved by stable identity after its IP address changes")
+    func resolvesSavedIdentityAtNewAddress() async throws {
+        let moved = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: "saved-sony",
+            displayName: "Bedroom TV",
+            modelName: "Sony BRAVIA",
+            address: try PrivateIPv4Address("192.168.10.91"),
+            controlPort: 6466
+        )
+        let backend = DiscoveryBackendSpy(events: [.found(moved), .finished])
+        let store = TVDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
+
+        let target = await store.findDevice(stableDeviceKey: "sony:saved-sony")
+
+        #expect(target == moved.connectionTarget)
+        #expect(backend.startCount == 1)
+    }
+
+    @MainActor
+    @Test("Saved-TV resolution ignores a different TV on the same network")
+    func doesNotResolveDifferentIdentity() async throws {
+        let other = DiscoveredTV(
+            reportedIdentifier: "different-tv",
+            displayName: "Other TV",
+            modelName: "Samsung TV",
+            address: try PrivateIPv4Address("192.168.10.92")
+        )
+        let backend = DiscoveryBackendSpy(events: [.found(other), .finished])
+        let store = TVDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
+
+        let target = await store.findDevice(stableDeviceKey: "samsung:saved-tv")
+
+        #expect(target == nil)
+    }
+
+    @MainActor
     @Test("Local-network policy denial remains distinct from a generic discovery failure")
     func representsPermissionDenial() async {
         let backend = DiscoveryBackendSpy(events: [.permissionDenied])

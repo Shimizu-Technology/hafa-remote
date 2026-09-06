@@ -186,6 +186,9 @@ typealias PairedSamsungTV = ConnectedTV
 
 /// The command boundary between product features and a television-specific protocol.
 protocol TVDriver: Sendable {
+    /// Verifies that the active control session is still usable without changing TV state.
+    func checkConnection() async throws
+
     /// Sends one semantic remote action to the active television connection.
     func send(_ command: RemoteCommand) async throws
 
@@ -197,6 +200,8 @@ protocol TVDriver: Sendable {
 }
 
 extension TVDriver {
+    func checkConnection() async throws {}
+
     func sendText(_ input: RemoteTextInput) async throws {
         throw TVDriverError.unsupportedTextInput
     }
