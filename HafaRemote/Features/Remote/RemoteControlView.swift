@@ -13,18 +13,23 @@ struct RemoteControlView: View {
     let powerOnWasVerified: Bool
     let powerOnHelpText: String
     let powerOnFailureText: String
+    let powerOffFailureText: String
     let action: @MainActor @Sendable (RemoteCommand) async -> Void
     let textAction: @MainActor @Sendable (RemoteTextInput) async throws -> Void
     let powerOnAction: @MainActor @Sendable () async throws -> Void
+    let powerOffAction: @MainActor @Sendable () async throws -> Void
     let retry: @MainActor @Sendable () async -> Void
     let showTVSetup: @MainActor @Sendable () -> Void
 
     @State private var isConfirmingPowerOff = false
     @State private var isShowingKeyboard = false
     @State private var isPoweringOnTV = false
+    @State private var isPoweringOffTV = false
     @State private var activePowerOnID: UUID?
+    @State private var activePowerOffID: UUID?
     @State private var powerOnTask: Task<Void, Never>?
-    @State private var powerOnFailureMessage: String?
+    @State private var powerOffTask: Task<Void, Never>?
+    @State private var powerFailure: PowerFailure?
 
     var body: some View {
         ZStack {
@@ -57,7 +62,9 @@ struct RemoteControlView: View {
         .preferredColorScheme(.dark)
         .onChange(of: isConnected) { wasConnected, isConnected in
             if isConnected, !isPoweringOnTV {
-                powerOnFailureMessage = nil
+                if powerFailure?.operation == .powerOn {
+                    powerFailure = nil
+                }
             }
             guard wasConnected, !isConnected else { return }
             UIAccessibility.post(
@@ -74,7 +81,7 @@ struct RemoteControlView: View {
             isPresented: $isConfirmingPowerOff
         ) {
             Button("Turn Off", role: .destructive) {
-                send(.powerOff)
+                powerOffTV()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -84,16 +91,12 @@ struct RemoteControlView: View {
                 Text("Reconnect once while the TV is on before Hafa Remote can prepare power on.")
             }
         }
-        .alert(
-            "Couldn’t Turn On TV",
-            isPresented: Binding(
-                get: { powerOnFailureMessage != nil },
-                set: { if !$0 { powerOnFailureMessage = nil } }
+        .alert(item: $powerFailure) { failure in
+            Alert(
+                title: Text(failure.title),
+                message: Text(failure.message),
+                dismissButton: .cancel(Text("OK"))
             )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(powerOnFailureMessage ?? "")
         }
         .sheet(isPresented: $isShowingKeyboard) {
             SamsungTextInputSheet(
@@ -104,10 +107,15 @@ struct RemoteControlView: View {
         }
         .onDisappear {
             activePowerOnID = nil
+            activePowerOffID = nil
             isPoweringOnTV = false
-            let task = powerOnTask
-            powerOnTask = nil
-            task?.cancel()
+            isPoweringOffTV = false
+            let powerOnTask = powerOnTask
+            let powerOffTask = powerOffTask
+            self.powerOnTask = nil
+            self.powerOffTask = nil
+            powerOnTask?.cancel()
+            powerOffTask?.cancel()
         }
     }
 
@@ -137,7 +145,7 @@ struct RemoteControlView: View {
                     }
                 } label: {
                     Group {
-                        if isPoweringOnTV {
+                        if isPoweringOnTV || isPoweringOffTV {
                             ProgressView()
                                 .tint(HafaTheme.accent)
                         } else {
@@ -149,16 +157,18 @@ struct RemoteControlView: View {
                 }
                 .buttonStyle(.bordered)
                 .tint(isConnected ? .red : HafaTheme.accent)
-                .disabled(isPoweringOnTV || (!isConnected && !canPowerOnTV))
+                .disabled(
+                    isPoweringOnTV || isPoweringOffTV || (!isConnected && !canPowerOnTV)
+                )
                 .accessibilityLabel(
-                    isPoweringOnTV ? "Turning on TV" : (isConnected ? "Power off TV" : "Turn on TV")
+                    powerAccessibilityLabel
                 )
                 .accessibilityHint(powerAccessibilityHint)
                 .accessibilityIdentifier(isConnected ? "remote-powerOff" : "remote-powerOn")
             }
 
             Label(
-                isPoweringOnTV ? "Turning on TV…" : statusLabel,
+                powerStatusLabel,
                 systemImage: isConnected
                     ? "checkmark.circle.fill" : "arrow.trianglehead.2.clockwise.rotate.90"
             )
@@ -445,13 +455,25 @@ struct RemoteControlView: View {
         }
     }
 
+    private var powerAccessibilityLabel: String {
+        if isPoweringOnTV { return "Turning on TV" }
+        if isPoweringOffTV { return "Sending power off" }
+        return isConnected ? "Power off TV" : "Turn on TV"
+    }
+
+    private var powerStatusLabel: String {
+        if isPoweringOnTV { return "Turning on TV…" }
+        if isPoweringOffTV { return "Sending power off…" }
+        return statusLabel
+    }
+
     private func powerOnTV() {
         guard !isConnected, canPowerOnTV, powerOnTask == nil else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         let powerOnID = UUID()
         activePowerOnID = powerOnID
         isPoweringOnTV = true
-        powerOnFailureMessage = nil
+        powerFailure = nil
         powerOnTask = Task { @MainActor in
             defer {
                 finishPowerOn(powerOnID)
@@ -462,7 +484,11 @@ struct RemoteControlView: View {
                 return
             } catch {
                 guard activePowerOnID == powerOnID else { return }
-                powerOnFailureMessage = powerOnFailureText
+                powerFailure = PowerFailure(
+                    operation: .powerOn,
+                    title: "Couldn’t Turn On TV",
+                    message: powerOnFailureText
+                )
                 UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
         }
@@ -474,12 +500,54 @@ struct RemoteControlView: View {
         powerOnTask = nil
         isPoweringOnTV = false
     }
+
+    private func powerOffTV() {
+        guard isConnected, powerOffTask == nil else { return }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        let powerOffID = UUID()
+        activePowerOffID = powerOffID
+        isPoweringOffTV = true
+        powerFailure = nil
+        powerOffTask = Task { @MainActor in
+            defer {
+                finishPowerOff(powerOffID)
+            }
+            do {
+                try await powerOffAction()
+            } catch is CancellationError {
+                return
+            } catch {
+                guard activePowerOffID == powerOffID else { return }
+                powerFailure = PowerFailure(
+                    operation: .powerOff,
+                    title: "Couldn’t Send Power Off",
+                    message: powerOffFailureText
+                )
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            }
+        }
+    }
+
+    private func finishPowerOff(_ powerOffID: UUID) {
+        guard activePowerOffID == powerOffID else { return }
+        activePowerOffID = nil
+        powerOffTask = nil
+        isPoweringOffTV = false
+    }
+}
+
+private struct PowerFailure: Identifiable {
+    let id = UUID()
+    let operation: RemoteCommand
+    let title: String
+    let message: String
 }
 
 #if DEBUG
     struct RemoteControlTestHarness: View {
         @Environment(\.dynamicTypeSize) private var dynamicTypeSize
         let isConnected: Bool
+        let powerOffFails: Bool
         @State private var lastCommand = "none"
 
         var body: some View {
@@ -493,13 +561,19 @@ struct RemoteControlView: View {
                     canPowerOnTV: true,
                     powerOnWasVerified: false,
                     powerOnHelpText: "Requires the TV's network standby setting.",
-                    powerOnFailureText: "The TV did not respond to power on."
+                    powerOnFailureText: "The TV did not respond to power on.",
+                    powerOffFailureText: "The TV did not accept power off."
                 ) { command in
                     lastCommand = command.rawValue
                 } textAction: { input in
                     lastCommand = "text:\(input.value.count)"
                 } powerOnAction: {
                     lastCommand = "powerOn"
+                } powerOffAction: {
+                    if powerOffFails {
+                        throw RemoteControlTestFailure.powerOff
+                    }
+                    lastCommand = "powerOff"
                 } retry: {
                     lastCommand = "retry"
                 } showTVSetup: {
@@ -517,6 +591,10 @@ struct RemoteControlView: View {
                 .opacity(0.01)
             }
         }
+    }
+
+    private enum RemoteControlTestFailure: Error {
+        case powerOff
     }
 #endif
 

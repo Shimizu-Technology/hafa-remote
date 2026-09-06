@@ -17,9 +17,13 @@ struct HafaRemoteApp: App {
         WindowGroup {
             #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("-ui-testing-remote-offline") {
-                    RemoteControlTestHarness(isConnected: false)
+                    RemoteControlTestHarness(isConnected: false, powerOffFails: false)
+                } else if ProcessInfo.processInfo.arguments.contains(
+                    "-ui-testing-remote-power-off-failure"
+                ) {
+                    RemoteControlTestHarness(isConnected: true, powerOffFails: true)
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-remote") {
-                    RemoteControlTestHarness(isConnected: true)
+                    RemoteControlTestHarness(isConnected: true, powerOffFails: false)
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-discovery-result") {
                     HomeView(
                         discovery: TVDiscoveryStore(

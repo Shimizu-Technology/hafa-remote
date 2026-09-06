@@ -3,8 +3,8 @@
 
 **Version:** 0.2
 **Last updated:** September 6, 2026
-**Current status:** Automatic three-brand discovery, pairing, controls, saved-TV switching, and brand-aware power paths are implemented; internal TestFlight build 2 is awaiting upload
-**Current execution frontier:** Upload build 2, then validate Samsung, Sony, and Vizio pairing, commands, reconnect, and power behavior on Leon's exact household TVs
+**Current status:** Internal TestFlight build 2 is installed and under household testing; Vizio identity parsing is repaired, while Sony power and multi-TV usability feedback are being addressed
+**Current execution frontier:** Ship the field-feedback fixes in a new internal build, then repeat Samsung, Sony, and Vizio pairing, commands, reconnect, switching, and power tests on Leon's exact household TVs
 
 ## Delivery targets
 
@@ -240,6 +240,21 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 - [ ] Confirm discovery, PIN pairing, first command, relaunch, and reconnect on the household Vizio.
 
 **Acceptance evidence:** Automated coverage proves modern and legacy response compatibility without weakening field validation. Household acceptance remains required before Vizio is described as validated.
+
+### HR-031 — Make power commands explicit and failures truthful
+
+**Evidence:** Household TestFlight build 2 reported a successful-looking Sony power-off transition while the TV remained on. The implementation sent Android `KEYCODE_TV_POWER` (`177`) for both semantic power actions, even though that key toggles state. [Android's KeyEvent reference](https://developer.android.com/reference/android/view/KeyEvent) defines idempotent `KEYCODE_SLEEP` (`223`) and `KEYCODE_WAKEUP` (`224`) actions for explicit off/on behavior.
+
+- [x] Map Sony power off to `SLEEP` and power on to `WAKEUP` instead of the toggle key.
+- [x] Keep the semantic command boundary so raw Android keycodes never enter feature code.
+- [x] Route confirmed power off through a throwing action and disconnect only after the TV transport accepts the command.
+- [x] Show an actionable error when power-off delivery fails instead of silently presenting the TV as offline.
+- [x] Expose in-flight power state and cancel its work when the remote leaves the screen.
+- [x] Add protocol and UI regression coverage for explicit key mapping, confirmation, success, and failure.
+- [ ] Verify Sony sleep/wake with Remote Start or network standby enabled on the household TV.
+- [ ] Verify Vizio off/on with Quick Start enabled and Samsung wake with Power On With Mobile enabled.
+
+**Acceptance evidence:** Automated tests prove Sony uses idempotent sleep/wake codes and the UI cannot claim a failed power-off delivery. Household tests still determine whether each TV remains reachable while off; the app must not promise wake where the required standby mode is disabled or unsupported.
 
 ## Phase 3 — External TestFlight
 
