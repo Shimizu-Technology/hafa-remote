@@ -44,6 +44,7 @@ struct SavedTVTests {
         #expect(fetched.first?.validatedControlPort == 6466)
         #expect(fetched.first?.validatedMACAddress == (try SamsungMACAddress("02:00:5E:10:00:01")))
         #expect(fetched.first?.wakeWasVerified == true)
+        #expect(fetched.first?.pendingCredentialRemoval == false)
         #expect(fetched.first?.lastSeenAt == Date(timeIntervalSince1970: 100))
         #expect(fetched.first?.lastUsedAt == Date(timeIntervalSince1970: 200))
         #expect(fetched.first?.description == "SavedTV(redacted)")
@@ -375,14 +376,14 @@ struct SavedTVTests {
         #expect(television.connectionTarget.suggestedDisplayName == "Den TV")
     }
 
-    /// A failed external credential deletion can restore every local field after database removal.
+    /// A persisted pending deletion is completed after constructing a fresh model context.
     @MainActor
-    @Test("Saved TV recovery snapshot compensates after deletion")
-    func recoverySnapshotRestoresDeletedMetadata() throws {
+    @Test("Pending TV removal resumes across model contexts")
+    func pendingRemovalResumesAcrossModelContexts() async throws {
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: SavedTV.self, configurations: configuration)
-        let context = container.mainContext
-        let original = SavedTV(
+        let originalContext = container.mainContext
+        let pendingTV = SavedTV(
             brand: .vizio,
             reportedDeviceID: "recovery-tv",
             displayName: "Den TV",
@@ -393,33 +394,65 @@ struct SavedTVTests {
             controlPort: 7345,
             macAddress: "02:00:5E:10:00:09",
             wakeWasVerified: true,
+            pendingCredentialRemoval: true,
             lastSeenAt: Date(timeIntervalSince1970: 400),
             lastUsedAt: Date(timeIntervalSince1970: 500)
         )
-        context.insert(original)
-        try context.save()
-        let snapshot = SavedTVRecoverySnapshot(original)
+        originalContext.insert(pendingTV)
+        try originalContext.save()
 
-        context.delete(original)
-        try context.save()
-        context.insert(snapshot.makeSavedTV())
-        try context.save()
+        let recoveryContext = ModelContext(container)
+        let records = try recoveryContext.fetch(FetchDescriptor<SavedTV>())
+        var removedDeviceIDs: [String] = []
+        let succeeded = await SavedTVPendingRemovalRecovery.reconcile(
+            records,
+            in: recoveryContext
+        ) { savedTV in
+            removedDeviceIDs.append(savedTV.reportedDeviceID)
+        }
 
-        let restored = try #require(context.fetch(FetchDescriptor<SavedTV>()).first)
-        #expect(restored.id == snapshot.id)
-        #expect(restored.stableDeviceID == snapshot.stableDeviceID)
-        #expect(restored.brand == .vizio)
-        #expect(restored.reportedDeviceID == "recovery-tv")
-        #expect(restored.displayName == "Den TV")
-        #expect(restored.roomName == "Den")
-        #expect(restored.modelName == "V-Series")
-        #expect(restored.firmwareVersion == "9.0")
-        #expect(restored.lastKnownAddress == "192.168.10.40")
-        #expect(restored.controlPort == 7345)
-        #expect(restored.macAddress == "02:00:5E:10:00:09")
-        #expect(restored.wakeWasVerified)
-        #expect(restored.lastSeenAt == Date(timeIntervalSince1970: 400))
-        #expect(restored.lastUsedAt == Date(timeIntervalSince1970: 500))
+        let verificationContext = ModelContext(container)
+        #expect(succeeded)
+        #expect(removedDeviceIDs == ["recovery-tv"])
+        #expect(try verificationContext.fetch(FetchDescriptor<SavedTV>()).isEmpty)
+    }
+
+    /// Failed reconciliation keeps the durable marker so the UI can offer a retry.
+    @MainActor
+    @Test("Failed pending TV removal remains retryable")
+    func failedPendingRemovalRemainsRetryable() async throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: SavedTV.self, configurations: configuration)
+        let originalContext = container.mainContext
+        originalContext.insert(
+            SavedTV(
+                brand: .sony,
+                reportedDeviceID: "pending-sony",
+                displayName: "Bedroom TV",
+                modelName: "BRAVIA",
+                firmwareVersion: nil,
+                lastKnownAddress: "192.168.10.41",
+                pendingCredentialRemoval: true
+            )
+        )
+        try originalContext.save()
+
+        let recoveryContext = ModelContext(container)
+        let records = try recoveryContext.fetch(FetchDescriptor<SavedTV>())
+        let succeeded = await SavedTVPendingRemovalRecovery.reconcile(
+            records,
+            in: recoveryContext
+        ) { _ in
+            throw SyntheticSavedTVRemovalError.failed
+        }
+
+        let verificationContext = ModelContext(container)
+        let remaining = try #require(
+            verificationContext.fetch(FetchDescriptor<SavedTV>()).first
+        )
+        #expect(!succeeded)
+        #expect(remaining.reportedDeviceID == "pending-sony")
+        #expect(remaining.pendingCredentialRemoval)
     }
 
     @Test("A reconnect without wake metadata preserves the previously captured MAC")
@@ -799,6 +832,10 @@ private func waitForSelectionState(_ condition: @escaping @MainActor () async ->
         await Task.yield()
     }
     Issue.record("Timed out waiting for the expected selection state")
+}
+
+private enum SyntheticSavedTVRemovalError: Error {
+    case failed
 }
 
 private actor RestorationConnectionGate {

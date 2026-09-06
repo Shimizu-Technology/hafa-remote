@@ -16,6 +16,7 @@ final class SavedTV: CustomStringConvertible {
     var controlPort: Int?
     var macAddress: String?
     var wakeWasVerified: Bool = false
+    var pendingCredentialRemoval: Bool = false
     var lastSeenAt: Date
     var lastUsedAt: Date
 
@@ -31,6 +32,7 @@ final class SavedTV: CustomStringConvertible {
         controlPort: UInt16? = nil,
         macAddress: String? = nil,
         wakeWasVerified: Bool = false,
+        pendingCredentialRemoval: Bool = false,
         lastSeenAt: Date = .now,
         lastUsedAt: Date = .now
     ) {
@@ -46,6 +48,7 @@ final class SavedTV: CustomStringConvertible {
         self.controlPort = controlPort.map(Int.init)
         self.macAddress = macAddress
         self.wakeWasVerified = wakeWasVerified
+        self.pendingCredentialRemoval = pendingCredentialRemoval
         self.lastSeenAt = lastSeenAt
         self.lastUsedAt = lastUsedAt
     }

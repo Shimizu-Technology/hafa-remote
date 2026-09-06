@@ -104,6 +104,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
 
     /// Deletes the saved Sony certificate fingerprint without closing another active session.
     func removeCredential(reportedDeviceID: String) async throws {
+        try Task.checkCancellation()
         try await credentialStore.remove(reportedDeviceID: reportedDeviceID)
     }
 

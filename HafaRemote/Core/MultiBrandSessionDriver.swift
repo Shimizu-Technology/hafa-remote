@@ -124,6 +124,7 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
 
     func forget(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws {
         await disconnect()
+        try Task.checkCancellation()
         try await removeCredential(
             addressText: addressText,
             reportedDeviceID: reportedDeviceID,
@@ -179,7 +180,10 @@ actor PairingCodeBroker {
     }
 
     func waitForCode() async throws -> String {
-        guard isExpectingCode, continuation == nil else {
+        guard isExpectingCode else {
+            throw CancellationError()
+        }
+        guard continuation == nil else {
             throw MultiBrandSessionDriverError.pairingCodeAlreadyRequested
         }
         if let pendingCode {

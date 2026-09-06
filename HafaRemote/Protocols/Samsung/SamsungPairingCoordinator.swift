@@ -172,6 +172,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
 
     /// Deletes Samsung authentication material while leaving an unrelated transport intact.
     func removeCredential(addressText: String, reportedDeviceID: String?) async throws {
+        try Task.checkCancellation()
         let trimmedAddress = addressText.trimmingCharacters(in: .whitespacesAndNewlines)
         let persistedIdentity = try reportedDeviceID.map {
             try SamsungPairingCredentialIdentity(reportedDeviceID: $0)

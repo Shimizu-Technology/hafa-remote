@@ -326,6 +326,8 @@ struct RemoteSessionControllerTests {
         #expect(store.state == .connected(tv))
         #expect(store.lastConnectedTV == tv)
         #expect(store.canSendCommands)
+        try await store.send(.volumeUp)
+        #expect(await driver.commands == [.volumeUp])
     }
 
     @MainActor
@@ -1556,6 +1558,7 @@ private enum SyntheticForgetError: Error {
 
 private actor CredentialRemovalFailureDriver: RemoteSessionDriving {
     private let tv: PairedSamsungTV
+    private(set) var commands: [RemoteCommand] = []
 
     /// Creates a connected fixture whose credential removal always fails.
     init(tv: PairedSamsungTV) {
@@ -1571,7 +1574,9 @@ private actor CredentialRemovalFailureDriver: RemoteSessionDriving {
     }
 
     /// Accepts commands so the test can keep its session connected.
-    func send(_ command: RemoteCommand) async throws {}
+    func send(_ command: RemoteCommand) async throws {
+        commands.append(command)
+    }
 
     /// Simulates a Keychain deletion failure.
     func forget(addressText: String) async throws {

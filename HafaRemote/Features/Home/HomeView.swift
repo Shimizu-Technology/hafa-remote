@@ -88,14 +88,14 @@ struct HomeView: View {
                 session: session,
                 initialAddress:
                     presentedTV?.address.rawValue
-                    ?? savedTVs.first?.lastKnownAddress
+                    ?? selectableSavedTVs.first?.lastKnownAddress
                     ?? "",
                 initialReportedDeviceID:
                     presentedTV?.reportedDeviceID
-                    ?? savedTVs.first?.reportedDeviceID,
+                    ?? selectableSavedTVs.first?.reportedDeviceID,
                 initialTarget:
                     presentedTV?.connectionTarget
-                    ?? savedTVs.first?.connectionTarget,
+                    ?? selectableSavedTVs.first?.connectionTarget,
                 discovery: discovery
             )
         }
@@ -135,6 +135,23 @@ struct HomeView: View {
         }
         .task(id: savedTVs.first?.persistentModelID) {
             backfillLegacySavedTVsIfNeeded()
+            let reconciled = await SavedTVPendingRemovalRecovery.reconcile(
+                savedTVs,
+                in: modelContext
+            ) { savedTV in
+                try await session.removePairingCredential(
+                    for: savedTV.lastKnownAddress,
+                    reportedDeviceID: savedTV.reportedDeviceID,
+                    brand: savedTV.brand
+                )
+            }
+            if !reconciled {
+                alert = HomeAlert(
+                    title: "TV Removal Pending",
+                    message:
+                        "Hafa Remote could not finish removing a TV. Open My TVs and try Forget TV again."
+                )
+            }
             await restoreLastUsedTVIfNeeded()
         }
         .onChange(of: session.state) { _, state in
@@ -295,10 +312,10 @@ struct HomeView: View {
 
     private func restoreLastUsedTVIfNeeded() async {
         if selection.selectedDeviceKey == nil {
-            selection.selectWithoutConnecting(savedTVs.first?.stableDeviceKey)
+            selection.selectWithoutConnecting(selectableSavedTVs.first?.stableDeviceKey)
         }
         await restoration.restore(
-            from: savedTVs,
+            from: selectableSavedTVs,
             skipBecauseConnectionWasInitiated: session.hasInitiatedConnection
         ) { target in
             await session.connect(to: target)
@@ -307,7 +324,11 @@ struct HomeView: View {
 
     private var selectedSavedTV: SavedTV? {
         guard let selectedDeviceKey = selection.selectedDeviceKey else { return nil }
-        return savedTVs.first(where: { $0.stableDeviceKey == selectedDeviceKey })
+        return selectableSavedTVs.first(where: { $0.stableDeviceKey == selectedDeviceKey })
+    }
+
+    private var selectableSavedTVs: [SavedTV] {
+        savedTVs.filter { !$0.pendingCredentialRemoval }
     }
 
     private var presentedTV: ConnectedTV? {
@@ -370,9 +391,7 @@ struct HomeView: View {
             ? remainingTVs.first(where: { $0.connectionTarget != nil }) : selectedBeforeRemoval
         let replacementDeviceKey = reconnectTV?.stableDeviceKey
         let reconnectTarget = reconnectTV?.connectionTarget
-        let recoverySnapshot = SavedTVRecoverySnapshot(savedTV)
-
-        modelContext.delete(savedTV)
+        savedTV.pendingCredentialRemoval = true
         do {
             try modelContext.save()
         } catch {
@@ -380,19 +399,17 @@ struct HomeView: View {
             throw error
         }
 
+        try await session.removePairingCredential(
+            for: savedTV.lastKnownAddress,
+            reportedDeviceID: savedTV.reportedDeviceID,
+            brand: savedTV.brand
+        )
+
+        modelContext.delete(savedTV)
         do {
-            try await session.removePairingCredential(
-                for: recoverySnapshot.lastKnownAddress,
-                reportedDeviceID: recoverySnapshot.reportedDeviceID,
-                brand: recoverySnapshot.brand
-            )
+            try modelContext.save()
         } catch {
-            modelContext.insert(recoverySnapshot.makeSavedTV())
-            do {
-                try modelContext.save()
-            } catch {
-                throw SavedTVRemovalError.couldNotRestoreMetadata
-            }
+            modelContext.rollback()
             throw error
         }
 
@@ -576,63 +593,26 @@ struct HomeView: View {
     }
 }
 
-private enum SavedTVRemovalError: Error {
-    case couldNotRestoreMetadata
-}
-
-struct SavedTVRecoverySnapshot {
-    let id: UUID
-    let stableDeviceID: String?
-    let brand: TVBrand
-    let reportedDeviceID: String
-    let displayName: String
-    let roomName: String?
-    let modelName: String
-    let firmwareVersion: String?
-    let lastKnownAddress: String
-    let controlPort: Int?
-    let macAddress: String?
-    let wakeWasVerified: Bool
-    let lastSeenAt: Date
-    let lastUsedAt: Date
-
-    /// Captures every persisted field before the record is removed from SwiftData.
-    init(_ savedTV: SavedTV) {
-        id = savedTV.id
-        stableDeviceID = savedTV.stableDeviceID
-        brand = savedTV.brand
-        reportedDeviceID = savedTV.reportedDeviceID
-        displayName = savedTV.displayName
-        roomName = savedTV.roomName
-        modelName = savedTV.modelName
-        firmwareVersion = savedTV.firmwareVersion
-        lastKnownAddress = savedTV.lastKnownAddress
-        controlPort = savedTV.controlPort
-        macAddress = savedTV.macAddress
-        wakeWasVerified = savedTV.wakeWasVerified
-        lastSeenAt = savedTV.lastSeenAt
-        lastUsedAt = savedTV.lastUsedAt
-    }
-
-    /// Recreates the exact local metadata if credential deletion fails.
-    func makeSavedTV() -> SavedTV {
-        let savedTV = SavedTV(
-            id: id,
-            brand: brand,
-            reportedDeviceID: reportedDeviceID,
-            displayName: displayName,
-            roomName: roomName,
-            modelName: modelName,
-            firmwareVersion: firmwareVersion,
-            lastKnownAddress: lastKnownAddress,
-            macAddress: macAddress,
-            wakeWasVerified: wakeWasVerified,
-            lastSeenAt: lastSeenAt,
-            lastUsedAt: lastUsedAt
-        )
-        savedTV.stableDeviceID = stableDeviceID
-        savedTV.controlPort = controlPort
-        return savedTV
+@MainActor
+enum SavedTVPendingRemovalRecovery {
+    /// Finishes durable pending deletions and leaves failed records visible for retry.
+    static func reconcile(
+        _ savedTVs: [SavedTV],
+        in modelContext: ModelContext,
+        removeCredential: @MainActor (SavedTV) async throws -> Void
+    ) async -> Bool {
+        var allSucceeded = true
+        for savedTV in savedTVs where savedTV.pendingCredentialRemoval {
+            do {
+                try await removeCredential(savedTV)
+                modelContext.delete(savedTV)
+                try modelContext.save()
+            } catch {
+                modelContext.rollback()
+                allSucceeded = false
+            }
+        }
+        return allSucceeded
     }
 }
 
@@ -788,17 +768,23 @@ private struct MyTVsView: View {
             }
             .buttonStyle(.plain)
             .frame(minHeight: 44)
-            .disabled(isForgetting)
+            .disabled(isForgetting || savedTV.pendingCredentialRemoval)
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityIdentifier("myTVRow-\(savedTV.stableDeviceKey)")
 
             Menu {
-                Button("Edit Name & Room", systemImage: "pencil") {
-                    editRequest = SavedTVEditRequest(savedTV: savedTV)
+                if !savedTV.pendingCredentialRemoval {
+                    Button("Edit Name & Room", systemImage: "pencil") {
+                        editRequest = SavedTVEditRequest(savedTV: savedTV)
+                    }
+                    .accessibilityIdentifier("editMyTV-\(savedTV.stableDeviceKey)")
                 }
-                .accessibilityIdentifier("editMyTV-\(savedTV.stableDeviceKey)")
 
-                Button("Forget TV", systemImage: "trash", role: .destructive) {
+                Button(
+                    savedTV.pendingCredentialRemoval ? "Retry Forget" : "Forget TV",
+                    systemImage: "trash",
+                    role: .destructive
+                ) {
                     activeAlert = MyTVsAlert(kind: .confirmForget(savedTV))
                 }
                 .accessibilityIdentifier("forgetMyTV-\(savedTV.stableDeviceKey)")
@@ -817,8 +803,13 @@ private struct MyTVsView: View {
     /// Combines optional room context with stable brand and model details.
     private func savedTVDetail(_ savedTV: SavedTV) -> String {
         let device = "\(savedTV.brand.displayName) · \(savedTV.modelName)"
-        guard let roomName = savedTV.roomName, !roomName.isEmpty else { return device }
-        return "\(roomName) · \(device)"
+        let detail: String
+        if let roomName = savedTV.roomName, !roomName.isEmpty {
+            detail = "\(roomName) · \(device)"
+        } else {
+            detail = device
+        }
+        return savedTV.pendingCredentialRemoval ? "Removal pending · \(detail)" : detail
     }
 
     /// Persists user-facing labels while restoring the prior values if storage fails.

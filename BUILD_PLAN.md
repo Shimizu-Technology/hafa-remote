@@ -3,7 +3,7 @@
 
 **Version:** 0.2
 **Last updated:** September 6, 2026
-**Current status:** Internal TestFlight build 2 is installed and under household testing; Vizio parsing and Sony power defects are repaired, and the multi-TV library is being made visible and editable
+**Current status:** Internal TestFlight build 2 is installed and under household testing; Vizio parsing, Sony power, and the visible editable multi-TV library are complete, with only the ten-switch household soak pending for HR-008 and HR-032
 **Current execution frontier:** Ship the field-feedback fixes in internal build 3, then repeat Samsung, Sony, and Vizio pairing, commands, reconnect, switching, persistence, and power tests on Leon's exact household TVs
 
 ## Delivery targets

@@ -204,6 +204,7 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
 
     /// Deletes the saved Vizio auth token without closing another active session.
     func removeCredential(reportedDeviceID: String) async throws {
+        try Task.checkCancellation()
         let identity = try VizioPairingIdentity(reportedDeviceID: reportedDeviceID)
         try await credentialStore.remove(for: identity)
     }
