@@ -363,7 +363,7 @@ final class HafaRemoteUITests: XCTestCase {
         app.buttons["Turn Off"].tap()
 
         XCTAssertTrue(app.staticTexts["Couldn’t Send Power Off"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.staticTexts["The TV did not accept power off."].exists)
+        XCTAssertTrue(app.staticTexts["Hafa Remote could not deliver power off."].exists)
         XCTAssertEqual(app.staticTexts["lastRemoteCommand"].label, "none")
     }
 

@@ -62,6 +62,7 @@ struct HomeView: View {
                         throw TVSelectionError.notConnected
                     }
                     try await session.send(.powerOff)
+                    try Task.checkCancellation()
                     await session.disconnect(clearRememberedTV: false)
                 } retry: {
                     await session.connect(to: tv.connectionTarget)
@@ -389,7 +390,7 @@ struct HomeView: View {
     }
 
     private func powerOffFailureText(for brand: TVBrand) -> String {
-        "The \(brand.displayName) TV did not accept the command. Confirm it is still connected, then try again."
+        "Hafa Remote could not deliver power off to the \(brand.displayName) TV. Confirm it is still connected, then try again."
     }
 
     private func powerOnSettingName(for brand: TVBrand) -> String {

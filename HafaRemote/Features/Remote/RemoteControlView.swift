@@ -562,7 +562,7 @@ private struct PowerFailure: Identifiable {
                     powerOnWasVerified: false,
                     powerOnHelpText: "Requires the TV's network standby setting.",
                     powerOnFailureText: "The TV did not respond to power on.",
-                    powerOffFailureText: "The TV did not accept power off."
+                    powerOffFailureText: "Hafa Remote could not deliver power off."
                 ) { command in
                     lastCommand = command.rawValue
                 } textAction: { input in
