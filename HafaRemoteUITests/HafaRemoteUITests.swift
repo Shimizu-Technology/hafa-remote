@@ -333,6 +333,40 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertEqual(commandOutput.label, "none")
     }
 
+    /// Confirmed power-off waits for the dedicated action before reporting delivery.
+    @MainActor
+    func testConfirmedPowerOffUsesDedicatedAction() throws {
+        let app = launchRemoteHarness()
+        let power = app.buttons["remote-powerOff"]
+        XCTAssertTrue(power.waitForExistence(timeout: 5))
+        power.tap()
+        app.buttons["Turn Off"].tap()
+
+        let commandOutput = app.staticTexts["lastRemoteCommand"]
+        let powerOffRecorded = expectation(
+            for: NSPredicate(format: "label == %@", "powerOff"),
+            evaluatedWith: commandOutput
+        )
+        wait(for: [powerOffRecorded], timeout: 2)
+    }
+
+    /// A rejected power command stays visible instead of silently pretending the TV turned off.
+    @MainActor
+    func testPowerOffFailureIsVisible() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-remote-power-off-failure")
+        app.launch()
+
+        let power = app.buttons["remote-powerOff"]
+        XCTAssertTrue(power.waitForExistence(timeout: 5))
+        power.tap()
+        app.buttons["Turn Off"].tap()
+
+        XCTAssertTrue(app.staticTexts["Couldn’t Send Power Off"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Hafa Remote could not deliver power off."].exists)
+        XCTAssertEqual(app.staticTexts["lastRemoteCommand"].label, "none")
+    }
+
     /// The scrollable remote must remain usable at the largest accessibility text size.
     @MainActor
     func testRemoteSupportsLargestDynamicType() throws {

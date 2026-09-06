@@ -262,6 +262,7 @@ enum SonyRemoteProtocolCodec {
         SonyProtobuf.bytesField(9, SonyProtobuf.varintField(1, UInt64(bitPattern: value)))
     }
 
+    /// Encodes one semantic action as an Android TV Remote Service key injection.
     static func command(_ command: RemoteCommand) throws -> Data {
         let keyCode: UInt64
         switch command {
@@ -279,7 +280,8 @@ enum SonyRemoteProtocolCodec {
         case .rewind: keyCode = 89
         case .fastForward: keyCode = 90
         case .mute: keyCode = 164
-        case .powerOn, .powerOff: keyCode = 177
+        case .powerOn: keyCode = 224
+        case .powerOff: keyCode = 223
         }
         let key =
             SonyProtobuf.varintField(1, keyCode)

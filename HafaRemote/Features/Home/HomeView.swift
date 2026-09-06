@@ -28,6 +28,7 @@ struct HomeView: View {
         self.wakeService = wakeService
     }
 
+    /// Builds the current saved-TV, restoration, setup, or remote presentation.
     var body: some View {
         NavigationStack {
             if let tv = presentedTV {
@@ -41,14 +42,12 @@ struct HomeView: View {
                     canPowerOnTV: canPowerOn(tv, savedTV: savedTV),
                     powerOnWasVerified: savedTV?.wakeWasVerified ?? false,
                     powerOnHelpText: powerOnHelpText(for: tv.brand),
-                    powerOnFailureText: powerOnFailureText(for: tv.brand)
+                    powerOnFailureText: powerOnFailureText(for: tv.brand),
+                    powerOffFailureText: powerOffFailureText(for: tv.brand)
                 ) { command in
                     guard isPresentedTVConnected else { return }
                     do {
                         try await session.send(command)
-                        if command == .powerOff {
-                            await session.disconnect(clearRememberedTV: false)
-                        }
                     } catch {
                         // The session projects the protocol failure and reconnect state.
                     }
@@ -59,6 +58,13 @@ struct HomeView: View {
                     try await session.sendText(input)
                 } powerOnAction: {
                     try await powerOn(tv, savedTV: savedTV)
+                } powerOffAction: {
+                    guard isPresentedTVConnected else {
+                        throw TVSelectionError.notConnected
+                    }
+                    try await session.send(.powerOff)
+                    try Task.checkCancellation()
+                    await session.disconnect(clearRememberedTV: false)
                 } retry: {
                     await session.connect(to: tv.connectionTarget)
                 } showTVSetup: {
@@ -382,6 +388,11 @@ struct HomeView: View {
 
     private func powerOnFailureText(for brand: TVBrand) -> String {
         "The \(brand.displayName) TV did not respond. Confirm the iPhone and TV use the same Wi-Fi, enable \(powerOnSettingName(for: brand)), then try again."
+    }
+
+    /// Describes an undelivered power-off action without guessing which layer rejected it.
+    private func powerOffFailureText(for brand: TVBrand) -> String {
+        "Hafa Remote could not deliver power off to the \(brand.displayName) TV. Confirm it is still connected, then try again."
     }
 
     private func powerOnSettingName(for brand: TVBrand) -> String {
