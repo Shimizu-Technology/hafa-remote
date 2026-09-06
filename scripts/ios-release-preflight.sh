@@ -249,9 +249,9 @@ if [[ -n "$export_path" ]]; then
   exported_app="$(find "$export_tmp/Payload" -maxdepth 1 -type d -name '*.app' -print -quit)"
   [[ -n "$exported_app" ]] || { echo "Exported app bundle is missing." >&2; exit 1; }
   exported_info="$exported_app/Info.plist"
-  [[ "$(plutil -extract CFBundleIdentifier raw "$exported_info")" == "com.shimizutechnology.hafaremote" ]] || { echo "Exported bundle ID does not match." >&2; exit 1; }
-  [[ "$(plutil -extract CFBundleShortVersionString raw "$exported_info")" == "1.0" ]] || { echo "Exported marketing version does not match." >&2; exit 1; }
-  [[ "$(plutil -extract CFBundleVersion raw "$exported_info")" == "2" ]] || { echo "Exported build number does not match." >&2; exit 1; }
+  [[ "$(plutil -extract CFBundleIdentifier raw "$exported_info")" == "$(setting PRODUCT_BUNDLE_IDENTIFIER)" ]] || { echo "Exported bundle ID does not match." >&2; exit 1; }
+  [[ "$(plutil -extract CFBundleShortVersionString raw "$exported_info")" == "$(setting MARKETING_VERSION)" ]] || { echo "Exported marketing version does not match." >&2; exit 1; }
+  [[ "$(plutil -extract CFBundleVersion raw "$exported_info")" == "$(setting CURRENT_PROJECT_VERSION)" ]] || { echo "Exported build number does not match." >&2; exit 1; }
   "$repo_root/scripts/validate-privacy-manifest.sh" "$exported_app/PrivacyInfo.xcprivacy"
   codesign --verify --deep --strict "$exported_app"
   codesign -d --entitlements :- "$exported_app" >"$export_tmp/entitlements.plist" 2>/dev/null
