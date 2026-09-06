@@ -187,6 +187,18 @@ struct HafaRemoteApp: App {
                         lastUsedAt: Date(timeIntervalSince1970: 100)
                     )
                 )
+                modelContext.insert(
+                    SavedTV(
+                        brand: .vizio,
+                        reportedDeviceID: "fixture-malformed-fallback",
+                        displayName: "Old Guest Room TV",
+                        roomName: "Guest Room",
+                        modelName: "Unknown model",
+                        firmwareVersion: nil,
+                        lastKnownAddress: "not-an-address",
+                        lastUsedAt: Date(timeIntervalSince1970: 150)
+                    )
+                )
                 try? modelContext.save()
                 didSeed = true
             }

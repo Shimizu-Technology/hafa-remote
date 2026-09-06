@@ -27,9 +27,9 @@ extension SamsungPairingCoordinating {
         try await forget(addressText: addressText)
     }
 
-    /// Adapts older test and single-purpose coordinators to the credential-only contract.
+    /// Refuses to treat a potentially destructive legacy forget as credential-only.
     func removeCredential(addressText: String, reportedDeviceID: String?) async throws {
-        try await forget(addressText: addressText, reportedDeviceID: reportedDeviceID)
+        throw RemoteCredentialRemovalError.unsupported
     }
 }
 

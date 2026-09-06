@@ -476,6 +476,12 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
         func send(_ command: RemoteCommand) async throws {}
         func sendText(_ input: RemoteTextInput) async throws {}
         func forget(addressText: String) async throws {}
+        /// Simulates isolated Keychain deletion without changing the fixture connection.
+        func removeCredential(
+            addressText: String,
+            reportedDeviceID: String?,
+            brand: TVBrand
+        ) async throws {}
         func disconnect() async {}
     }
 #endif

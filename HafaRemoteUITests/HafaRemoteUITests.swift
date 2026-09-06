@@ -257,6 +257,30 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Connected"].waitForExistence(timeout: 2))
     }
 
+    /// Forgetting the active TV skips malformed records and connects a usable fallback.
+    @MainActor
+    func testMyTVsForgetSelectedSkipsMalformedFallback() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-saved-tvs")
+        app.launch()
+
+        XCTAssertTrue(app.buttons["myTVsButton"].waitForExistence(timeout: 5))
+        app.buttons["myTVsButton"].tap()
+        let manage = app.buttons["manageMyTV-samsung:fixture-samsung"]
+        XCTAssertTrue(manage.waitForExistence(timeout: 2))
+        manage.tap()
+        app.buttons["Forget TV"].tap()
+        app.buttons["Forget"].tap()
+
+        let sonyRow = app.buttons["myTVRow-sony:fixture-sony"]
+        XCTAssertTrue(sonyRow.waitForExistence(timeout: 2))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.staticTexts["Side Door TV"].waitForExistence(timeout: 2))
+        let status = app.staticTexts["remoteConnectionStatus"]
+        expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
+        waitForExpectations(timeout: 15)
+    }
+
     /// Add TV remains a prominent action from the saved-TV library.
     @MainActor
     func testMyTVsOpensAddTV() throws {

@@ -316,6 +316,9 @@ private actor MultiBrandSamsungFixture: SamsungPairingCoordinating {
     func forget(addressText: String) {
         forgottenAddresses.append(addressText)
     }
+    func removeCredential(addressText: String, reportedDeviceID: String?) {
+        forgottenAddresses.append(addressText)
+    }
     func disconnect() {}
 }
 
@@ -344,6 +347,9 @@ private actor MultiBrandSonyFixture: SonyPairingCoordinating {
     }
 
     func forget(reportedDeviceID: String) {
+        forgottenDeviceIDs.append(reportedDeviceID)
+    }
+    func removeCredential(reportedDeviceID: String) {
         forgottenDeviceIDs.append(reportedDeviceID)
     }
     func disconnect() {}
@@ -410,6 +416,9 @@ private actor MultiBrandVizioFixture: VizioPairingCoordinating {
     }
 
     func forget(reportedDeviceID: String) {
+        forgottenDeviceIDs.append(reportedDeviceID)
+    }
+    func removeCredential(reportedDeviceID: String) {
         forgottenDeviceIDs.append(reportedDeviceID)
     }
     func disconnect() {}

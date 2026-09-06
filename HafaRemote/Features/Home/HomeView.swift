@@ -367,21 +367,10 @@ struct HomeView: View {
             || session.connectedTV?.stableDeviceKey == removedKey
         let reconnectTV =
             affectsActiveSession
-            ? remainingTVs.first : selectedBeforeRemoval
-
-        if affectsActiveSession {
-            try await session.forgetPairing(
-                for: savedTV.lastKnownAddress,
-                reportedDeviceID: savedTV.reportedDeviceID,
-                brand: savedTV.brand
-            )
-        } else {
-            try await session.removePairingCredential(
-                for: savedTV.lastKnownAddress,
-                reportedDeviceID: savedTV.reportedDeviceID,
-                brand: savedTV.brand
-            )
-        }
+            ? remainingTVs.first(where: { $0.connectionTarget != nil }) : selectedBeforeRemoval
+        let replacementDeviceKey = reconnectTV?.stableDeviceKey
+        let reconnectTarget = reconnectTV?.connectionTarget
+        let recoverySnapshot = SavedTVRecoverySnapshot(savedTV)
 
         modelContext.delete(savedTV)
         do {
@@ -391,11 +380,30 @@ struct HomeView: View {
             throw error
         }
 
+        do {
+            try await session.removePairingCredential(
+                for: recoverySnapshot.lastKnownAddress,
+                reportedDeviceID: recoverySnapshot.reportedDeviceID,
+                brand: recoverySnapshot.brand
+            )
+        } catch {
+            modelContext.insert(recoverySnapshot.makeSavedTV())
+            do {
+                try modelContext.save()
+            } catch {
+                throw SavedTVRemovalError.couldNotRestoreMetadata
+            }
+            throw error
+        }
+
+        if affectsActiveSession {
+            await session.disconnect()
+        }
         selection.removeSelection(
             for: removedKey,
-            replacementDeviceKey: reconnectTV?.stableDeviceKey
+            replacementDeviceKey: replacementDeviceKey
         )
-        if affectsActiveSession, let target = reconnectTV?.connectionTarget {
+        if affectsActiveSession, let target = reconnectTarget {
             await session.connect(to: target)
         }
     }
@@ -565,6 +573,66 @@ struct HomeView: View {
                     "Hafa Remote could not finish updating a saved TV. Reconnect it to keep it available."
             )
         }
+    }
+}
+
+private enum SavedTVRemovalError: Error {
+    case couldNotRestoreMetadata
+}
+
+struct SavedTVRecoverySnapshot {
+    let id: UUID
+    let stableDeviceID: String?
+    let brand: TVBrand
+    let reportedDeviceID: String
+    let displayName: String
+    let roomName: String?
+    let modelName: String
+    let firmwareVersion: String?
+    let lastKnownAddress: String
+    let controlPort: Int?
+    let macAddress: String?
+    let wakeWasVerified: Bool
+    let lastSeenAt: Date
+    let lastUsedAt: Date
+
+    /// Captures every persisted field before the record is removed from SwiftData.
+    init(_ savedTV: SavedTV) {
+        id = savedTV.id
+        stableDeviceID = savedTV.stableDeviceID
+        brand = savedTV.brand
+        reportedDeviceID = savedTV.reportedDeviceID
+        displayName = savedTV.displayName
+        roomName = savedTV.roomName
+        modelName = savedTV.modelName
+        firmwareVersion = savedTV.firmwareVersion
+        lastKnownAddress = savedTV.lastKnownAddress
+        controlPort = savedTV.controlPort
+        macAddress = savedTV.macAddress
+        wakeWasVerified = savedTV.wakeWasVerified
+        lastSeenAt = savedTV.lastSeenAt
+        lastUsedAt = savedTV.lastUsedAt
+    }
+
+    /// Recreates the exact local metadata if credential deletion fails.
+    func makeSavedTV() -> SavedTV {
+        let savedTV = SavedTV(
+            id: id,
+            brand: brand,
+            reportedDeviceID: reportedDeviceID,
+            displayName: displayName,
+            roomName: roomName,
+            modelName: modelName,
+            firmwareVersion: firmwareVersion,
+            lastKnownAddress: lastKnownAddress,
+            macAddress: macAddress,
+            wakeWasVerified: wakeWasVerified,
+            lastSeenAt: lastSeenAt,
+            lastUsedAt: lastUsedAt
+        )
+        savedTV.stableDeviceID = stableDeviceID
+        savedTV.controlPort = controlPort
+        return savedTV
     }
 }
 

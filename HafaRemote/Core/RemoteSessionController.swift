@@ -35,17 +35,13 @@ extension RemoteSessionDriving {
         try await forget(addressText: addressText)
     }
 
-    /// Preserves compatibility for single-brand drivers that already isolate credential deletion.
+    /// Refuses to infer that an existing forget operation is safe for an active transport.
     func removeCredential(
         addressText: String,
         reportedDeviceID: String?,
         brand: TVBrand
     ) async throws {
-        try await forget(
-            addressText: addressText,
-            reportedDeviceID: reportedDeviceID,
-            brand: brand
-        )
+        throw RemoteCredentialRemovalError.unsupported
     }
 
     func supports(_ brand: TVBrand) -> Bool {
@@ -82,6 +78,19 @@ extension SamsungPairingCoordinator: RemoteSessionDriving {
         return try await pair(
             addressText: target.address.rawValue,
             onWaitingForApproval: onWaitingForApproval
+        )
+    }
+
+    /// Bridges the generic session boundary to Samsung's non-destructive credential API.
+    func removeCredential(
+        addressText: String,
+        reportedDeviceID: String?,
+        brand: TVBrand
+    ) async throws {
+        guard brand == .samsung else { throw RemoteCredentialRemovalError.unsupported }
+        try await removeCredential(
+            addressText: addressText,
+            reportedDeviceID: reportedDeviceID
         )
     }
 }
@@ -126,6 +135,10 @@ enum RemoteSessionControllerError: Error, Equatable, Sendable {
             operation
         }
     }
+}
+
+enum RemoteCredentialRemovalError: Error, Equatable, Sendable {
+    case unsupported
 }
 
 /// Owns the single driver session, lifecycle cancellation, and bounded reconnect policy.

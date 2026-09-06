@@ -375,6 +375,53 @@ struct SavedTVTests {
         #expect(television.connectionTarget.suggestedDisplayName == "Den TV")
     }
 
+    /// A failed external credential deletion can restore every local field after database removal.
+    @MainActor
+    @Test("Saved TV recovery snapshot compensates after deletion")
+    func recoverySnapshotRestoresDeletedMetadata() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: SavedTV.self, configurations: configuration)
+        let context = container.mainContext
+        let original = SavedTV(
+            brand: .vizio,
+            reportedDeviceID: "recovery-tv",
+            displayName: "Den TV",
+            roomName: "Den",
+            modelName: "V-Series",
+            firmwareVersion: "9.0",
+            lastKnownAddress: "192.168.10.40",
+            controlPort: 7345,
+            macAddress: "02:00:5E:10:00:09",
+            wakeWasVerified: true,
+            lastSeenAt: Date(timeIntervalSince1970: 400),
+            lastUsedAt: Date(timeIntervalSince1970: 500)
+        )
+        context.insert(original)
+        try context.save()
+        let snapshot = SavedTVRecoverySnapshot(original)
+
+        context.delete(original)
+        try context.save()
+        context.insert(snapshot.makeSavedTV())
+        try context.save()
+
+        let restored = try #require(context.fetch(FetchDescriptor<SavedTV>()).first)
+        #expect(restored.id == snapshot.id)
+        #expect(restored.stableDeviceID == snapshot.stableDeviceID)
+        #expect(restored.brand == .vizio)
+        #expect(restored.reportedDeviceID == "recovery-tv")
+        #expect(restored.displayName == "Den TV")
+        #expect(restored.roomName == "Den")
+        #expect(restored.modelName == "V-Series")
+        #expect(restored.firmwareVersion == "9.0")
+        #expect(restored.lastKnownAddress == "192.168.10.40")
+        #expect(restored.controlPort == 7345)
+        #expect(restored.macAddress == "02:00:5E:10:00:09")
+        #expect(restored.wakeWasVerified)
+        #expect(restored.lastSeenAt == Date(timeIntervalSince1970: 400))
+        #expect(restored.lastUsedAt == Date(timeIntervalSince1970: 500))
+    }
+
     @Test("A reconnect without wake metadata preserves the previously captured MAC")
     func preservesMACWhenReconnectOmitsIt() throws {
         let saved = SavedTV(

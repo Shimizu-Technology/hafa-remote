@@ -14,9 +14,9 @@ protocol SonyPairingCoordinating: TVDriver {
 }
 
 extension SonyPairingCoordinating {
-    /// Adapts older test and single-purpose coordinators to the credential-only contract.
+    /// Refuses to treat a potentially destructive legacy forget as credential-only.
     func removeCredential(reportedDeviceID: String) async throws {
-        try await forget(reportedDeviceID: reportedDeviceID)
+        throw RemoteCredentialRemovalError.unsupported
     }
 }
 

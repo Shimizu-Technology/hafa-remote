@@ -127,10 +127,10 @@ actor KeychainSamsungPairingCredentialStore: SamsungPairingCredentialStoring {
         for identity: SamsungPairingCredentialIdentity,
         legacyAddress: PrivateIPv4Address?
     ) throws {
-        try deleteCredential(accountMaterial: identity.stableDeviceKey)
         if let legacyAddress {
             try deleteCredential(accountMaterial: legacyAddress.rawValue)
         }
+        try deleteCredential(accountMaterial: identity.stableDeviceKey)
     }
 
     func removeLegacyCredential(for address: PrivateIPv4Address) throws {

@@ -1578,6 +1578,15 @@ private actor CredentialRemovalFailureDriver: RemoteSessionDriving {
         throw SyntheticForgetError.failed
     }
 
+    /// Simulates the same Keychain failure through the non-destructive API.
+    func removeCredential(
+        addressText: String,
+        reportedDeviceID: String?,
+        brand: TVBrand
+    ) async throws {
+        throw SyntheticForgetError.failed
+    }
+
     /// Provides a no-op transport teardown for the isolated fixture.
     func disconnect() {}
 }
