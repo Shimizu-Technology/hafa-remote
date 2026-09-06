@@ -104,6 +104,27 @@ struct MultiBrandSessionDriverTests {
         #expect(await samsung.forgottenAddresses.isEmpty)
     }
 
+    /// Credential-only removal preserves the currently active brand session.
+    @Test("Removing another TV's credential keeps the active TV controllable")
+    func credentialRemovalPreservesActiveSession() async throws {
+        let samsung = MultiBrandSamsungFixture()
+        let sony = MultiBrandSonyFixture()
+        let vizio = MultiBrandVizioFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony, vizio: vizio)
+
+        _ = try await driver.connect(addressText: "192.168.10.51") {}
+        let sonyID = String(repeating: "a", count: 64)
+        try await driver.removeCredential(
+            addressText: "192.168.10.50",
+            reportedDeviceID: sonyID,
+            brand: .sony
+        )
+        try await driver.send(.volumeUp)
+
+        #expect(await sony.forgottenDeviceIDs == [sonyID])
+        #expect(await samsung.commands == [.volumeUp])
+    }
+
     @Test("Samsung selection never exposes its commands to the Sony driver")
     func routesSamsungCommands() async throws {
         let samsung = MultiBrandSamsungFixture()

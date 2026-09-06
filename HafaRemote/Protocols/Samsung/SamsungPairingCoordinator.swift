@@ -9,6 +9,8 @@ protocol SamsungPairingCoordinating: Sendable {
     func sendText(_ input: RemoteTextInput) async throws
     func forget(addressText: String) async throws
     func forget(addressText: String, reportedDeviceID: String?) async throws
+    /// Deletes saved Samsung authentication material without requiring transport teardown.
+    func removeCredential(addressText: String, reportedDeviceID: String?) async throws
     func disconnect() async
 }
 
@@ -23,6 +25,11 @@ extension SamsungPairingCoordinating {
 
     func forget(addressText: String, reportedDeviceID: String?) async throws {
         try await forget(addressText: addressText)
+    }
+
+    /// Adapts older test and single-purpose coordinators to the credential-only contract.
+    func removeCredential(addressText: String, reportedDeviceID: String?) async throws {
+        try await forget(addressText: addressText, reportedDeviceID: reportedDeviceID)
     }
 }
 
@@ -159,15 +166,24 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
     }
 
     func forget(addressText: String, reportedDeviceID: String?) async throws {
-        let address = try PrivateIPv4Address(addressText.trimmingCharacters(in: .whitespacesAndNewlines))
         await transport.disconnect()
+        try await removeCredential(addressText: addressText, reportedDeviceID: reportedDeviceID)
+    }
+
+    /// Deletes Samsung authentication material while leaving an unrelated transport intact.
+    func removeCredential(addressText: String, reportedDeviceID: String?) async throws {
+        let trimmedAddress = addressText.trimmingCharacters(in: .whitespacesAndNewlines)
         let persistedIdentity = try reportedDeviceID.map {
             try SamsungPairingCredentialIdentity(reportedDeviceID: $0)
         }
         if let identity = persistedIdentity {
-            try await credentialStore.removeCredential(for: identity, legacyAddress: address)
-            mostRecentIdentityByAddress[address] = nil
+            let legacyAddress = try? PrivateIPv4Address(trimmedAddress)
+            try await credentialStore.removeCredential(for: identity, legacyAddress: legacyAddress)
+            if let legacyAddress {
+                mostRecentIdentityByAddress[legacyAddress] = nil
+            }
         } else {
+            let address = try PrivateIPv4Address(trimmedAddress)
             // No stable identity is available, so the store may only discard the
             // unsafe address-keyed alpha credential. A discovery request is never
             // required to forget locally held authentication material.

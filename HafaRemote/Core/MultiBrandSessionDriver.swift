@@ -124,19 +124,32 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
 
     func forget(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws {
         await disconnect()
+        try await removeCredential(
+            addressText: addressText,
+            reportedDeviceID: reportedDeviceID,
+            brand: brand
+        )
+    }
+
+    /// Deletes one brand-scoped credential without tearing down the active brand session.
+    func removeCredential(
+        addressText: String,
+        reportedDeviceID: String?,
+        brand: TVBrand
+    ) async throws {
         switch brand {
         case .sony:
             guard let reportedDeviceID else {
                 throw MultiBrandSessionDriverError.missingStableIdentity
             }
-            try await sony.forget(reportedDeviceID: reportedDeviceID)
+            try await sony.removeCredential(reportedDeviceID: reportedDeviceID)
         case .vizio:
             guard let reportedDeviceID else {
                 throw MultiBrandSessionDriverError.missingStableIdentity
             }
-            try await vizio.forget(reportedDeviceID: reportedDeviceID)
+            try await vizio.removeCredential(reportedDeviceID: reportedDeviceID)
         case .samsung:
-            try await samsung.forget(
+            try await samsung.removeCredential(
                 addressText: addressText,
                 reportedDeviceID: reportedDeviceID
             )

@@ -301,6 +301,33 @@ struct RemoteSessionControllerTests {
         #expect(store.lastConnectedTV == nil)
     }
 
+    /// A failed credential-only removal must not project a failure or drop the active remote.
+    @MainActor
+    @Test("Credential-only removal failure preserves the active session")
+    func credentialRemovalFailurePreservesActiveSession() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let driver = CredentialRemovalFailureDriver(tv: tv)
+        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+
+        await store.connect(to: tv.address.rawValue)
+        await waitUntil { @MainActor in store.state == .connected(tv) }
+        await #expect(throws: SyntheticForgetError.self) {
+            try await store.removePairingCredential(
+                for: "192.168.10.21",
+                reportedDeviceID: "another-tv",
+                brand: .sony
+            )
+        }
+
+        #expect(store.state == .connected(tv))
+        #expect(store.lastConnectedTV == tv)
+        #expect(store.canSendCommands)
+    }
+
     @MainActor
     @Test("An immediate disconnect rejects a queued connected projection")
     func immediateDisconnectDoesNotRestoreRememberedTV() async throws {
@@ -1525,6 +1552,34 @@ private actor SuspendedRemoteSessionDriver: RemoteSessionDriving {
 
 private enum SyntheticForgetError: Error {
     case failed
+}
+
+private actor CredentialRemovalFailureDriver: RemoteSessionDriving {
+    private let tv: PairedSamsungTV
+
+    /// Creates a connected fixture whose credential removal always fails.
+    init(tv: PairedSamsungTV) {
+        self.tv = tv
+    }
+
+    /// Returns the fixed connected television.
+    func connect(
+        addressText: String,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> PairedSamsungTV {
+        tv
+    }
+
+    /// Accepts commands so the test can keep its session connected.
+    func send(_ command: RemoteCommand) async throws {}
+
+    /// Simulates a Keychain deletion failure.
+    func forget(addressText: String) async throws {
+        throw SyntheticForgetError.failed
+    }
+
+    /// Provides a no-op transport teardown for the isolated fixture.
+    func disconnect() {}
 }
 
 private actor SuspendedForgetRemoteSessionDriver: RemoteSessionDriving {

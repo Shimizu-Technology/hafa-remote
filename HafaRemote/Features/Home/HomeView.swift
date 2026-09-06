@@ -219,6 +219,13 @@ struct HomeView: View {
         }
         .navigationTitle("Hafa Remote")
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            if !savedTVs.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    myTVsButton
+                }
+            }
+        }
     }
 
     private var restoringState: some View {
@@ -350,19 +357,31 @@ struct HomeView: View {
         )
     }
 
+    /// Removes a saved TV while disrupting the active session only when that TV owns it.
     private func forget(_ savedTV: SavedTV) async throws {
         let removedKey = savedTV.stableDeviceKey
         let remainingTVs = savedTVs.filter { $0.stableDeviceKey != removedKey }
         let selectedBeforeRemoval = selectedSavedTV
-        let reconnectTV =
+        let affectsActiveSession =
             selectedBeforeRemoval?.stableDeviceKey == removedKey
+            || session.connectedTV?.stableDeviceKey == removedKey
+        let reconnectTV =
+            affectsActiveSession
             ? remainingTVs.first : selectedBeforeRemoval
 
-        try await session.forgetPairing(
-            for: savedTV.lastKnownAddress,
-            reportedDeviceID: savedTV.reportedDeviceID,
-            brand: savedTV.brand
-        )
+        if affectsActiveSession {
+            try await session.forgetPairing(
+                for: savedTV.lastKnownAddress,
+                reportedDeviceID: savedTV.reportedDeviceID,
+                brand: savedTV.brand
+            )
+        } else {
+            try await session.removePairingCredential(
+                for: savedTV.lastKnownAddress,
+                reportedDeviceID: savedTV.reportedDeviceID,
+                brand: savedTV.brand
+            )
+        }
 
         modelContext.delete(savedTV)
         do {
@@ -376,7 +395,7 @@ struct HomeView: View {
             for: removedKey,
             replacementDeviceKey: reconnectTV?.stableDeviceKey
         )
-        if let target = reconnectTV?.connectionTarget {
+        if affectsActiveSession, let target = reconnectTV?.connectionTarget {
             await session.connect(to: target)
         }
     }
@@ -700,6 +719,7 @@ private struct MyTVsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .frame(minHeight: 44)
             .disabled(isForgetting)
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityIdentifier("myTVRow-\(savedTV.stableDeviceKey)")
@@ -716,7 +736,7 @@ private struct MyTVsView: View {
                 .accessibilityIdentifier("forgetMyTV-\(savedTV.stableDeviceKey)")
             } label: {
                 Image(systemName: "ellipsis")
-                    .frame(width: 36, height: 36)
+                    .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .disabled(isForgetting)
@@ -803,6 +823,7 @@ private struct SavedTVEditor: View {
     @State private var roomName: String
     @State private var errorMessage: String?
 
+    /// Starts the editor with the TV's current local labels.
     init(
         savedTV: SavedTV,
         save: @escaping @MainActor (String, String?) throws -> Void

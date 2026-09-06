@@ -21,6 +21,7 @@ struct SamsungDiscoveryTests {
         #expect(metadata.advertisedModelName == "Samsung Q70A")
     }
 
+    /// Discovery keeps a room-friendly name while merging endpoint advertisements.
     @Test("A discovery target carries its room-friendly TV name into pairing")
     func preservesDiscoveredDisplayName() throws {
         let television = DiscoveredTV(

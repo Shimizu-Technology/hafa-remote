@@ -5,6 +5,7 @@ import Testing
 @testable import HafaRemote
 
 struct SavedTVTests {
+    /// Saved metadata remains available after SwiftData persistence and fetch.
     @MainActor
     @Test("Saved TV metadata survives an in-memory SwiftData round trip")
     func roundTripsMetadata() throws {
@@ -341,6 +342,7 @@ struct SavedTVTests {
         #expect(saved.lastUsedAt == Date(timeIntervalSince1970: 300))
     }
 
+    /// Removing a selected record promotes the requested remaining record.
     @MainActor
     @Test("Removing the selected TV chooses the requested local fallback")
     func replacesRemovedSelection() {
@@ -356,6 +358,7 @@ struct SavedTVTests {
         #expect(!selection.isSwitching)
     }
 
+    /// Control characters never survive into display names or reconnect targets.
     @Test("Connected TVs keep a safe bounded display name from discovery")
     func sanitizesConnectedDisplayName() throws {
         let television = ConnectedTV(

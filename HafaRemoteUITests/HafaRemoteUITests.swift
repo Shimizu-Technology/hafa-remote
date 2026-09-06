@@ -221,15 +221,13 @@ final class HafaRemoteUITests: XCTestCase {
 
         let name = app.textFields["savedTVNameField"]
         XCTAssertTrue(name.waitForExistence(timeout: 2))
-        name.tap()
-        name.typeText(" Updated")
+        replaceText(in: name, with: "Den TV")
         let room = app.textFields["savedTVRoomField"]
-        room.tap()
-        room.typeText(" Main")
+        replaceText(in: room, with: "Den")
         app.buttons["saveTVEditsButton"].tap()
 
-        XCTAssertTrue(app.staticTexts["Living Room TV Updated"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.staticTexts["Living Room Main · Samsung · Q70AA"].exists)
+        XCTAssertTrue(app.staticTexts["Den TV"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Den · Samsung · Q70AA"].exists)
     }
 
     /// Forget is deliberate and removes the selected local library row.
@@ -255,6 +253,8 @@ final class HafaRemoteUITests: XCTestCase {
         )
         wait(for: [removed], timeout: 5)
         XCTAssertTrue(app.buttons["myTVRow-samsung:fixture-samsung"].exists)
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.staticTexts["Connected"].waitForExistence(timeout: 2))
     }
 
     /// Add TV remains a prominent action from the saved-TV library.
@@ -271,6 +271,33 @@ final class HafaRemoteUITests: XCTestCase {
         addTV.tap()
 
         XCTAssertTrue(app.navigationBars["Add TV"].waitForExistence(timeout: 3))
+    }
+
+    /// A malformed saved endpoint remains visible and manageable instead of stranding the user.
+    @MainActor
+    func testMyTVsRemainsAvailableForMalformedSavedTV() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-malformed-saved-tv")
+        app.launch()
+
+        let myTVs = app.buttons["myTVsButton"]
+        XCTAssertTrue(myTVs.waitForExistence(timeout: 5))
+        XCTAssertTrue(myTVs.isHittable)
+        myTVs.tap()
+
+        XCTAssertTrue(app.staticTexts["Needs Setup"].waitForExistence(timeout: 2))
+        let manage = app.buttons["manageMyTV-samsung:fixture-malformed"]
+        XCTAssertTrue(manage.exists)
+        manage.tap()
+        app.buttons["Forget TV"].tap()
+        app.buttons["Forget"].tap()
+
+        let malformedRow = app.buttons["myTVRow-samsung:fixture-malformed"]
+        let removed = expectation(
+            for: NSPredicate(format: "exists == false"),
+            evaluatedWith: malformedRow
+        )
+        wait(for: [removed], timeout: 5)
     }
 
     /// Runs separately from the deterministic gate against the powered-on household TV.
@@ -549,5 +576,16 @@ final class HafaRemoteUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments.append("-ui-testing-in-memory-store")
         return app
+    }
+
+    /// Replaces a text field's full value through the same edit menu available to users.
+    @MainActor
+    private func replaceText(in field: XCUIElement, with value: String) {
+        field.tap()
+        field.press(forDuration: 1)
+        let selectAll = XCUIApplication().menuItems["Select All"]
+        XCTAssertTrue(selectAll.waitForExistence(timeout: 2))
+        selectAll.tap()
+        field.typeText(value)
     }
 }

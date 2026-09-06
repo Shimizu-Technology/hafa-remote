@@ -54,6 +54,10 @@ struct HafaRemoteApp: App {
                     VizioPairingRepairUITestHarness()
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-saved-tvs") {
                     SavedTVSwitchingUITestHarness()
+                } else if ProcessInfo.processInfo.arguments.contains(
+                    "-ui-testing-malformed-saved-tv"
+                ) {
+                    MalformedSavedTVUITestHarness()
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-discovery-empty") {
                     HomeView(
                         discovery: TVDiscoveryStore(
@@ -187,5 +191,67 @@ struct HafaRemoteApp: App {
                 didSeed = true
             }
         }
+    }
+
+    private struct MalformedSavedTVUITestHarness: View {
+        @Environment(\.modelContext) private var modelContext
+        @State private var didSeed = false
+
+        /// Seeds an invalid legacy endpoint so UI tests can prove recovery remains reachable.
+        var body: some View {
+            Group {
+                if didSeed {
+                    HomeView(
+                        session: RemoteSessionStore(
+                            controller: RemoteSessionController(
+                                driver: MalformedSavedTVUIFixtureDriver()
+                            )
+                        )
+                    )
+                } else {
+                    ProgressView("Preparing TV…")
+                }
+            }
+            .task {
+                guard !didSeed else { return }
+                modelContext.insert(
+                    SavedTV(
+                        reportedDeviceID: "fixture-malformed",
+                        displayName: "Needs Setup",
+                        modelName: "Unknown model",
+                        firmwareVersion: nil,
+                        lastKnownAddress: "not-an-address"
+                    )
+                )
+                try? modelContext.save()
+                didSeed = true
+            }
+        }
+    }
+
+    private actor MalformedSavedTVUIFixtureDriver: RemoteSessionDriving {
+        /// The recovery fixture never opens a connection.
+        func connect(
+            addressText: String,
+            onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+        ) async throws -> ConnectedTV {
+            throw SamsungConnectionError.unavailable
+        }
+
+        /// The recovery fixture never sends commands.
+        func send(_ command: RemoteCommand) async throws {}
+
+        /// Simulates successful local removal independent of simulator Keychain entitlements.
+        func forget(addressText: String) async throws {}
+
+        /// Simulates scoped credential removal for the malformed saved record.
+        func removeCredential(
+            addressText: String,
+            reportedDeviceID: String?,
+            brand: TVBrand
+        ) async throws {}
+
+        /// The recovery fixture owns no transport.
+        func disconnect() {}
     }
 #endif

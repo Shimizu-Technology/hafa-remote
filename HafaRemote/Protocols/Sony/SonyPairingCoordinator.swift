@@ -9,6 +9,15 @@ protocol SonyPairingCoordinating: TVDriver {
         requestPairingCode: @escaping SonyPairingCodeProvider
     ) async throws -> ConnectedTV
     func forget(reportedDeviceID: String) async throws
+    /// Deletes a saved Sony fingerprint without requiring control-channel teardown.
+    func removeCredential(reportedDeviceID: String) async throws
+}
+
+extension SonyPairingCoordinating {
+    /// Adapts older test and single-purpose coordinators to the credential-only contract.
+    func removeCredential(reportedDeviceID: String) async throws {
+        try await forget(reportedDeviceID: reportedDeviceID)
+    }
 }
 
 actor SonyPairingCoordinator: SonyPairingCoordinating {
@@ -90,6 +99,11 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
 
     func forget(reportedDeviceID: String) async throws {
         await disconnect()
+        try await removeCredential(reportedDeviceID: reportedDeviceID)
+    }
+
+    /// Deletes the saved Sony certificate fingerprint without closing another active session.
+    func removeCredential(reportedDeviceID: String) async throws {
         try await credentialStore.remove(reportedDeviceID: reportedDeviceID)
     }
 

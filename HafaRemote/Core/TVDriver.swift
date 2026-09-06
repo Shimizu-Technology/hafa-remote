@@ -35,6 +35,7 @@ struct TVConnectionTarget: Equatable, Sendable {
     let controlPort: UInt16?
     let suggestedDisplayName: String?
 
+    /// Creates a brand-scoped endpoint with optional user-facing discovery metadata.
     init(
         brand: TVBrand,
         reportedDeviceID: String,
