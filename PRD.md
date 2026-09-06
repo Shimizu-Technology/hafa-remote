@@ -15,7 +15,7 @@ Hafa Remote is an iPhone-only remote control for compatible Samsung, Sony, and V
 - **Profile:** Public consumer utility, beginning as a personal/internal alpha
 - **Platform:** iPhone only
 - **Initial TV platforms:** Compatible Samsung Tizen, Sony BRAVIA/Google TV, and Vizio SmartCast televisions, enabled only after per-model validation
-- **Connectivity:** Local Wi-Fi only
+- **Connectivity:** Same local network; the iPhone uses Wi-Fi and the TV may use Wi-Fi or Ethernet
 - **Backend:** None
 - **Account:** None
 - **Initial price:** Free
@@ -110,7 +110,7 @@ The main session state machine must represent at least:
 
 ### First launch and pairing
 
-1. Hafa Remote explains that the iPhone and TV must be on the same non-guest Wi-Fi network.
+1. Hafa Remote explains that the iPhone and TV must be on the same non-guest local network; the iPhone uses Wi-Fi, while the TV may use Wi-Fi or Ethernet.
 2. The user taps **Add TV**; the setup sheet immediately searches and this user action triggers the iOS local-network permission request.
 3. The app shows verified Samsung, Sony, and Vizio devices with their reported name, brand, and model when available.
 4. The user chooses a TV.

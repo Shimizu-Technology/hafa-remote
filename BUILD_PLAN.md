@@ -1,10 +1,10 @@
 # Hafa Remote
 ## Build Plan
 
-**Version:** 0.1  
-**Last updated:** September 5, 2026
-**Current status:** The Samsung internal alpha and conditional Wake-on-LAN are merged and uploaded as TestFlight build 1; brand-scoped TV identity is merged; unified discovery plus Sony and Vizio household validation are in progress
-**Current execution frontier:** One automatic multi-brand discovery experience, then Sony and Vizio pairing/control on Leon's exact household TVs
+**Version:** 0.2
+**Last updated:** September 6, 2026
+**Current status:** Automatic three-brand discovery, pairing, controls, saved-TV switching, and brand-aware power paths are implemented; internal TestFlight build 2 is awaiting upload
+**Current execution frontier:** Upload build 2, then validate Samsung, Sony, and Vizio pairing, commands, reconnect, and power behavior on Leon's exact household TVs
 
 ## Delivery targets
 
