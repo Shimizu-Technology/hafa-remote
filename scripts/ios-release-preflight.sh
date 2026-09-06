@@ -92,7 +92,7 @@ assert_setting PRODUCT_NAME "Hafa Remote"
 assert_setting PRODUCT_MODULE_NAME HafaRemote
 assert_setting DEVELOPMENT_TEAM 4T358A5S74
 assert_setting MARKETING_VERSION 1.0
-assert_setting CURRENT_PROJECT_VERSION 1
+assert_setting CURRENT_PROJECT_VERSION 2
 assert_setting IPHONEOS_DEPLOYMENT_TARGET 18.4
 assert_setting TARGETED_DEVICE_FAMILY 1
 assert_setting CODE_SIGN_STYLE Automatic
@@ -105,7 +105,7 @@ fi
 
 bonjour_services="$(plutil -extract NSBonjourServices json -o - "$info_plist")"
 if [[ "$bonjour_services" != '["_androidtvremote2._tcp","_samsungmsf._tcp","_viziocast._tcp"]' ]]; then
-  echo "Bonjour declarations must contain only the verified Sony/Google TV and Samsung services." >&2
+  echo "Bonjour declarations must contain only the verified Samsung, Sony/Google TV, and Vizio services." >&2
   exit 1
 fi
 
@@ -126,16 +126,7 @@ if plutil -extract UIBackgroundModes raw "$info_plist" >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ "$(plutil -extract NSPrivacyTracking raw "$privacy_manifest")" != "false" ]]; then
-  echo "Hafa Remote must not declare tracking." >&2
-  exit 1
-fi
-
-collected_count="$(plutil -extract NSPrivacyCollectedDataTypes json -o - "$privacy_manifest" | ruby -rjson -e 'puts JSON.parse(STDIN.read).length')"
-if [[ "$collected_count" != "0" ]]; then
-  echo "Privacy manifest unexpectedly declares collected data." >&2
-  exit 1
-fi
+"$repo_root/scripts/validate-privacy-manifest.sh" "$privacy_manifest"
 
 entitlement_count="$(plutil -convert json -o - "$entitlements" | ruby -rjson -e 'puts JSON.parse(STDIN.read).length')"
 if [[ "$entitlement_count" != "0" ]]; then
@@ -225,22 +216,16 @@ if [[ -n "$archive_path" ]]; then
   [[ "$(plutil -extract CFBundleShortVersionString raw "$archived_info")" == "$(setting MARKETING_VERSION)" ]] || { echo "Archived marketing version does not match." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleVersion raw "$archived_info")" == "$(setting CURRENT_PROJECT_VERSION)" ]] || { echo "Archived build number does not match." >&2; exit 1; }
   [[ "$(plutil -extract DTSDKName raw "$archived_info")" == iphoneos26.* ]] || { echo "Archive was not built with the iOS 26 SDK." >&2; exit 1; }
-  [[ -f "$archived_app/PrivacyInfo.xcprivacy" ]] || { echo "Archive is missing PrivacyInfo.xcprivacy." >&2; exit 1; }
+  "$repo_root/scripts/validate-privacy-manifest.sh" "$archived_app/PrivacyInfo.xcprivacy"
 
   preflight_tmp="$(mktemp -d "${TMPDIR:-/tmp}/hafa-release-preflight.XXXXXX")"
   cleanup_preflight() { rm -rf -- "$preflight_tmp"; }
   trap cleanup_preflight EXIT
   codesign --verify --deep --strict "$archived_app"
-  if [[ -f "$archived_app/embedded.mobileprovision" ]]; then
-    security cms -D -i "$archived_app/embedded.mobileprovision" >"$preflight_tmp/profile.plist"
-    profile_app_id="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$preflight_tmp/profile.plist")"
-    if [[ "$profile_app_id" == "4T358A5S74.*" ]]; then
-      echo "Notice: development-signed archive uses the team wildcard; the App Store export must prove the explicit app identifier."
-    elif [[ "$profile_app_id" != "4T358A5S74.com.shimizutechnology.hafaremote" ]]; then
-      echo "Provisioning profile app identifier does not match." >&2
-      exit 1
-    fi
-  fi
+  "$repo_root/scripts/validate-provisioning-profile.sh" \
+    "$archived_app/embedded.mobileprovision" \
+    "4T358A5S74.com.shimizutechnology.hafaremote" \
+    true
 fi
 
 if [[ -n "$export_path" ]]; then
@@ -265,12 +250,12 @@ if [[ -n "$export_path" ]]; then
   exported_info="$exported_app/Info.plist"
   [[ "$(plutil -extract CFBundleIdentifier raw "$exported_info")" == "com.shimizutechnology.hafaremote" ]] || { echo "Exported bundle ID does not match." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleShortVersionString raw "$exported_info")" == "1.0" ]] || { echo "Exported marketing version does not match." >&2; exit 1; }
-  [[ "$(plutil -extract CFBundleVersion raw "$exported_info")" == "1" ]] || { echo "Exported build number does not match." >&2; exit 1; }
-  [[ -f "$exported_app/PrivacyInfo.xcprivacy" ]] || { echo "Exported app is missing PrivacyInfo.xcprivacy." >&2; exit 1; }
+  [[ "$(plutil -extract CFBundleVersion raw "$exported_info")" == "2" ]] || { echo "Exported build number does not match." >&2; exit 1; }
+  "$repo_root/scripts/validate-privacy-manifest.sh" "$exported_app/PrivacyInfo.xcprivacy"
   codesign --verify --deep --strict "$exported_app"
   codesign -d --entitlements :- "$exported_app" >"$export_tmp/entitlements.plist" 2>/dev/null
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' "$export_tmp/entitlements.plist")" == "4T358A5S74.com.shimizutechnology.hafaremote" ]] || { echo "Exported application identifier does not match." >&2; exit 1; }
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :get-task-allow' "$export_tmp/entitlements.plist")" == "false" ]] || { echo "Exported app is debuggable." >&2; exit 1; }
 fi
 
-echo "iOS release preflight passed for Hafa Remote 1.0 (1) with Xcode $xcode_version / iOS SDK $sdk_version"
+echo "iOS release preflight passed for Hafa Remote 1.0 (2) with Xcode $xcode_version / iOS SDK $sdk_version"
