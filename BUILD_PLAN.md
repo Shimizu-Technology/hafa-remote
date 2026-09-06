@@ -140,12 +140,14 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** HR-005; HR-007
 
-- [ ] Save multiple TVs with optional room and editable name.
-- [ ] Add a compact TV chooser and one default/last-used selection.
-- [ ] Cancel the previous session before connecting to another TV.
-- [ ] Rediscover a saved TV after DHCP changes its address.
-- [ ] Add forget/re-pair actions that delete the associated Keychain token.
-- [ ] Add tests for duplicate discovery, deleted credentials, renamed TVs, and repeated switching.
+- [x] Save multiple TVs and restore the last-used selection.
+- [ ] Add an optional room and editable display name.
+- [x] Add a compact TV chooser.
+- [x] Cancel the previous session before connecting to another TV.
+- [x] Refresh a saved TV's address when discovery finds its stable identity after a DHCP change.
+- [x] Add forget/re-pair actions that delete the associated Keychain token.
+- [x] Add deterministic tests for duplicate discovery, credential deletion, address refresh, and rapid switching.
+- [ ] Complete the ten-switch household hardware soak, including renamed TVs.
 
 **Acceptance evidence:** Multiple TVs can be paired, renamed, switched ten times, relaunched, and forgotten without crossing brand identity, credentials, or commands.
 
