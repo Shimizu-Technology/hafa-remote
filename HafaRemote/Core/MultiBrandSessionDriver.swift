@@ -123,6 +123,7 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
     }
 
     func forget(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws {
+        try Task.checkCancellation()
         await disconnect()
         try Task.checkCancellation()
         try await removeCredential(

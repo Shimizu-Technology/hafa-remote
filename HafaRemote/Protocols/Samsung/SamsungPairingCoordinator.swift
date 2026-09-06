@@ -166,6 +166,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
     }
 
     func forget(addressText: String, reportedDeviceID: String?) async throws {
+        try Task.checkCancellation()
         await transport.disconnect()
         try await removeCredential(addressText: addressText, reportedDeviceID: reportedDeviceID)
     }

@@ -381,7 +381,7 @@ struct HomeView: View {
     /// Removes a saved TV while disrupting the active session only when that TV owns it.
     private func forget(_ savedTV: SavedTV) async throws {
         let removedKey = savedTV.stableDeviceKey
-        let remainingTVs = savedTVs.filter { $0.stableDeviceKey != removedKey }
+        let remainingTVs = selectableSavedTVs.filter { $0.stableDeviceKey != removedKey }
         let selectedBeforeRemoval = selectedSavedTV
         let affectsActiveSession =
             selectedBeforeRemoval?.stableDeviceKey == removedKey

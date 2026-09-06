@@ -198,6 +198,7 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
     }
 
     func forget(reportedDeviceID: String) async throws {
+        try Task.checkCancellation()
         await disconnect()
         try await removeCredential(reportedDeviceID: reportedDeviceID)
     }
