@@ -28,6 +28,7 @@ struct HomeView: View {
         self.wakeService = wakeService
     }
 
+    /// Builds the current saved-TV, restoration, setup, or remote presentation.
     var body: some View {
         NavigationStack {
             if let tv = presentedTV {
@@ -389,6 +390,7 @@ struct HomeView: View {
         "The \(brand.displayName) TV did not respond. Confirm the iPhone and TV use the same Wi-Fi, enable \(powerOnSettingName(for: brand)), then try again."
     }
 
+    /// Describes an undelivered power-off action without guessing which layer rejected it.
     private func powerOffFailureText(for brand: TVBrand) -> String {
         "Hafa Remote could not deliver power off to the \(brand.displayName) TV. Confirm it is still connected, then try again."
     }

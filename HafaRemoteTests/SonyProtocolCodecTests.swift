@@ -139,6 +139,7 @@ struct SonyProtocolCodecTests {
         #expect(try SonyRemoteProtocolCodec.parse(powerMessage) == .powerState(true))
     }
 
+    /// Returns the protocol key expected for each product-level command.
     private func expectedCode(for command: RemoteCommand) -> UInt64 {
         switch command {
         case .powerOn: 224

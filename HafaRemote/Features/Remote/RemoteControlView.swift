@@ -31,6 +31,7 @@ struct RemoteControlView: View {
     @State private var powerOffTask: Task<Void, Never>?
     @State private var powerFailure: PowerFailure?
 
+    /// Builds the adaptive connected or recovery remote surface.
     var body: some View {
         ZStack {
             HafaTheme.canvas
@@ -455,18 +456,21 @@ struct RemoteControlView: View {
         }
     }
 
+    /// Keeps the power button's spoken label aligned with its active operation.
     private var powerAccessibilityLabel: String {
         if isPoweringOnTV { return "Turning on TV" }
         if isPoweringOffTV { return "Sending power off" }
         return isConnected ? "Power off TV" : "Turn on TV"
     }
 
+    /// Presents power progress without replacing the session's durable connection state.
     private var powerStatusLabel: String {
         if isPoweringOnTV { return "Turning on TV…" }
         if isPoweringOffTV { return "Sending power off…" }
         return statusLabel
     }
 
+    /// Starts one cancellable power-on attempt for a remembered television.
     private func powerOnTV() {
         guard !isConnected, canPowerOnTV, powerOnTask == nil else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -494,6 +498,7 @@ struct RemoteControlView: View {
         }
     }
 
+    /// Clears power-on progress only for the operation that still owns the screen.
     private func finishPowerOn(_ powerOnID: UUID) {
         guard activePowerOnID == powerOnID else { return }
         activePowerOnID = nil
@@ -501,6 +506,7 @@ struct RemoteControlView: View {
         isPoweringOnTV = false
     }
 
+    /// Sends one confirmed power-off action and keeps delivery errors visible.
     private func powerOffTV() {
         guard isConnected, powerOffTask == nil else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -528,6 +534,7 @@ struct RemoteControlView: View {
         }
     }
 
+    /// Clears power-off progress only for the operation that still owns the screen.
     private func finishPowerOff(_ powerOffID: UUID) {
         guard activePowerOffID == powerOffID else { return }
         activePowerOffID = nil
@@ -550,6 +557,7 @@ private struct PowerFailure: Identifiable {
         let powerOffFails: Bool
         @State private var lastCommand = "none"
 
+        /// Builds the deterministic remote used by UI tests.
         var body: some View {
             NavigationStack {
                 RemoteControlView(
