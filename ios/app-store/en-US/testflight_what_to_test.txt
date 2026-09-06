@@ -1,0 +1,9 @@
+Build 3 household regression:
+
+1. Vizio: with the TV on, use Add TV and confirm discovery opens the PIN flow. Pair, send Power, D-pad, Home, Back, Volume, Mute, and playback commands, then relaunch and reconnect from My TVs.
+2. Sony: confirm Power Off puts the TV into standby and does not report success when delivery fails. Then test Power On with Remote Start or network standby enabled.
+3. Samsung: test Power On with Power On With Mobile enabled. Power-on support still depends on the TV remaining reachable in standby.
+4. My TVs: save all household TVs, add names and optional rooms, switch between each TV ten times without rescanning, relaunch the app, and confirm every TV remains available.
+5. Forget TV: forget an inactive TV and confirm the current remote stays connected. Forget the selected TV and confirm Hafa Remote chooses a valid remaining TV without selecting a broken or pending record.
+
+All tests require the iPhone and TV on the same non-guest local network. Pair each TV once while it is on; first-time pairing cannot be completed while a TV is off. No account or backend is used.

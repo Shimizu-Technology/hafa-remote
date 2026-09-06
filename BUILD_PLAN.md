@@ -3,8 +3,8 @@
 
 **Version:** 0.2
 **Last updated:** September 6, 2026
-**Current status:** Internal TestFlight build 2 is installed and under household testing; Vizio parsing, Sony power, and the visible editable multi-TV library are complete, with only the ten-switch household soak pending for HR-008 and HR-032
-**Current execution frontier:** Ship the field-feedback fixes in internal build 3, then repeat Samsung, Sony, and Vizio pairing, commands, reconnect, switching, persistence, and power tests on Leon's exact household TVs
+**Current status:** Internal TestFlight build 2 is installed; the build 3 release candidate contains the Vizio parsing, Sony power, and visible editable multi-TV library fixes
+**Current execution frontier:** Upload internal build 3, then repeat Samsung, Sony, and Vizio pairing, commands, reconnect, switching, persistence, and power tests on Leon's exact household TVs
 
 ## Delivery targets
 
@@ -410,4 +410,4 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Immediate next action
 
-Merge the reviewed build 2 release PR, create the signed archive and exported IPA from `main`, and validate the reviewed bundle, version, entitlements, provisioning profile, and privacy manifest. Only after that validation passes, upload the same artifact to internal TestFlight and run the Samsung, Sony, and Vizio household acceptance journeys.
+Merge the reviewed build 3 release PR, create the signed archive and exported IPA from `main`, and validate the reviewed bundle, version, entitlements, provisioning profile, and privacy manifest. Only after that validation passes, upload the same artifact to internal TestFlight and run the Samsung, Sony, and Vizio household acceptance journeys in `ios/app-store/en-US/testflight_what_to_test.txt`.
