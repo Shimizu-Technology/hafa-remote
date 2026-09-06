@@ -197,6 +197,13 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
         throw TVDriverError.unsupportedTextInput
     }
 
+    func checkConnection() async throws {
+        guard let activeClient else {
+            throw VizioHTTPSClientError.notConnected
+        }
+        try await activeClient.checkConnection()
+    }
+
     func forget(reportedDeviceID: String) async throws {
         try Task.checkCancellation()
         await disconnect()

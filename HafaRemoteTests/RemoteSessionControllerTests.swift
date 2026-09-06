@@ -935,6 +935,144 @@ struct RemoteSessionControllerTests {
         #expect(await clock.pendingSleeps.isEmpty)
     }
 
+    @Test("A failed idle health check reconnects before the next remote command")
+    func idleHealthFailureReconnectsProactively() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [
+                .success(tv: tv, announcesPairing: false),
+                .success(tv: tv, announcesPairing: false),
+            ],
+            healthFailures: [.unavailable]
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                reconnectDelays: [.seconds(2)],
+                healthCheckInterval: .seconds(5)
+            )
+        )
+
+        await session.connect(to: tv.address.rawValue)
+        await resume(clock: clock, duration: .seconds(5))
+        await waitUntil { await session.state == .offline }
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await session.state == .connected(tv) }
+
+        #expect(await driver.healthCheckCallCount == 1)
+        #expect(await driver.connectCallCount == 2)
+        await session.disconnect()
+    }
+
+    @Test("Backgrounding cancels a pending health check without a stale reconnect")
+    func backgroundCancelsPendingHealthCheck() async throws {
+        try await verifyPendingHealthCancellation(.background)
+    }
+
+    @Test("Disconnecting cancels a pending health check without a stale reconnect")
+    func disconnectCancelsPendingHealthCheck() async throws {
+        try await verifyPendingHealthCancellation(.disconnect)
+    }
+
+    @Test("Replacing a session cancels its pending health check without stale state")
+    func replacementCancelsPendingHealthCheck() async throws {
+        try await verifyPendingHealthCancellation(.replaceSession)
+    }
+
+    private func verifyPendingHealthCancellation(
+        _ action: PendingHealthCancellationAction
+    ) async throws {
+        let firstTV = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let secondTV = try testTV(
+            address: "192.168.10.21",
+            reportedDeviceID: "synthetic-tv-b",
+            model: "TEST_MODEL_B"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = SuspendedHealthRemoteSessionDriver(televisions: [firstTV, secondTV])
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                reconnectDelays: [.seconds(2)],
+                repeatsLastReconnectDelay: true,
+                healthCheckInterval: .seconds(5)
+            )
+        )
+        await session.connect(to: firstTV.address.rawValue)
+        await resume(clock: clock, duration: .seconds(5))
+        var starts = driver.healthCheckStarts.makeAsyncIterator()
+        _ = await starts.next()
+
+        switch action {
+        case .background:
+            await session.applicationDidEnterBackground()
+            #expect(await session.state == .offline)
+        case .disconnect:
+            await session.disconnect()
+            #expect(await session.state == .idle)
+        case .replaceSession:
+            await session.connect(to: secondTV.address.rawValue)
+            #expect(await session.state == .connected(secondTV))
+        }
+
+        await waitUntil { await driver.cancelledHealthCheckCount == 1 }
+        #expect(!(await clock.pendingSleeps.contains(.seconds(2))))
+        if action == .replaceSession {
+            await session.disconnect()
+        }
+    }
+
+    @Test("Foreground reconnect keeps trying at the capped delay until the TV returns")
+    func foregroundReconnectContinuesUntilAvailable() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [
+                .success(tv: tv, announcesPairing: false),
+                .failure(.offline),
+                .failure(.offline),
+                .success(tv: tv, announcesPairing: false),
+            ],
+            healthFailures: [.unavailable]
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                reconnectDelays: [.seconds(2)],
+                repeatsLastReconnectDelay: true,
+                healthCheckInterval: .seconds(5)
+            )
+        )
+
+        await session.connect(to: tv.address.rawValue)
+        await resume(clock: clock, duration: .seconds(5))
+        await waitUntil { await session.state == .offline }
+        for expectedCallCount in 2...4 {
+            await resume(clock: clock, duration: .seconds(2))
+            await waitUntil { await driver.connectCallCount == expectedCallCount }
+        }
+
+        await waitUntil { await session.state == .connected(tv) }
+        #expect(await session.state == .connected(tv))
+        await session.disconnect()
+    }
+
     @Test("Background pauses retry and foreground reconnects immediately")
     func reconnectIsForegroundOnly() async throws {
         let tv = try testTV(
@@ -1356,22 +1494,80 @@ private enum MockConnectionOutcome: Sendable {
     case failure(MockConnectionFailure)
 }
 
+private enum PendingHealthCancellationAction: Equatable {
+    case background
+    case disconnect
+    case replaceSession
+}
+
+private actor SuspendedHealthRemoteSessionDriver: RemoteSessionDriving {
+    nonisolated let healthCheckStarts: AsyncStream<Void>
+    private let healthCheckStartsContinuation: AsyncStream<Void>.Continuation
+    private var televisions: [ConnectedTV]
+    private var healthContinuation: CheckedContinuation<Void, Error>?
+    private(set) var cancelledHealthCheckCount = 0
+
+    init(televisions: [ConnectedTV]) {
+        self.televisions = televisions
+        (healthCheckStarts, healthCheckStartsContinuation) = AsyncStream.makeStream()
+    }
+
+    func connect(
+        addressText: String,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) throws -> ConnectedTV {
+        guard !televisions.isEmpty else { throw SamsungConnectionError.unavailable }
+        return televisions.removeFirst()
+    }
+
+    func checkConnection() async throws {
+        healthCheckStartsContinuation.yield()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<Void, Error>) in
+                if Task.isCancelled {
+                    continuation.resume(throwing: CancellationError())
+                } else {
+                    healthContinuation = continuation
+                }
+            }
+        } onCancel: {
+            Task { await self.cancelHealthCheck() }
+        }
+    }
+
+    func send(_ command: RemoteCommand) {}
+    func forget(addressText: String) {}
+    func disconnect() {}
+
+    private func cancelHealthCheck() {
+        guard let healthContinuation else { return }
+        self.healthContinuation = nil
+        cancelledHealthCheckCount += 1
+        healthContinuation.resume(throwing: CancellationError())
+    }
+}
+
 private actor MockRemoteSessionDriver: RemoteSessionDriving {
     private var outcomes: [MockConnectionOutcome]
     private let textSendError: SamsungConnectionError?
+    private var healthFailures: [SamsungConnectionError]
     private(set) var connectCallCount = 0
     private(set) var activeConnectionCount = 0
     private(set) var maximumActiveConnectionCount = 0
     private(set) var forgottenAddresses: [String] = []
     private(set) var sentTextCharacterCounts: [Int] = []
     private(set) var presentedTargets: [TVConnectionTarget] = []
+    private(set) var healthCheckCallCount = 0
 
     init(
         outcomes: [MockConnectionOutcome],
-        textSendError: SamsungConnectionError? = nil
+        textSendError: SamsungConnectionError? = nil,
+        healthFailures: [SamsungConnectionError] = []
     ) {
         self.outcomes = outcomes
         self.textSendError = textSendError
+        self.healthFailures = healthFailures
     }
 
     func connect(
@@ -1422,6 +1618,13 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
     }
 
     func send(_ command: RemoteCommand) async throws {}
+
+    func checkConnection() throws {
+        healthCheckCallCount += 1
+        if !healthFailures.isEmpty {
+            throw healthFailures.removeFirst()
+        }
+    }
 
     func sendText(_ input: RemoteTextInput) async throws {
         if let textSendError {
@@ -2003,7 +2206,10 @@ private func testConfiguration(
     commandTimeout: Duration = .seconds(2),
     disconnectTimeout: Duration = .seconds(1),
     pairingRemovalTimeout: Duration = .seconds(3),
-    reconnectDelays: [Duration]
+    reconnectDelays: [Duration],
+    repeatsLastReconnectDelay: Bool = false,
+    healthCheckInterval: Duration? = nil,
+    healthCheckTimeout: Duration = .seconds(1)
 ) -> RemoteSessionConfiguration {
     RemoteSessionConfiguration(
         connectionTimeout: connectionTimeout,
@@ -2011,7 +2217,10 @@ private func testConfiguration(
         commandTimeout: commandTimeout,
         disconnectTimeout: disconnectTimeout,
         pairingRemovalTimeout: pairingRemovalTimeout,
-        reconnectDelays: reconnectDelays
+        reconnectDelays: reconnectDelays,
+        repeatsLastReconnectDelay: repeatsLastReconnectDelay,
+        healthCheckInterval: healthCheckInterval,
+        healthCheckTimeout: healthCheckTimeout
     )
 }
 

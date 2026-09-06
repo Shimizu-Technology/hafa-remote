@@ -35,6 +35,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
 
     private var readTask: Task<Void, Never>?
     private var sessionGeneration = UUID()
+    private var isRemoteSessionAlive = false
 
     init(
         identityStore: SonyClientIdentityStore = SonyClientIdentityStore(),
@@ -97,6 +98,13 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         throw TVDriverError.unsupportedTextInput
     }
 
+    func checkConnection() async throws {
+        guard isRemoteSessionAlive else {
+            throw SonyTLSChannelError.connectionClosed
+        }
+        try await controlChannel.checkConnection()
+    }
+
     func forget(reportedDeviceID: String) async throws {
         try Task.checkCancellation()
         await disconnect()
@@ -111,6 +119,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
 
     func disconnect() async {
         sessionGeneration = UUID()
+        isRemoteSessionAlive = false
         readTask?.cancel()
         readTask = nil
         await pairingChannel.disconnect()
@@ -248,6 +257,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
 
         let generation = UUID()
         sessionGeneration = generation
+        isRemoteSessionAlive = true
         readTask = Task { [weak self] in
             await self?.readRemoteEvents(generation: generation)
         }
@@ -283,7 +293,9 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
                 }
             }
         } catch {
-            // A later command or lifecycle transition owns user-visible recovery.
+            if sessionGeneration == generation {
+                isRemoteSessionAlive = false
+            }
         }
     }
 

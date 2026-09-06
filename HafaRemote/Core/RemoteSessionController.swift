@@ -112,6 +112,9 @@ struct RemoteSessionConfiguration: Equatable, Sendable {
     let disconnectTimeout: Duration
     let pairingRemovalTimeout: Duration
     let reconnectDelays: [Duration]
+    let repeatsLastReconnectDelay: Bool
+    let healthCheckInterval: Duration?
+    let healthCheckTimeout: Duration
 
     static let production = RemoteSessionConfiguration(
         connectionTimeout: .seconds(12),
@@ -119,7 +122,10 @@ struct RemoteSessionConfiguration: Equatable, Sendable {
         commandTimeout: .seconds(3),
         disconnectTimeout: .seconds(2),
         pairingRemovalTimeout: .seconds(3),
-        reconnectDelays: [.milliseconds(250), .seconds(1), .seconds(2)]
+        reconnectDelays: [.milliseconds(250), .seconds(1), .seconds(2), .seconds(5), .seconds(10)],
+        repeatsLastReconnectDelay: true,
+        healthCheckInterval: .seconds(15),
+        healthCheckTimeout: .seconds(3)
     )
 }
 
@@ -141,7 +147,7 @@ enum RemoteCredentialRemovalError: Error, Equatable, Sendable {
     case unsupported
 }
 
-/// Owns the single driver session, lifecycle cancellation, and bounded reconnect policy.
+/// Owns the single driver session, lifecycle cancellation, health checks, and reconnect policy.
 actor RemoteSessionController {
     private(set) var state: RemoteSessionState
 
@@ -164,6 +170,7 @@ actor RemoteSessionController {
     private var pairingRemovalID: UUID?
     private var pairingRemovalWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var reconnectTask: Task<Void, Never>?
+    private var healthTask: Task<Void, Never>?
     private var commandTasks: [UUID: Task<Void, Error>] = [:]
     private var stateContinuations: [UUID: AsyncStream<RemoteSessionState>.Continuation] = [:]
 
@@ -624,6 +631,7 @@ actor RemoteSessionController {
             reconnectTask = nil
             reconnectAttempt = 0
             transition(to: .connected(tv))
+            startHealthChecks(generation: requestedGeneration)
         } catch {
             guard generation == requestedGeneration, connectionID == id else { return }
             connectionTask = nil
@@ -688,13 +696,21 @@ actor RemoteSessionController {
     }
 
     private func scheduleReconnect(generation requestedGeneration: UUID) {
+        let delay: Duration
+        if configuration.reconnectDelays.indices.contains(reconnectAttempt) {
+            delay = configuration.reconnectDelays[reconnectAttempt]
+        } else if configuration.repeatsLastReconnectDelay,
+            let lastDelay = configuration.reconnectDelays.last
+        {
+            delay = lastDelay
+        } else {
+            return
+        }
         guard isForeground,
             reconnectTask == nil,
-            lastNetworkReachability != false,
-            configuration.reconnectDelays.indices.contains(reconnectAttempt)
+            lastNetworkReachability != false
         else { return }
 
-        let delay = configuration.reconnectDelays[reconnectAttempt]
         let clock = clock
         reconnectTask = Task { [weak self] in
             do {
@@ -720,6 +736,10 @@ actor RemoteSessionController {
     }
 
     private func cancelInFlightWork() async {
+        let healthTask = healthTask
+        self.healthTask = nil
+        healthTask?.cancel()
+
         reconnectTask?.cancel()
         reconnectTask = nil
 
@@ -735,8 +755,57 @@ actor RemoteSessionController {
         }
 
         _ = await connectionTask?.result
+        _ = await healthTask?.result
         for task in commandTasks {
             _ = await task.result
+        }
+    }
+
+    private func startHealthChecks(generation requestedGeneration: UUID) {
+        healthTask?.cancel()
+        guard let interval = configuration.healthCheckInterval else {
+            healthTask = nil
+            return
+        }
+        let clock = clock
+        healthTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await clock.sleep(for: interval)
+                    try Task.checkCancellation()
+                } catch {
+                    return
+                }
+                guard await self?.performHealthCheck(generation: requestedGeneration) == true else {
+                    return
+                }
+            }
+        }
+    }
+
+    private func performHealthCheck(generation requestedGeneration: UUID) async -> Bool {
+        guard generation == requestedGeneration, isForeground, case .connected = state else {
+            return false
+        }
+        let driver = driver
+        let clock = clock
+        do {
+            try await RemoteSessionTimeout.run(
+                operation: .send,
+                timeout: configuration.healthCheckTimeout,
+                clock: clock
+            ) {
+                try await driver.checkConnection()
+            }
+            return generation == requestedGeneration && isForeground
+        } catch {
+            guard generation == requestedGeneration, isForeground else { return false }
+            healthTask = nil
+            transition(to: .offline)
+            await disconnectDriverWithinLimit()
+            guard generation == requestedGeneration, isForeground else { return false }
+            scheduleReconnect(generation: requestedGeneration)
+            return false
         }
     }
 
@@ -828,6 +897,9 @@ actor RemoteSessionController {
         }
         if let error = error as? VizioHTTPSClientError {
             return error == .unavailable || error == .notConnected
+        }
+        if let error = error as? MultiBrandSessionDriverError {
+            return error == .notConnected
         }
         return false
     }

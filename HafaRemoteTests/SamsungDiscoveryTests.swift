@@ -293,6 +293,137 @@ struct SamsungDiscoveryTests {
     }
 
     @MainActor
+    @Test("A saved TV is resolved by stable identity after its IP address changes")
+    func resolvesSavedIdentityAtNewAddress() async throws {
+        let moved = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: "saved-sony",
+            displayName: "Bedroom TV",
+            modelName: "Sony BRAVIA",
+            address: try PrivateIPv4Address("192.168.10.91"),
+            controlPort: 6466
+        )
+        let backend = DiscoveryBackendSpy(events: [.found(moved), .finished])
+        let store = TVDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
+
+        let target = await store.findDevice(stableDeviceKey: "sony:saved-sony")
+
+        #expect(target == moved.connectionTarget)
+        #expect(backend.startCount == 1)
+    }
+
+    @MainActor
+    @Test("Each saved-TV lookup refreshes a previously discovered endpoint")
+    func refreshesSavedIdentityLookup() async throws {
+        let secondAddress = try PrivateIPv4Address("192.168.10.92")
+        let first = DiscoveredTV(
+            reportedIdentifier: "moving-tv",
+            displayName: "Living Room TV",
+            modelName: "Samsung TV",
+            address: try PrivateIPv4Address("192.168.10.91")
+        )
+        let second = DiscoveredTV(
+            reportedIdentifier: "moving-tv",
+            displayName: "Living Room TV",
+            modelName: "Samsung TV",
+            address: secondAddress
+        )
+        let backend = SequencedDiscoveryBackend(
+            eventSequences: [
+                [.found(first), .finished],
+                [.found(second), .finished],
+            ]
+        )
+        let store = TVDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
+
+        _ = await store.findDevice(stableDeviceKey: first.id)
+        let refreshed = await store.findDevice(stableDeviceKey: second.id)
+
+        #expect(refreshed?.address == secondAddress)
+        #expect(backend.startCount == 2)
+    }
+
+    @MainActor
+    @Test("Saved-TV resolution ignores a different TV on the same network")
+    func doesNotResolveDifferentIdentity() async throws {
+        let other = DiscoveredTV(
+            reportedIdentifier: "different-tv",
+            displayName: "Other TV",
+            modelName: "Samsung TV",
+            address: try PrivateIPv4Address("192.168.10.92")
+        )
+        let backend = DiscoveryBackendSpy(events: [.found(other), .finished])
+        let store = TVDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
+
+        let target = await store.findDevice(stableDeviceKey: "samsung:saved-tv")
+
+        #expect(target == nil)
+    }
+
+    @MainActor
+    @Test("Cancelling a pending saved-TV lookup resumes it once without a stale result")
+    func cancelsPendingIdentityLookup() async throws {
+        let backend = ControllableDiscoveryBackend()
+        let store = TVDiscoveryStore(backend: backend, searchDuration: .seconds(30))
+        let lookup = Task {
+            await store.findDevice(stableDeviceKey: "samsung:saved-tv")
+        }
+        await backend.waitUntilStarted()
+
+        lookup.cancel()
+        let result = await lookup.value
+        backend.emit(
+            .found(
+                DiscoveredTV(
+                    reportedIdentifier: "saved-tv",
+                    displayName: "Living Room TV",
+                    modelName: "Samsung TV",
+                    address: try PrivateIPv4Address("192.168.10.93")
+                )
+            )
+        )
+        backend.emit(.finished)
+
+        #expect(result == nil)
+        #expect(backend.stopCount >= 1)
+    }
+
+    @MainActor
+    @Test("An identity discarded by endpoint deduplication cannot resolve saved-TV recovery")
+    func onlyCanonicalIdentityResolvesRecovery() async throws {
+        let address = try PrivateIPv4Address("192.168.10.94")
+        let canonical = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: "canonical-tv",
+            displayName: "Living Room TV",
+            modelName: "Sony TV",
+            address: address,
+            controlPort: 6466
+        )
+        let conflicting = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: "discarded-tv",
+            displayName: "TV",
+            modelName: "Sony TV",
+            address: address,
+            controlPort: 6466
+        )
+        let backend = ControllableDiscoveryBackend()
+        let store = TVDiscoveryStore(backend: backend, searchDuration: .seconds(30))
+        let lookup = Task {
+            await store.findDevice(stableDeviceKey: conflicting.id)
+        }
+        await backend.waitUntilStarted()
+
+        backend.emit(.found(canonical))
+        backend.emit(.found(conflicting))
+        backend.emit(.finished)
+
+        #expect(await lookup.value == nil)
+        #expect(store.televisions == [canonical])
+    }
+
+    @MainActor
     @Test("Local-network policy denial remains distinct from a generic discovery failure")
     func representsPermissionDenial() async {
         let backend = DiscoveryBackendSpy(events: [.permissionDenied])
@@ -405,4 +536,34 @@ private final class SequencedDiscoveryBackend: TVDiscoveryBackend {
     }
 
     func stop() {}
+}
+
+@MainActor
+private final class ControllableDiscoveryBackend: TVDiscoveryBackend {
+    private var eventHandler: (@MainActor @Sendable (TVDiscoveryBackendEvent) -> Void)?
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
+
+    func start(
+        eventHandler: @escaping @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void
+    ) {
+        startCount += 1
+        self.eventHandler = eventHandler
+    }
+
+    func stop() {
+        stopCount += 1
+    }
+
+    func emit(_ event: TVDiscoveryBackendEvent) {
+        eventHandler?(event)
+    }
+
+    func waitUntilStarted() async {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while startCount == 0, ContinuousClock.now < deadline {
+            await Task.yield()
+        }
+        #expect(startCount == 1)
+    }
 }
