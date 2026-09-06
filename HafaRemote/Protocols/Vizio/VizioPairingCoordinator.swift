@@ -13,6 +13,15 @@ protocol VizioPairingCoordinating: TVDriver {
     func pair(target: TVConnectionTarget, pinProvider: @escaping VizioPINProvider) async throws
         -> ConnectedTV
     func forget(reportedDeviceID: String) async throws
+    /// Deletes a saved Vizio token without requiring SmartCast client teardown.
+    func removeCredential(reportedDeviceID: String) async throws
+}
+
+extension VizioPairingCoordinating {
+    /// Refuses to treat a potentially destructive legacy forget as credential-only.
+    func removeCredential(reportedDeviceID: String) async throws {
+        throw RemoteCredentialRemovalError.unsupported
+    }
 }
 
 actor VizioPairingCoordinator: VizioPairingCoordinating {
@@ -151,6 +160,7 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
                     reportedDeviceID: confirmedInfo.reportedDeviceID,
                     address: target.address,
                     controlPort: port,
+                    displayName: confirmedInfo.displayName,
                     modelName: confirmedInfo.modelName,
                     firmwareVersion: confirmedInfo.firmwareVersion
                 )
@@ -188,8 +198,15 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
     }
 
     func forget(reportedDeviceID: String) async throws {
-        let identity = try VizioPairingIdentity(reportedDeviceID: reportedDeviceID)
+        try Task.checkCancellation()
         await disconnect()
+        try await removeCredential(reportedDeviceID: reportedDeviceID)
+    }
+
+    /// Deletes the saved Vizio auth token without closing another active session.
+    func removeCredential(reportedDeviceID: String) async throws {
+        try Task.checkCancellation()
+        let identity = try VizioPairingIdentity(reportedDeviceID: reportedDeviceID)
         try await credentialStore.remove(for: identity)
     }
 

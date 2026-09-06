@@ -15,7 +15,8 @@ struct MultiBrandSessionDriverTests {
             brand: .sony,
             reportedDeviceID: "synthetic-candidate",
             address: try PrivateIPv4Address("192.168.10.50"),
-            controlPort: 6466
+            controlPort: 6466,
+            suggestedDisplayName: "Side Door TV"
         )
         let requestSignal = PairingRequestSignal()
         let connection = Task {
@@ -30,6 +31,7 @@ struct MultiBrandSessionDriverTests {
         try await driver.send(.volumeUp)
 
         #expect(television.brand == .sony)
+        #expect(television.displayName == "Side Door TV")
         #expect(await sony.receivedCode == "A1B2C3")
         #expect(await sony.commands == [.volumeUp])
         #expect(await samsung.commands.isEmpty)
@@ -100,6 +102,27 @@ struct MultiBrandSessionDriverTests {
 
         #expect(await sony.forgottenDeviceIDs == [reportedDeviceID])
         #expect(await samsung.forgottenAddresses.isEmpty)
+    }
+
+    /// Credential-only removal preserves the currently active brand session.
+    @Test("Removing another TV's credential keeps the active TV controllable")
+    func credentialRemovalPreservesActiveSession() async throws {
+        let samsung = MultiBrandSamsungFixture()
+        let sony = MultiBrandSonyFixture()
+        let vizio = MultiBrandVizioFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony, vizio: vizio)
+
+        _ = try await driver.connect(addressText: "192.168.10.51") {}
+        let sonyID = String(repeating: "a", count: 64)
+        try await driver.removeCredential(
+            addressText: "192.168.10.50",
+            reportedDeviceID: sonyID,
+            brand: .sony
+        )
+        try await driver.send(.volumeUp)
+
+        #expect(await sony.forgottenDeviceIDs == [sonyID])
+        #expect(await samsung.commands == [.volumeUp])
     }
 
     @Test("Samsung selection never exposes its commands to the Sony driver")
@@ -293,6 +316,9 @@ private actor MultiBrandSamsungFixture: SamsungPairingCoordinating {
     func forget(addressText: String) {
         forgottenAddresses.append(addressText)
     }
+    func removeCredential(addressText: String, reportedDeviceID: String?) {
+        forgottenAddresses.append(addressText)
+    }
     func disconnect() {}
 }
 
@@ -321,6 +347,9 @@ private actor MultiBrandSonyFixture: SonyPairingCoordinating {
     }
 
     func forget(reportedDeviceID: String) {
+        forgottenDeviceIDs.append(reportedDeviceID)
+    }
+    func removeCredential(reportedDeviceID: String) {
         forgottenDeviceIDs.append(reportedDeviceID)
     }
     func disconnect() {}
@@ -387,6 +416,9 @@ private actor MultiBrandVizioFixture: VizioPairingCoordinating {
     }
 
     func forget(reportedDeviceID: String) {
+        forgottenDeviceIDs.append(reportedDeviceID)
+    }
+    func removeCredential(reportedDeviceID: String) {
         forgottenDeviceIDs.append(reportedDeviceID)
     }
     func disconnect() {}

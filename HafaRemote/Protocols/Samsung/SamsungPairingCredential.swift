@@ -91,9 +91,10 @@ protocol SamsungPairingCredentialStoring: Sendable {
         _ credential: SamsungPairingCredential,
         for identity: SamsungPairingCredentialIdentity
     ) async throws
+    /// Deletes the stable credential and an optional address-keyed alpha credential.
     func removeCredential(
         for identity: SamsungPairingCredentialIdentity,
-        legacyAddress: PrivateIPv4Address
+        legacyAddress: PrivateIPv4Address?
     ) async throws
     func removeLegacyCredential(for address: PrivateIPv4Address) async throws
 }
@@ -121,12 +122,15 @@ actor KeychainSamsungPairingCredentialStore: SamsungPairingCredentialStoring {
         try write(credential, accountMaterial: identity.stableDeviceKey)
     }
 
+    /// Deletes stable authentication plus legacy material when its old address is valid.
     func removeCredential(
         for identity: SamsungPairingCredentialIdentity,
-        legacyAddress: PrivateIPv4Address
+        legacyAddress: PrivateIPv4Address?
     ) throws {
+        if let legacyAddress {
+            try deleteCredential(accountMaterial: legacyAddress.rawValue)
+        }
         try deleteCredential(accountMaterial: identity.stableDeviceKey)
-        try deleteCredential(accountMaterial: legacyAddress.rawValue)
     }
 
     func removeLegacyCredential(for address: PrivateIPv4Address) throws {

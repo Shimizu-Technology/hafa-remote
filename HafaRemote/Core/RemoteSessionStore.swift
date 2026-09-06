@@ -200,6 +200,19 @@ final class RemoteSessionStore {
         )
     }
 
+    /// Removes an unselected TV's credential without altering the active remote session.
+    func removePairingCredential(
+        for addressText: String,
+        reportedDeviceID: String? = nil,
+        brand: TVBrand = .samsung
+    ) async throws {
+        try await controller.removePairingCredential(
+            for: addressText,
+            reportedDeviceID: reportedDeviceID,
+            brand: brand
+        )
+    }
+
     func applicationDidEnterBackground() async {
         await controller.applicationDidEnterBackground()
     }

@@ -9,12 +9,14 @@ final class SavedTV: CustomStringConvertible {
     var reportedDeviceID: String
     var brandRawValue: String = TVBrand.samsung.rawValue
     var displayName: String
+    var roomName: String?
     var modelName: String
     var firmwareVersion: String?
     var lastKnownAddress: String
     var controlPort: Int?
     var macAddress: String?
     var wakeWasVerified: Bool = false
+    var pendingCredentialRemoval: Bool = false
     var lastSeenAt: Date
     var lastUsedAt: Date
 
@@ -23,12 +25,14 @@ final class SavedTV: CustomStringConvertible {
         brand: TVBrand = .samsung,
         reportedDeviceID: String,
         displayName: String,
+        roomName: String? = nil,
         modelName: String,
         firmwareVersion: String?,
         lastKnownAddress: String,
         controlPort: UInt16? = nil,
         macAddress: String? = nil,
         wakeWasVerified: Bool = false,
+        pendingCredentialRemoval: Bool = false,
         lastSeenAt: Date = .now,
         lastUsedAt: Date = .now
     ) {
@@ -37,12 +41,14 @@ final class SavedTV: CustomStringConvertible {
         stableDeviceID = "\(brand.rawValue):\(reportedDeviceID)"
         self.reportedDeviceID = reportedDeviceID
         self.displayName = displayName
+        self.roomName = roomName
         self.modelName = modelName
         self.firmwareVersion = firmwareVersion
         self.lastKnownAddress = lastKnownAddress
         self.controlPort = controlPort.map(Int.init)
         self.macAddress = macAddress
         self.wakeWasVerified = wakeWasVerified
+        self.pendingCredentialRemoval = pendingCredentialRemoval
         self.lastSeenAt = lastSeenAt
         self.lastUsedAt = lastUsedAt
     }
@@ -70,7 +76,8 @@ final class SavedTV: CustomStringConvertible {
             brand: brand,
             reportedDeviceID: reportedDeviceID,
             address: address,
-            controlPort: validatedControlPort
+            controlPort: validatedControlPort,
+            suggestedDisplayName: displayName
         )
     }
 
@@ -84,6 +91,7 @@ final class SavedTV: CustomStringConvertible {
             reportedDeviceID: reportedDeviceID,
             address: address,
             controlPort: validatedControlPort,
+            displayName: displayName,
             modelName: modelName,
             firmwareVersion: firmwareVersion,
             networkConnection: savedMACAddress == nil ? .unavailable : .wireless,

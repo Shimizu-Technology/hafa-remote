@@ -248,6 +248,36 @@ struct SamsungPairingCoordinatorTests {
         )
     }
 
+    /// A stable identity remains forgettable even when legacy metadata has a bad address.
+    @Test("Credential removal tolerates a malformed legacy address")
+    func removesStableCredentialWithMalformedAddress() async throws {
+        let identity = try SamsungPairingCredentialIdentity(reportedDeviceID: "malformed-tv")
+        let credential = try SamsungPairingCredential(
+            token: "offline-token",
+            certificateSHA256: Data(repeating: 21, count: 32)
+        )
+        let store = InMemorySamsungCredentialStore()
+        await store.save(credential, for: identity)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: OfflineSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: StubSamsungTransport(issuedCredential: credential)
+        )
+
+        try await coordinator.removeCredential(
+            addressText: "not-an-address",
+            reportedDeviceID: identity.reportedDeviceID
+        )
+
+        let validLookupAddress = try PrivateIPv4Address("192.168.10.20")
+        #expect(
+            await store.credential(
+                for: identity,
+                discardingLegacyCredentialFor: validLookupAddress
+            ) == nil
+        )
+    }
+
     @Test("Address-only forget never removes a stable TV credential")
     func addressOnlyForgetPreservesStableCredential() async throws {
         let address = try PrivateIPv4Address("192.168.10.20")
@@ -619,10 +649,12 @@ private actor InMemorySamsungCredentialStore: SamsungPairingCredentialStoring {
 
     func removeCredential(
         for identity: SamsungPairingCredentialIdentity,
-        legacyAddress: PrivateIPv4Address
+        legacyAddress: PrivateIPv4Address?
     ) {
         values[identity] = nil
-        legacyValues[legacyAddress] = nil
+        if let legacyAddress {
+            legacyValues[legacyAddress] = nil
+        }
     }
 
     func removeLegacyCredential(for address: PrivateIPv4Address) {
@@ -787,7 +819,7 @@ private actor SuspendedLookupCredentialStore: SamsungPairingCredentialStoring {
 
     func removeCredential(
         for identity: SamsungPairingCredentialIdentity,
-        legacyAddress: PrivateIPv4Address
+        legacyAddress: PrivateIPv4Address?
     ) {}
 
     func removeLegacyCredential(for address: PrivateIPv4Address) {}
@@ -873,7 +905,7 @@ private actor SuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
 
     func removeCredential(
         for identity: SamsungPairingCredentialIdentity,
-        legacyAddress: PrivateIPv4Address
+        legacyAddress: PrivateIPv4Address?
     ) throws {
         if rollbackFails {
             throw SyntheticCredentialStoreError.rollbackFailed
@@ -932,7 +964,7 @@ private actor FailFirstSaveCredentialStore: SamsungPairingCredentialStoring {
 
     func removeCredential(
         for identity: SamsungPairingCredentialIdentity,
-        legacyAddress: PrivateIPv4Address
+        legacyAddress: PrivateIPv4Address?
     ) {
         values[identity] = nil
     }

@@ -78,7 +78,7 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
             }
         }
         activeBrand = target.brand
-        return television
+        return television.applyingSuggestedDisplayName(target.suggestedDisplayName)
     }
 
     func submitPairingCode(_ code: String) async throws {
@@ -123,20 +123,35 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
     }
 
     func forget(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws {
+        try Task.checkCancellation()
         await disconnect()
+        try Task.checkCancellation()
+        try await removeCredential(
+            addressText: addressText,
+            reportedDeviceID: reportedDeviceID,
+            brand: brand
+        )
+    }
+
+    /// Deletes one brand-scoped credential without tearing down the active brand session.
+    func removeCredential(
+        addressText: String,
+        reportedDeviceID: String?,
+        brand: TVBrand
+    ) async throws {
         switch brand {
         case .sony:
             guard let reportedDeviceID else {
                 throw MultiBrandSessionDriverError.missingStableIdentity
             }
-            try await sony.forget(reportedDeviceID: reportedDeviceID)
+            try await sony.removeCredential(reportedDeviceID: reportedDeviceID)
         case .vizio:
             guard let reportedDeviceID else {
                 throw MultiBrandSessionDriverError.missingStableIdentity
             }
-            try await vizio.forget(reportedDeviceID: reportedDeviceID)
+            try await vizio.removeCredential(reportedDeviceID: reportedDeviceID)
         case .samsung:
-            try await samsung.forget(
+            try await samsung.removeCredential(
                 addressText: addressText,
                 reportedDeviceID: reportedDeviceID
             )
@@ -166,7 +181,10 @@ actor PairingCodeBroker {
     }
 
     func waitForCode() async throws -> String {
-        guard isExpectingCode, continuation == nil else {
+        guard isExpectingCode else {
+            throw CancellationError()
+        }
+        guard continuation == nil else {
             throw MultiBrandSessionDriverError.pairingCodeAlreadyRequested
         }
         if let pendingCode {
@@ -463,6 +481,12 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
         func send(_ command: RemoteCommand) async throws {}
         func sendText(_ input: RemoteTextInput) async throws {}
         func forget(addressText: String) async throws {}
+        /// Simulates isolated Keychain deletion without changing the fixture connection.
+        func removeCredential(
+            addressText: String,
+            reportedDeviceID: String?,
+            brand: TVBrand
+        ) async throws {}
         func disconnect() async {}
     }
 #endif

@@ -13,6 +13,8 @@ protocol RemoteSessionDriving: TVDriver {
     ) async throws -> ConnectedTV
     func forget(addressText: String) async throws
     func forget(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws
+    /// Deletes one saved credential without requiring the active transport to disconnect.
+    func removeCredential(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws
     func submitPairingCode(_ code: String) async throws
 }
 
@@ -31,6 +33,15 @@ extension RemoteSessionDriving {
 
     func forget(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws {
         try await forget(addressText: addressText)
+    }
+
+    /// Refuses to infer that an existing forget operation is safe for an active transport.
+    func removeCredential(
+        addressText: String,
+        reportedDeviceID: String?,
+        brand: TVBrand
+    ) async throws {
+        throw RemoteCredentialRemovalError.unsupported
     }
 
     func supports(_ brand: TVBrand) -> Bool {
@@ -67,6 +78,19 @@ extension SamsungPairingCoordinator: RemoteSessionDriving {
         return try await pair(
             addressText: target.address.rawValue,
             onWaitingForApproval: onWaitingForApproval
+        )
+    }
+
+    /// Bridges the generic session boundary to Samsung's non-destructive credential API.
+    func removeCredential(
+        addressText: String,
+        reportedDeviceID: String?,
+        brand: TVBrand
+    ) async throws {
+        guard brand == .samsung else { throw RemoteCredentialRemovalError.unsupported }
+        try await removeCredential(
+            addressText: addressText,
+            reportedDeviceID: reportedDeviceID
         )
     }
 }
@@ -111,6 +135,10 @@ enum RemoteSessionControllerError: Error, Equatable, Sendable {
             operation
         }
     }
+}
+
+enum RemoteCredentialRemovalError: Error, Equatable, Sendable {
+    case unsupported
 }
 
 /// Owns the single driver session, lifecycle cancellation, and bounded reconnect policy.
@@ -380,6 +408,62 @@ actor RemoteSessionController {
                 } else {
                     transition(to: .failed(.unexpected))
                 }
+            }
+            if Task.isCancelled || error is CancellationError {
+                throw CancellationError()
+            }
+            throw error
+        }
+    }
+
+    /// Removes one saved credential without changing the active session projection or transport.
+    func removePairingCredential(
+        for addressText: String,
+        reportedDeviceID: String? = nil,
+        brand: TVBrand = .samsung
+    ) async throws {
+        try await waitForPairingRemoval()
+        try Task.checkCancellation()
+        let removalID = UUID()
+        pairingRemovalID = removalID
+
+        let driver = driver
+        let clock = clock
+        let timeout = configuration.pairingRemovalTimeout
+        let driverTask = Task {
+            try await driver.removeCredential(
+                addressText: addressText,
+                reportedDeviceID: reportedDeviceID,
+                brand: brand
+            )
+        }
+        Task { [weak self] in
+            _ = await driverTask.result
+            await self?.finishPairingRemoval(id: removalID)
+        }
+
+        do {
+            try await withTaskCancellationHandler {
+                try await RemoteSessionTimeout.run(
+                    operation: .forgetPairing,
+                    timeout: timeout,
+                    clock: clock
+                ) {
+                    try await driverTask.value
+                }
+            } onCancel: {
+                driverTask.cancel()
+            }
+            finishPairingRemoval(id: removalID)
+            try Task.checkCancellation()
+        } catch {
+            let removalIsStillRunning =
+                Task.isCancelled || error is CancellationError
+                || error as? RemoteSessionControllerError == .timedOut(.forgetPairing)
+            if removalIsStillRunning {
+                driverTask.cancel()
+            } else {
+                finishPairingRemoval(id: removalID)
             }
             if Task.isCancelled || error is CancellationError {
                 throw CancellationError()

@@ -10,6 +10,7 @@ struct HomeView: View {
     @State private var discovery: TVDiscoveryStore
     @State private var networkMonitor = LocalNetworkMonitor()
     @State private var isShowingSetup = false
+    @State private var isShowingMyTVs = false
     @State private var scenePhaseEvents = ScenePhaseEvents()
     @State private var restoration = SavedTVRestorationCoordinator()
     @State private var selection = SavedTVSelectionCoordinator()
@@ -72,7 +73,7 @@ struct HomeView: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
-                        tvPicker
+                        myTVsButton
                     }
                 }
             } else if restoration.isRestoring {
@@ -87,15 +88,38 @@ struct HomeView: View {
                 session: session,
                 initialAddress:
                     presentedTV?.address.rawValue
-                    ?? savedTVs.first?.lastKnownAddress
+                    ?? selectableSavedTVs.first?.lastKnownAddress
                     ?? "",
                 initialReportedDeviceID:
                     presentedTV?.reportedDeviceID
-                    ?? savedTVs.first?.reportedDeviceID,
+                    ?? selectableSavedTVs.first?.reportedDeviceID,
                 initialTarget:
                     presentedTV?.connectionTarget
-                    ?? savedTVs.first?.connectionTarget,
+                    ?? selectableSavedTVs.first?.connectionTarget,
                 discovery: discovery
+            )
+        }
+        .sheet(isPresented: $isShowingMyTVs) {
+            MyTVsView(
+                savedTVs: savedTVs,
+                selectedDeviceKey: selection.selectedDeviceKey,
+                connectedDeviceKey: session.connectedTV?.stableDeviceKey,
+                isSwitching: selection.isSwitching,
+                selectTV: { savedTV in
+                    select(savedTV)
+                    isShowingMyTVs = false
+                },
+                addTV: {
+                    isShowingMyTVs = false
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(300))
+                        guard !Task.isCancelled else { return }
+                        isShowingSetup = true
+                    }
+                },
+                forgetTV: { savedTV in
+                    try await forget(savedTV)
+                }
             )
         }
         .alert(
@@ -111,6 +135,23 @@ struct HomeView: View {
         }
         .task(id: savedTVs.first?.persistentModelID) {
             backfillLegacySavedTVsIfNeeded()
+            let reconciled = await SavedTVPendingRemovalRecovery.reconcile(
+                savedTVs,
+                in: modelContext
+            ) { savedTV in
+                try await session.removePairingCredential(
+                    for: savedTV.lastKnownAddress,
+                    reportedDeviceID: savedTV.reportedDeviceID,
+                    brand: savedTV.brand
+                )
+            }
+            if !reconciled {
+                alert = HomeAlert(
+                    title: "TV Removal Pending",
+                    message:
+                        "Hafa Remote could not finish removing a TV. Open My TVs and try Forget TV again."
+                )
+            }
             await restoreLastUsedTVIfNeeded()
         }
         .onChange(of: session.state) { _, state in
@@ -195,6 +236,13 @@ struct HomeView: View {
         }
         .navigationTitle("Hafa Remote")
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            if !savedTVs.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    myTVsButton
+                }
+            }
+        }
     }
 
     private var restoringState: some View {
@@ -264,10 +312,10 @@ struct HomeView: View {
 
     private func restoreLastUsedTVIfNeeded() async {
         if selection.selectedDeviceKey == nil {
-            selection.selectWithoutConnecting(savedTVs.first?.stableDeviceKey)
+            selection.selectWithoutConnecting(selectableSavedTVs.first?.stableDeviceKey)
         }
         await restoration.restore(
-            from: savedTVs,
+            from: selectableSavedTVs,
             skipBecauseConnectionWasInitiated: session.hasInitiatedConnection
         ) { target in
             await session.connect(to: target)
@@ -276,7 +324,11 @@ struct HomeView: View {
 
     private var selectedSavedTV: SavedTV? {
         guard let selectedDeviceKey = selection.selectedDeviceKey else { return nil }
-        return savedTVs.first(where: { $0.stableDeviceKey == selectedDeviceKey })
+        return selectableSavedTVs.first(where: { $0.stableDeviceKey == selectedDeviceKey })
+    }
+
+    private var selectableSavedTVs: [SavedTV] {
+        savedTVs.filter { !$0.pendingCredentialRemoval }
     }
 
     private var presentedTV: ConnectedTV? {
@@ -294,36 +346,12 @@ struct HomeView: View {
         return session.connectedTV?.stableDeviceKey == presentedTV.stableDeviceKey
     }
 
-    @ViewBuilder
-    private var tvPicker: some View {
-        Menu {
-            ForEach(savedTVs, id: \.stableDeviceKey) { savedTV in
-                let isSelected = savedTV.stableDeviceKey == selection.selectedDeviceKey
-                Button {
-                    select(savedTV)
-                } label: {
-                    if isSelected {
-                        Label(savedTV.displayName, systemImage: "checkmark")
-                    } else {
-                        Text(savedTV.displayName)
-                    }
-                }
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
-                .accessibilityIdentifier("savedTV-\(savedTV.stableDeviceKey)")
-            }
-
-            if !savedTVs.isEmpty {
-                Divider()
-            }
-
-            Button("Add TV", systemImage: "plus") {
-                isShowingSetup = true
-            }
-            .accessibilityIdentifier("addAnotherTVButton")
-        } label: {
-            Label("TVs", systemImage: "tv.badge.wifi")
+    private var myTVsButton: some View {
+        Button("My TVs") {
+            isShowingMyTVs = true
         }
-        .accessibilityIdentifier("changeTVButton")
+        .accessibilityHint("Shows saved TVs, rooms, editing, and Add TV")
+        .accessibilityIdentifier("myTVsButton")
     }
 
     private func select(_ savedTV: SavedTV) {
@@ -348,6 +376,53 @@ struct HomeView: View {
                 await session.connect(to: target)
             }
         )
+    }
+
+    /// Removes a saved TV while disrupting the active session only when that TV owns it.
+    private func forget(_ savedTV: SavedTV) async throws {
+        let removedKey = savedTV.stableDeviceKey
+        let remainingTVs = selectableSavedTVs.filter { $0.stableDeviceKey != removedKey }
+        let selectedBeforeRemoval = selectedSavedTV
+        let affectsActiveSession =
+            selectedBeforeRemoval?.stableDeviceKey == removedKey
+            || session.connectedTV?.stableDeviceKey == removedKey
+        let reconnectTV =
+            affectsActiveSession
+            ? remainingTVs.first(where: { $0.connectionTarget != nil }) : selectedBeforeRemoval
+        let replacementDeviceKey = reconnectTV?.stableDeviceKey
+        let reconnectTarget = reconnectTV?.connectionTarget
+        savedTV.pendingCredentialRemoval = true
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
+
+        try await session.removePairingCredential(
+            for: savedTV.lastKnownAddress,
+            reportedDeviceID: savedTV.reportedDeviceID,
+            brand: savedTV.brand
+        )
+
+        modelContext.delete(savedTV)
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
+
+        if affectsActiveSession {
+            await session.disconnect()
+        }
+        selection.removeSelection(
+            for: removedKey,
+            replacementDeviceKey: replacementDeviceKey
+        )
+        if affectsActiveSession, let target = reconnectTarget {
+            await session.connect(to: target)
+        }
     }
 
     private func displayName(for tv: ConnectedTV) -> String {
@@ -474,7 +549,7 @@ struct HomeView: View {
                 SavedTV(
                     brand: tv.brand,
                     reportedDeviceID: tv.reportedDeviceID,
-                    displayName: tv.brand.defaultDeviceName,
+                    displayName: tv.displayName ?? tv.brand.defaultDeviceName,
                     modelName: tv.modelName,
                     firmwareVersion: tv.firmwareVersion,
                     lastKnownAddress: tv.address.rawValue,
@@ -518,6 +593,393 @@ struct HomeView: View {
     }
 }
 
+@MainActor
+enum SavedTVPendingRemovalRecovery {
+    /// Finishes durable pending deletions and leaves failed records visible for retry.
+    static func reconcile(
+        _ savedTVs: [SavedTV],
+        in modelContext: ModelContext,
+        removeCredential: @MainActor (SavedTV) async throws -> Void
+    ) async -> Bool {
+        var allSucceeded = true
+        for savedTV in savedTVs where savedTV.pendingCredentialRemoval {
+            do {
+                try await removeCredential(savedTV)
+                modelContext.delete(savedTV)
+                try modelContext.save()
+            } catch {
+                modelContext.rollback()
+                allSucceeded = false
+            }
+        }
+        return allSucceeded
+    }
+}
+
+private struct MyTVsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
+
+    let savedTVs: [SavedTV]
+    let selectedDeviceKey: String?
+    let connectedDeviceKey: String?
+    let isSwitching: Bool
+    let selectTV: @MainActor (SavedTV) -> Void
+    let addTV: @MainActor () -> Void
+    let forgetTV: @MainActor (SavedTV) async throws -> Void
+
+    @State private var editRequest: SavedTVEditRequest?
+    @State private var activeAlert: MyTVsAlert?
+    @State private var forgettingDeviceKey: String?
+
+    /// Builds a local, account-free library for every previously paired TV.
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                HafaTheme.canvas
+                    .ignoresSafeArea()
+
+                List {
+                    Section {
+                        ForEach(savedTVs, id: \.stableDeviceKey) { savedTV in
+                            savedTVRow(savedTV)
+                        }
+                    } header: {
+                        Text("Saved TVs")
+                    } footer: {
+                        Text(
+                            "Saved only on this iPhone. Pairing credentials stay protected in Keychain."
+                        )
+                    }
+                }
+                .scrollContentBackground(.hidden)
+            }
+            .navigationTitle("My TVs")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                Button {
+                    addTV()
+                } label: {
+                    Label("Add TV", systemImage: "plus")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 52)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(HafaTheme.accent)
+                .foregroundStyle(HafaTheme.canvas)
+                .accessibilityIdentifier("addTVFromLibraryButton")
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial)
+            }
+        }
+        .preferredColorScheme(.dark)
+        .sheet(item: $editRequest) { request in
+            SavedTVEditor(savedTV: request.savedTV) { displayName, roomName in
+                try saveEdits(
+                    for: request.savedTV,
+                    displayName: displayName,
+                    roomName: roomName
+                )
+            }
+        }
+        .alert(item: $activeAlert) { alert in
+            switch alert.kind {
+            case .confirmForget(let savedTV):
+                Alert(
+                    title: Text("Forget \(savedTV.displayName)?"),
+                    message: Text(
+                        "This removes the saved TV and its pairing credential from this iPhone."
+                    ),
+                    primaryButton: .destructive(Text("Forget")) {
+                        forget(savedTV)
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .error(let message):
+                Alert(
+                    title: Text("Couldn’t Update My TVs"),
+                    message: Text(message),
+                    dismissButton: .cancel(Text("OK"))
+                )
+            }
+        }
+    }
+
+    /// Builds one selectable TV row with visible state and secondary management actions.
+    private func savedTVRow(_ savedTV: SavedTV) -> some View {
+        let isSelected = savedTV.stableDeviceKey == selectedDeviceKey
+        let isConnected = savedTV.stableDeviceKey == connectedDeviceKey
+        let isForgetting = savedTV.stableDeviceKey == forgettingDeviceKey
+
+        return HStack(spacing: 12) {
+            Button {
+                selectTV(savedTV)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "tv")
+                        .font(.title3)
+                        .foregroundStyle(HafaTheme.accent)
+                        .frame(width: 36, height: 36)
+                        .background(HafaTheme.accent.opacity(0.12), in: Circle())
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(savedTV.displayName)
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+
+                        Text(savedTVDetail(savedTV))
+                            .font(.caption2)
+                            .foregroundStyle(HafaTheme.secondaryText)
+                            .lineLimit(2)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if isForgetting {
+                        ProgressView()
+                            .tint(HafaTheme.accent)
+                    } else if isConnected {
+                        Label("Connected", systemImage: "checkmark.circle.fill")
+                            .labelStyle(.iconOnly)
+                            .foregroundStyle(HafaTheme.accent)
+                            .accessibilityLabel("Connected")
+                    } else if isSelected && isSwitching {
+                        ProgressView()
+                            .tint(HafaTheme.accent)
+                            .accessibilityLabel("Connecting")
+                    } else if isSelected {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(HafaTheme.accent)
+                            .accessibilityLabel("Selected")
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .frame(minHeight: 44)
+            .disabled(isForgetting || savedTV.pendingCredentialRemoval)
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+            .accessibilityIdentifier("myTVRow-\(savedTV.stableDeviceKey)")
+
+            Menu {
+                if !savedTV.pendingCredentialRemoval {
+                    Button("Edit Name & Room", systemImage: "pencil") {
+                        editRequest = SavedTVEditRequest(savedTV: savedTV)
+                    }
+                    .accessibilityIdentifier("editMyTV-\(savedTV.stableDeviceKey)")
+                }
+
+                Button(
+                    savedTV.pendingCredentialRemoval ? "Retry Forget" : "Forget TV",
+                    systemImage: "trash",
+                    role: .destructive
+                ) {
+                    activeAlert = MyTVsAlert(kind: .confirmForget(savedTV))
+                }
+                .accessibilityIdentifier("forgetMyTV-\(savedTV.stableDeviceKey)")
+            } label: {
+                Image(systemName: "ellipsis")
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .disabled(isForgetting)
+            .accessibilityLabel("Manage \(savedTV.displayName)")
+            .accessibilityIdentifier("manageMyTV-\(savedTV.stableDeviceKey)")
+        }
+        .listRowBackground(HafaTheme.surface)
+    }
+
+    /// Combines optional room context with stable brand and model details.
+    private func savedTVDetail(_ savedTV: SavedTV) -> String {
+        let device = "\(savedTV.brand.displayName) · \(savedTV.modelName)"
+        let detail: String
+        if let roomName = savedTV.roomName, !roomName.isEmpty {
+            detail = "\(roomName) · \(device)"
+        } else {
+            detail = device
+        }
+        return savedTV.pendingCredentialRemoval ? "Removal pending · \(detail)" : detail
+    }
+
+    /// Persists user-facing labels while restoring the prior values if storage fails.
+    private func saveEdits(
+        for savedTV: SavedTV,
+        displayName: String,
+        roomName: String?
+    ) throws {
+        let previousDisplayName = savedTV.displayName
+        let previousRoomName = savedTV.roomName
+        savedTV.displayName = displayName
+        savedTV.roomName = roomName
+        do {
+            try modelContext.save()
+        } catch {
+            savedTV.displayName = previousDisplayName
+            savedTV.roomName = previousRoomName
+            throw error
+        }
+    }
+
+    /// Removes one TV and keeps the sheet responsive during credential deletion.
+    private func forget(_ savedTV: SavedTV) {
+        guard forgettingDeviceKey == nil else { return }
+        let deviceKey = savedTV.stableDeviceKey
+        forgettingDeviceKey = deviceKey
+        Task { @MainActor in
+            defer {
+                if forgettingDeviceKey == deviceKey {
+                    forgettingDeviceKey = nil
+                }
+            }
+            do {
+                try await forgetTV(savedTV)
+            } catch is CancellationError {
+                return
+            } catch {
+                activeAlert = MyTVsAlert(
+                    kind: .error(
+                        "The TV or its saved pairing could not be removed from this iPhone. Try again."
+                    )
+                )
+            }
+        }
+    }
+}
+
+private struct SavedTVEditRequest: Identifiable {
+    let id = UUID()
+    let savedTV: SavedTV
+}
+
+private struct MyTVsAlert: Identifiable {
+    enum Kind {
+        case confirmForget(SavedTV)
+        case error(String)
+    }
+
+    let id = UUID()
+    let kind: Kind
+}
+
+private struct SavedTVEditor: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let savedTV: SavedTV
+    let save: @MainActor (String, String?) throws -> Void
+
+    @State private var displayName: String
+    @State private var roomName: String
+    @State private var errorMessage: String?
+
+    /// Starts the editor with the TV's current local labels.
+    init(
+        savedTV: SavedTV,
+        save: @escaping @MainActor (String, String?) throws -> Void
+    ) {
+        self.savedTV = savedTV
+        self.save = save
+        _displayName = State(initialValue: savedTV.displayName)
+        _roomName = State(initialValue: savedTV.roomName ?? "")
+    }
+
+    private var normalizedDisplayName: String {
+        displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var normalizedRoomName: String? {
+        let roomName = roomName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return roomName.isEmpty ? nil : roomName
+    }
+
+    private var canSave: Bool {
+        !normalizedDisplayName.isEmpty
+            && normalizedDisplayName.count <= 80
+            && (normalizedRoomName?.count ?? 0) <= 40
+            && !displayName.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+            && !roomName.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+    }
+
+    /// Builds a short, native edit form with no account or network dependency.
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("TV Name") {
+                    TextField("Living Room TV", text: $displayName)
+                        .textInputAutocapitalization(.words)
+                        .accessibilityIdentifier("savedTVNameField")
+                    Text("\(displayName.count)/80")
+                        .font(.caption)
+                        .foregroundStyle(HafaTheme.secondaryText)
+                }
+
+                Section("Room (Optional)") {
+                    TextField("Living Room", text: $roomName)
+                        .textInputAutocapitalization(.words)
+                        .accessibilityIdentifier("savedTVRoomField")
+                    Text("\(roomName.count)/40")
+                        .font(.caption)
+                        .foregroundStyle(HafaTheme.secondaryText)
+                }
+
+                Section("Device") {
+                    LabeledContent("Brand", value: savedTV.brand.displayName)
+                    LabeledContent("Model", value: savedTV.modelName)
+                }
+            }
+            .navigationTitle("Edit TV")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveEdits()
+                    }
+                    .disabled(!canSave)
+                    .accessibilityIdentifier("saveTVEditsButton")
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .alert(
+            "Couldn’t Save TV",
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    /// Validates and persists the local display metadata before dismissing.
+    private func saveEdits() {
+        guard canSave else { return }
+        do {
+            try save(normalizedDisplayName, normalizedRoomName)
+            dismiss()
+        } catch {
+            errorMessage = "Hafa Remote could not save these changes. Try again."
+        }
+    }
+}
+
 private struct HomeAlert {
     let title: String
     let message: String
@@ -545,6 +1007,15 @@ final class SavedTVSelectionCoordinator {
         isSwitching = false
         operationID = nil
         taskHolder.cancel()
+    }
+
+    /// Clears a removed selection and optionally promotes a remaining saved TV.
+    func removeSelection(for deviceKey: String, replacementDeviceKey: String?) {
+        guard selectedDeviceKey == deviceKey else { return }
+        taskHolder.cancel()
+        selectedDeviceKey = replacementDeviceKey
+        isSwitching = false
+        operationID = nil
     }
 
     func select(

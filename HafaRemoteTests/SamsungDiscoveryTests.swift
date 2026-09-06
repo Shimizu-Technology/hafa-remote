@@ -21,6 +21,19 @@ struct SamsungDiscoveryTests {
         #expect(metadata.advertisedModelName == "Samsung Q70A")
     }
 
+    /// Discovery keeps a room-friendly name while merging endpoint advertisements.
+    @Test("A discovery target carries its room-friendly TV name into pairing")
+    func preservesDiscoveredDisplayName() throws {
+        let television = DiscoveredTV(
+            reportedIdentifier: "synthetic-tv",
+            displayName: "Living Room TV",
+            modelName: "Samsung Q70A",
+            address: try PrivateIPv4Address("192.168.10.20")
+        )
+
+        #expect(television.connectionTarget.suggestedDisplayName == "Living Room TV")
+    }
+
     @Test("Bonjour records without a stable reported device ID are ignored")
     func rejectsBonjourMetadataWithoutIdentity() {
         let txtData = NetService.data(fromTXTRecord: [
@@ -118,7 +131,16 @@ struct SamsungDiscoveryTests {
         #expect(store.televisions.count == 1)
         #expect(store.televisions[0].reportedIdentifier == modelAdvertisement.reportedIdentifier)
         #expect(store.televisions[0].displayName == roomAdvertisement.displayName)
-        #expect(store.televisions[0].connectionTarget == modelAdvertisement.connectionTarget)
+        #expect(
+            store.televisions[0].connectionTarget
+                == TVConnectionTarget(
+                    brand: modelAdvertisement.brand,
+                    reportedDeviceID: modelAdvertisement.reportedIdentifier,
+                    address: modelAdvertisement.address,
+                    controlPort: modelAdvertisement.controlPort,
+                    suggestedDisplayName: roomAdvertisement.displayName
+                )
+        )
     }
 
     @MainActor
@@ -246,7 +268,16 @@ struct SamsungDiscoveryTests {
         #expect(store.televisions.count == 1)
         #expect(store.televisions[0].reportedIdentifier == existingEndpoint.reportedIdentifier)
         #expect(store.televisions[0].displayName == moved.displayName)
-        #expect(store.televisions[0].connectionTarget == existingEndpoint.connectionTarget)
+        #expect(
+            store.televisions[0].connectionTarget
+                == TVConnectionTarget(
+                    brand: existingEndpoint.brand,
+                    reportedDeviceID: existingEndpoint.reportedIdentifier,
+                    address: existingEndpoint.address,
+                    controlPort: existingEndpoint.controlPort,
+                    suggestedDisplayName: moved.displayName
+                )
+        )
     }
 
     @MainActor

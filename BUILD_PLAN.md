@@ -3,8 +3,8 @@
 
 **Version:** 0.2
 **Last updated:** September 6, 2026
-**Current status:** Internal TestFlight build 2 is installed and under household testing; Vizio identity parsing is repaired, while Sony power and multi-TV usability feedback are being addressed
-**Current execution frontier:** Ship the field-feedback fixes in a new internal build, then repeat Samsung, Sony, and Vizio pairing, commands, reconnect, switching, and power tests on Leon's exact household TVs
+**Current status:** Internal TestFlight build 2 is installed and under household testing; Vizio parsing, Sony power, and the visible editable multi-TV library are complete, with only the ten-switch household soak pending for HR-008 and HR-032
+**Current execution frontier:** Ship the field-feedback fixes in internal build 3, then repeat Samsung, Sony, and Vizio pairing, commands, reconnect, switching, persistence, and power tests on Leon's exact household TVs
 
 ## Delivery targets
 
@@ -141,15 +141,15 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 **Blockers:** HR-005; HR-007
 
 - [x] Save multiple TVs and restore the last-used selection.
-- [ ] Add an optional room and editable display name.
-- [x] Add a compact TV chooser.
+- [x] Add an optional room and editable display name.
+- [x] Add a visible My TVs library with one-tap switching and a prominent Add TV action.
 - [x] Cancel the previous session before connecting to another TV.
 - [x] Refresh a saved TV's address when discovery finds its stable identity after a DHCP change.
 - [x] Add forget/re-pair actions that delete the associated Keychain token.
 - [x] Add deterministic tests for duplicate discovery, credential deletion, address refresh, and rapid switching.
 - [ ] Complete the ten-switch household hardware soak.
 
-**Acceptance evidence:** Automated coverage proves that multiple TVs can be saved, switched rapidly, restored, rediscovered at a changed address, and forgotten without crossing brand identity, credentials, or commands. Editable names and the ten-switch household soak remain pending.
+**Acceptance evidence:** Automated coverage proves that multiple TVs can be saved, switched rapidly, restored, rediscovered at a changed address, renamed, and forgotten without crossing brand identity, credentials, or commands. Only the ten-switch household soak remains pending.
 
 ### HR-009 — Complete the production-quality remote experience
 
@@ -255,6 +255,22 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 - [ ] Verify Vizio off/on with Quick Start enabled and Samsung wake with Power On With Mobile enabled.
 
 **Acceptance evidence:** Automated tests prove Sony uses idempotent sleep/wake codes and the UI cannot claim a failed power-off delivery. Household tests still determine whether each TV remains reachable while off; the app must not promise wake where the required standby mode is disabled or unsupported.
+
+### HR-032 — Make multiple saved TVs obvious and editable
+
+**Evidence:** Build 2 already persisted multiple TVs in SwiftData and pairing credentials in Keychain, but switching was hidden inside a compact toolbar menu and new records used generic brand names. Household testing showed the expected mental model is a visible favorites-like list that remembers every paired room and makes switching immediate.
+
+- [x] Replace the hidden chooser with a visible **My TVs** toolbar action and local library.
+- [x] Show saved name, optional room, brand, model, selected state, connected state, and switching progress.
+- [x] Switch to a saved TV in one tap without rescanning or entering an address.
+- [x] Add local name and room editing with bounded, validated fields.
+- [x] Keep Add TV prominent from the library.
+- [x] Make Forget TV deliberate, remove the brand-specific Keychain credential, delete local metadata, and choose a safe fallback.
+- [x] Preserve edited name and room through reconnects and DHCP address refreshes.
+- [x] Add SwiftData and UI coverage for persistence, switching, editing, adding, and forgetting.
+- [ ] Complete the ten-switch household soak across Samsung, Sony, and Vizio.
+
+**Acceptance evidence:** A user can open My TVs, understand what is saved, switch rooms, rename a TV, add another, or deliberately forget one without an account or backend. All metadata remains on the iPhone and all pairing secrets remain in Keychain.
 
 ## Phase 3 — External TestFlight
 
