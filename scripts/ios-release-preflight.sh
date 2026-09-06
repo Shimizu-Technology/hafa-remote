@@ -231,16 +231,10 @@ if [[ -n "$archive_path" ]]; then
   cleanup_preflight() { rm -rf -- "$preflight_tmp"; }
   trap cleanup_preflight EXIT
   codesign --verify --deep --strict "$archived_app"
-  if [[ -f "$archived_app/embedded.mobileprovision" ]]; then
-    security cms -D -i "$archived_app/embedded.mobileprovision" >"$preflight_tmp/profile.plist"
-    profile_app_id="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$preflight_tmp/profile.plist")"
-    if [[ "$profile_app_id" == "4T358A5S74.*" ]]; then
-      echo "Notice: development-signed archive uses the team wildcard; the App Store export must prove the explicit app identifier."
-    elif [[ "$profile_app_id" != "4T358A5S74.com.shimizutechnology.hafaremote" ]]; then
-      echo "Provisioning profile app identifier does not match." >&2
-      exit 1
-    fi
-  fi
+  "$repo_root/scripts/validate-provisioning-profile.sh" \
+    "$archived_app/embedded.mobileprovision" \
+    "4T358A5S74.com.shimizutechnology.hafaremote" \
+    true
 fi
 
 if [[ -n "$export_path" ]]; then

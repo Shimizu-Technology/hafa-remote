@@ -4,6 +4,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 validator="$repo_root/scripts/validate-no-arbitrary-loads.sh"
+profile_validator="$repo_root/scripts/validate-provisioning-profile.sh"
 fixtures="$repo_root/scripts/fixtures"
 
 assert_rejected() {
@@ -28,5 +29,20 @@ assert_rejected "$fixtures/Info-arbitrary-media.plist" "NSAllowsArbitraryLoadsFo
 assert_rejected "$fixtures/Info-insecure-exception-domain.plist" "ATS exception domains are not allowed."
 assert_rejected "$fixtures/Info-local-networking-string.plist" "NSAllowsLocalNetworking must be a boolean"
 assert_rejected "$fixtures/Info-does-not-exist.plist" "ATS validation requires a readable property list."
+
+missing_profile="$fixtures/embedded-does-not-exist.mobileprovision"
+if output="$(
+  "$profile_validator" \
+    "$missing_profile" \
+    "4T358A5S74.com.shimizutechnology.hafaremote" \
+    true 2>&1
+)"; then
+  echo "Expected a missing archive provisioning profile to fail." >&2
+  exit 1
+fi
+if [[ "$output" != *"Archive is missing embedded.mobileprovision."* ]]; then
+  echo "Unexpected missing-profile rejection: $output" >&2
+  exit 1
+fi
 
 echo "iOS release preflight fixture tests passed"
