@@ -92,7 +92,7 @@ assert_setting PRODUCT_NAME "Hafa Remote"
 assert_setting PRODUCT_MODULE_NAME HafaRemote
 assert_setting DEVELOPMENT_TEAM 4T358A5S74
 assert_setting MARKETING_VERSION 1.0
-assert_setting CURRENT_PROJECT_VERSION 2
+assert_setting CURRENT_PROJECT_VERSION 3
 assert_setting IPHONEOS_DEPLOYMENT_TARGET 18.4
 assert_setting TARGETED_DEVICE_FAMILY 1
 assert_setting CODE_SIGN_STYLE Automatic
@@ -182,12 +182,13 @@ limits = {
   "promotional_text.txt" => 170,
   "description.txt" => 4_000,
   "keywords.txt" => 100,
-  "review_notes.txt" => 4_000
+  "review_notes.txt" => 4_000,
+  "testflight_what_to_test.txt" => 4_000
 }
 
 limits.each do |filename, limit|
   value = File.read(File.join(path, filename), encoding: "UTF-8").strip
-  measured = %w[keywords.txt review_notes.txt].include?(filename) ? value.bytesize : value.length
+  measured = %w[keywords.txt review_notes.txt testflight_what_to_test.txt].include?(filename) ? value.bytesize : value.length
   abort "#{filename} is empty" if value.empty?
   abort "#{filename} exceeds #{limit}" if measured > limit
 end
@@ -258,4 +259,4 @@ if [[ -n "$export_path" ]]; then
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :get-task-allow' "$export_tmp/entitlements.plist")" == "false" ]] || { echo "Exported app is debuggable." >&2; exit 1; }
 fi
 
-echo "iOS release preflight passed for Hafa Remote 1.0 (2) with Xcode $xcode_version / iOS SDK $sdk_version"
+echo "iOS release preflight passed for Hafa Remote $(setting MARKETING_VERSION) ($(setting CURRENT_PROJECT_VERSION)) with Xcode $xcode_version / iOS SDK $sdk_version"
