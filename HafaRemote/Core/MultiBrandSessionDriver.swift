@@ -78,7 +78,7 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
             }
         }
         activeBrand = target.brand
-        return television
+        return television.applyingSuggestedDisplayName(target.suggestedDisplayName)
     }
 
     func submitPairingCode(_ code: String) async throws {

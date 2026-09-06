@@ -33,6 +33,21 @@ struct TVConnectionTarget: Equatable, Sendable {
     let reportedDeviceID: String
     let address: PrivateIPv4Address
     let controlPort: UInt16?
+    let suggestedDisplayName: String?
+
+    init(
+        brand: TVBrand,
+        reportedDeviceID: String,
+        address: PrivateIPv4Address,
+        controlPort: UInt16?,
+        suggestedDisplayName: String? = nil
+    ) {
+        self.brand = brand
+        self.reportedDeviceID = reportedDeviceID
+        self.address = address
+        self.controlPort = controlPort
+        self.suggestedDisplayName = suggestedDisplayName
+    }
 }
 
 /// A validated hardware address that is never rendered or logged verbatim.
@@ -90,6 +105,7 @@ struct ConnectedTV: Equatable, Sendable {
     let reportedDeviceID: String
     let address: PrivateIPv4Address
     let controlPort: UInt16?
+    let displayName: String?
     let modelName: String
     let firmwareVersion: String?
     let networkConnection: TVNetworkConnection
@@ -100,6 +116,7 @@ struct ConnectedTV: Equatable, Sendable {
         reportedDeviceID: String,
         address: PrivateIPv4Address,
         controlPort: UInt16? = nil,
+        displayName: String? = nil,
         modelName: String,
         firmwareVersion: String?,
         networkConnection: TVNetworkConnection = .unavailable,
@@ -109,6 +126,7 @@ struct ConnectedTV: Equatable, Sendable {
         self.reportedDeviceID = reportedDeviceID
         self.address = address
         self.controlPort = controlPort
+        self.displayName = Self.validatedDisplayName(displayName)
         self.modelName = modelName
         self.firmwareVersion = firmwareVersion
         self.networkConnection = networkConnection
@@ -124,12 +142,39 @@ struct ConnectedTV: Equatable, Sendable {
             brand: brand,
             reportedDeviceID: reportedDeviceID,
             address: address,
-            controlPort: controlPort
+            controlPort: controlPort,
+            suggestedDisplayName: displayName
+        )
+    }
+
+    /// Keeps a verified protocol name when available, otherwise using discovery metadata.
+    func applyingSuggestedDisplayName(_ suggestedDisplayName: String?) -> ConnectedTV {
+        ConnectedTV(
+            brand: brand,
+            reportedDeviceID: reportedDeviceID,
+            address: address,
+            controlPort: controlPort,
+            displayName: displayName ?? suggestedDisplayName,
+            modelName: modelName,
+            firmwareVersion: firmwareVersion,
+            networkConnection: networkConnection,
+            macAddress: macAddress
         )
     }
 
     var isEligibleForSamsungWake: Bool {
         brand == .samsung && networkConnection == .wireless
+    }
+
+    /// Removes non-displayable input before a network-provided name reaches the UI or storage.
+    private static func validatedDisplayName(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let cleaned = String(
+            String.UnicodeScalarView(
+                value.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }
+            )
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? nil : String(cleaned.prefix(80))
     }
 }
 

@@ -35,7 +35,8 @@ struct DiscoveredTV: Identifiable, Equatable, Sendable,
             brand: brand,
             reportedDeviceID: reportedIdentifier,
             address: address,
-            controlPort: controlPort
+            controlPort: controlPort,
+            suggestedDisplayName: displayName
         )
     }
 

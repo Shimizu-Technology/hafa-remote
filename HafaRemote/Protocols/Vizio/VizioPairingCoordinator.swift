@@ -151,6 +151,7 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
                     reportedDeviceID: confirmedInfo.reportedDeviceID,
                     address: target.address,
                     controlPort: port,
+                    displayName: confirmedInfo.displayName,
                     modelName: confirmedInfo.modelName,
                     firmwareVersion: confirmedInfo.firmwareVersion
                 )

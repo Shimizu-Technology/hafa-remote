@@ -15,7 +15,8 @@ struct MultiBrandSessionDriverTests {
             brand: .sony,
             reportedDeviceID: "synthetic-candidate",
             address: try PrivateIPv4Address("192.168.10.50"),
-            controlPort: 6466
+            controlPort: 6466,
+            suggestedDisplayName: "Side Door TV"
         )
         let requestSignal = PairingRequestSignal()
         let connection = Task {
@@ -30,6 +31,7 @@ struct MultiBrandSessionDriverTests {
         try await driver.send(.volumeUp)
 
         #expect(television.brand == .sony)
+        #expect(television.displayName == "Side Door TV")
         #expect(await sony.receivedCode == "A1B2C3")
         #expect(await sony.commands == [.volumeUp])
         #expect(await samsung.commands.isEmpty)

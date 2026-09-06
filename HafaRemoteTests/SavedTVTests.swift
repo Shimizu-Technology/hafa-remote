@@ -15,6 +15,7 @@ struct SavedTVTests {
             brand: .sony,
             reportedDeviceID: "synthetic-device-id",
             displayName: "Living Room",
+            roomName: "Living Room",
             modelName: "Q70AA",
             firmwareVersion: "2210",
             lastKnownAddress: "192.168.10.20",
@@ -35,6 +36,7 @@ struct SavedTVTests {
         #expect(fetched.first?.stableDeviceKey == "sony:synthetic-device-id")
         #expect(fetched.first?.reportedDeviceID == "synthetic-device-id")
         #expect(fetched.first?.displayName == "Living Room")
+        #expect(fetched.first?.roomName == "Living Room")
         #expect(fetched.first?.modelName == "Q70AA")
         #expect(fetched.first?.firmwareVersion == "2210")
         #expect(fetched.first?.validatedAddress == (try PrivateIPv4Address("192.168.10.20")))
@@ -314,6 +316,7 @@ struct SavedTVTests {
         let saved = SavedTV(
             reportedDeviceID: "synthetic-device-id",
             displayName: "Living Room",
+            roomName: "Main House",
             modelName: "Q70AA",
             firmwareVersion: "1001",
             lastKnownAddress: "192.168.10.20"
@@ -330,11 +333,43 @@ struct SavedTVTests {
         saved.recordConnection(to: reconnectedTV, at: Date(timeIntervalSince1970: 300))
 
         #expect(saved.displayName == "Living Room")
+        #expect(saved.roomName == "Main House")
         #expect(saved.reportedDeviceID == "synthetic-device-id")
         #expect(saved.lastKnownAddress == "192.168.10.42")
         #expect(saved.firmwareVersion == "1002")
         #expect(saved.macAddress == "02:00:5E:10:00:02")
         #expect(saved.lastUsedAt == Date(timeIntervalSince1970: 300))
+    }
+
+    @MainActor
+    @Test("Removing the selected TV chooses the requested local fallback")
+    func replacesRemovedSelection() {
+        let selection = SavedTVSelectionCoordinator()
+        selection.selectWithoutConnecting("sony:first")
+
+        selection.removeSelection(
+            for: "sony:first",
+            replacementDeviceKey: "samsung:second"
+        )
+
+        #expect(selection.selectedDeviceKey == "samsung:second")
+        #expect(!selection.isSwitching)
+    }
+
+    @Test("Connected TVs keep a safe bounded display name from discovery")
+    func sanitizesConnectedDisplayName() throws {
+        let television = ConnectedTV(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-device-id",
+            address: try PrivateIPv4Address("192.168.10.20"),
+            controlPort: 7345,
+            displayName: "  Den\u{0000} TV  ",
+            modelName: "V-Series",
+            firmwareVersion: nil
+        )
+
+        #expect(television.displayName == "Den TV")
+        #expect(television.connectionTarget.suggestedDisplayName == "Den TV")
     }
 
     @Test("A reconnect without wake metadata preserves the previously captured MAC")

@@ -173,9 +173,9 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(error.label.contains("Vizio PIN was not accepted"))
     }
 
-    /// Saved televisions can be switched directly without scanning the network again.
+    /// Saved televisions can be switched directly from My TVs without scanning again.
     @MainActor
-    func testSavedTVPickerSwitchesTheVisibleAndConnectedTarget() throws {
+    func testMyTVsSwitchesTheVisibleAndConnectedTarget() throws {
         let app = makeApplication()
         app.launchArguments.append("-ui-testing-saved-tvs")
         app.launch()
@@ -187,11 +187,12 @@ final class HafaRemoteUITests: XCTestCase {
         expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
         waitForExpectations(timeout: 15)
 
-        let tvPicker = app.buttons["changeTVButton"]
-        XCTAssertTrue(tvPicker.waitForExistence(timeout: 2))
-        tvPicker.tap()
+        let myTVs = app.buttons["myTVsButton"]
+        XCTAssertTrue(myTVs.waitForExistence(timeout: 2))
+        myTVs.tap()
+        XCTAssertTrue(app.navigationBars["My TVs"].waitForExistence(timeout: 2))
 
-        let sideDoorTV = app.buttons["Side Door TV"]
+        let sideDoorTV = app.buttons["myTVRow-sony:fixture-sony"]
         XCTAssertTrue(sideDoorTV.waitForExistence(timeout: 2))
         sideDoorTV.tap()
 
@@ -200,6 +201,76 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Side Door TV"].waitForExistence(timeout: 5))
         expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
         waitForExpectations(timeout: 15)
+    }
+
+    /// TV names and rooms remain editable from the visible saved-TV library.
+    @MainActor
+    func testMyTVsEditsNameAndRoom() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-saved-tvs")
+        app.launch()
+
+        XCTAssertTrue(app.buttons["myTVsButton"].waitForExistence(timeout: 5))
+        app.buttons["myTVsButton"].tap()
+        let manage = app.buttons["manageMyTV-samsung:fixture-samsung"]
+        XCTAssertTrue(manage.waitForExistence(timeout: 2))
+        manage.tap()
+        let edit = app.buttons["Edit Name & Room"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 2))
+        edit.tap()
+
+        let name = app.textFields["savedTVNameField"]
+        XCTAssertTrue(name.waitForExistence(timeout: 2))
+        name.tap()
+        name.typeText(" Updated")
+        let room = app.textFields["savedTVRoomField"]
+        room.tap()
+        room.typeText(" Main")
+        app.buttons["saveTVEditsButton"].tap()
+
+        XCTAssertTrue(app.staticTexts["Living Room TV Updated"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Living Room Main · Samsung · Q70AA"].exists)
+    }
+
+    /// Forget is deliberate and removes the selected local library row.
+    @MainActor
+    func testMyTVsForgetsTVAfterConfirmation() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-saved-tvs")
+        app.launch()
+
+        XCTAssertTrue(app.buttons["myTVsButton"].waitForExistence(timeout: 5))
+        app.buttons["myTVsButton"].tap()
+        let manage = app.buttons["manageMyTV-sony:fixture-sony"]
+        XCTAssertTrue(manage.waitForExistence(timeout: 2))
+        manage.tap()
+        app.buttons["Forget TV"].tap()
+        XCTAssertTrue(app.staticTexts["Forget Side Door TV?"].waitForExistence(timeout: 2))
+        app.buttons["Forget"].tap()
+
+        let forgottenRow = app.buttons["myTVRow-sony:fixture-sony"]
+        let removed = expectation(
+            for: NSPredicate(format: "exists == false"),
+            evaluatedWith: forgottenRow
+        )
+        wait(for: [removed], timeout: 5)
+        XCTAssertTrue(app.buttons["myTVRow-samsung:fixture-samsung"].exists)
+    }
+
+    /// Add TV remains a prominent action from the saved-TV library.
+    @MainActor
+    func testMyTVsOpensAddTV() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-saved-tvs")
+        app.launch()
+
+        XCTAssertTrue(app.buttons["myTVsButton"].waitForExistence(timeout: 5))
+        app.buttons["myTVsButton"].tap()
+        let addTV = app.buttons["addTVFromLibraryButton"]
+        XCTAssertTrue(addTV.waitForExistence(timeout: 2))
+        addTV.tap()
+
+        XCTAssertTrue(app.navigationBars["Add TV"].waitForExistence(timeout: 3))
     }
 
     /// Runs separately from the deterministic gate against the powered-on household TV.

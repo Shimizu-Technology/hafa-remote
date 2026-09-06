@@ -9,6 +9,7 @@ final class SavedTV: CustomStringConvertible {
     var reportedDeviceID: String
     var brandRawValue: String = TVBrand.samsung.rawValue
     var displayName: String
+    var roomName: String?
     var modelName: String
     var firmwareVersion: String?
     var lastKnownAddress: String
@@ -23,6 +24,7 @@ final class SavedTV: CustomStringConvertible {
         brand: TVBrand = .samsung,
         reportedDeviceID: String,
         displayName: String,
+        roomName: String? = nil,
         modelName: String,
         firmwareVersion: String?,
         lastKnownAddress: String,
@@ -37,6 +39,7 @@ final class SavedTV: CustomStringConvertible {
         stableDeviceID = "\(brand.rawValue):\(reportedDeviceID)"
         self.reportedDeviceID = reportedDeviceID
         self.displayName = displayName
+        self.roomName = roomName
         self.modelName = modelName
         self.firmwareVersion = firmwareVersion
         self.lastKnownAddress = lastKnownAddress
@@ -70,7 +73,8 @@ final class SavedTV: CustomStringConvertible {
             brand: brand,
             reportedDeviceID: reportedDeviceID,
             address: address,
-            controlPort: validatedControlPort
+            controlPort: validatedControlPort,
+            suggestedDisplayName: displayName
         )
     }
 
@@ -84,6 +88,7 @@ final class SavedTV: CustomStringConvertible {
             reportedDeviceID: reportedDeviceID,
             address: address,
             controlPort: validatedControlPort,
+            displayName: displayName,
             modelName: modelName,
             firmwareVersion: firmwareVersion,
             networkConnection: savedMACAddress == nil ? .unavailable : .wireless,

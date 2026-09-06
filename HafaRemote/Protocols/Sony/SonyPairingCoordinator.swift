@@ -240,6 +240,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             reportedDeviceID: credential.reportedDeviceID,
             address: address,
             controlPort: Self.controlPort,
+            displayName: peer.displayName,
             modelName: device.model,
             firmwareVersion: device.softwareVersion.isEmpty ? nil : device.softwareVersion
         )
