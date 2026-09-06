@@ -92,7 +92,7 @@ assert_setting PRODUCT_NAME "Hafa Remote"
 assert_setting PRODUCT_MODULE_NAME HafaRemote
 assert_setting DEVELOPMENT_TEAM 4T358A5S74
 assert_setting MARKETING_VERSION 1.0
-assert_setting CURRENT_PROJECT_VERSION 1
+assert_setting CURRENT_PROJECT_VERSION 2
 assert_setting IPHONEOS_DEPLOYMENT_TARGET 18.4
 assert_setting TARGETED_DEVICE_FAMILY 1
 assert_setting CODE_SIGN_STYLE Automatic
@@ -105,7 +105,7 @@ fi
 
 bonjour_services="$(plutil -extract NSBonjourServices json -o - "$info_plist")"
 if [[ "$bonjour_services" != '["_androidtvremote2._tcp","_samsungmsf._tcp","_viziocast._tcp"]' ]]; then
-  echo "Bonjour declarations must contain only the verified Sony/Google TV and Samsung services." >&2
+  echo "Bonjour declarations must contain only the verified Samsung, Sony/Google TV, and Vizio services." >&2
   exit 1
 fi
 
@@ -265,7 +265,7 @@ if [[ -n "$export_path" ]]; then
   exported_info="$exported_app/Info.plist"
   [[ "$(plutil -extract CFBundleIdentifier raw "$exported_info")" == "com.shimizutechnology.hafaremote" ]] || { echo "Exported bundle ID does not match." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleShortVersionString raw "$exported_info")" == "1.0" ]] || { echo "Exported marketing version does not match." >&2; exit 1; }
-  [[ "$(plutil -extract CFBundleVersion raw "$exported_info")" == "1" ]] || { echo "Exported build number does not match." >&2; exit 1; }
+  [[ "$(plutil -extract CFBundleVersion raw "$exported_info")" == "2" ]] || { echo "Exported build number does not match." >&2; exit 1; }
   [[ -f "$exported_app/PrivacyInfo.xcprivacy" ]] || { echo "Exported app is missing PrivacyInfo.xcprivacy." >&2; exit 1; }
   codesign --verify --deep --strict "$exported_app"
   codesign -d --entitlements :- "$exported_app" >"$export_tmp/entitlements.plist" 2>/dev/null
@@ -273,4 +273,4 @@ if [[ -n "$export_path" ]]; then
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :get-task-allow' "$export_tmp/entitlements.plist")" == "false" ]] || { echo "Exported app is debuggable." >&2; exit 1; }
 fi
 
-echo "iOS release preflight passed for Hafa Remote 1.0 (1) with Xcode $xcode_version / iOS SDK $sdk_version"
+echo "iOS release preflight passed for Hafa Remote 1.0 (2) with Xcode $xcode_version / iOS SDK $sdk_version"

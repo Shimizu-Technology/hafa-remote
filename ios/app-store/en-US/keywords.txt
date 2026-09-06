@@ -1,1 +1,1 @@
-samsung,tv,remote,control,smart tv,wifi,keyboard,volume
+tv,remote,control,samsung,sony,vizio,smart tv,wifi,keyboard,volume,power

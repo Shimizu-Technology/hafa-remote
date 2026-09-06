@@ -1,10 +1,10 @@
 # Hafa Remote
 ## Product Requirements Document
 
-**Version:** 0.2
-**Date:** September 5, 2026
+**Version:** 0.3
+**Date:** September 6, 2026
 **Owner:** Shimizu Technology
-**Status:** Samsung internal alpha available; mixed-brand expansion in progress
+**Status:** Three-brand internal TestFlight candidate; household hardware validation pending
 
 ## Executive summary
 
@@ -42,7 +42,7 @@ The core job is: **Open Hafa Remote, select the intended television if necessary
 ### Required controls
 
 - Power off while connected
-- Power on through Wake-on-LAN only when setup and testing prove it is supported
+- Power on through the brand-specific local power-on path only when setup and testing prove it is supported
 - Volume up and volume down
 - Mute
 - D-pad: up, down, left, right, and select
@@ -52,7 +52,7 @@ The core job is: **Open Hafa Remote, select the intended television if necessary
 - Button-repeat behavior for directional and volume controls
 - Haptic feedback for taps and connection-state changes
 
-Commands use a reviewed allowlist. Factory, service-menu, hospitality, reset, and other potentially destructive Samsung keys are never included.
+Commands use a reviewed allowlist. Factory, service-menu, hospitality, reset, and other potentially destructive keys are never included.
 
 ### Compatibility policy
 
@@ -104,7 +104,7 @@ The main session state machine must represent at least:
 - Siri, widgets, Shortcuts, Live Activities, or home-screen controls
 - Custom layouts, macros, scenes, or automations
 - Subscription billing, advertising, telemetry, or behavioral analytics
-- Claims of universal Samsung compatibility
+- Claims of universal brand or model compatibility
 
 ## Primary user flows
 
@@ -128,7 +128,7 @@ The main session state machine must represent at least:
 
 ### Power-on
 
-1. When a saved Samsung TV is offline, explicitly wireless, and has a known MAC address plus verified wake support, the power control sends a Wake-on-LAN packet. Sony and Vizio use separately tested brand-specific power behavior and never enter this Samsung wake path.
+1. When a saved Samsung TV is offline, explicitly wireless, and has a known MAC address plus verified wake support, the power control sends three unicast Wake-on-LAN packets to the saved private address on UDP port 9. Sony and Vizio use separately tested brand-specific power behavior and never enter this Samsung wake path.
 2. Hafa Remote displays **Waking TV…**, searches for the TV, and connects when it becomes available.
 3. If wake support is unknown or has failed, the app explains the TV/network limitation and does not imply success.
 
@@ -367,8 +367,8 @@ Do not submit until:
 - A basic trademark/name check is complete. A preliminary web search found no exact App Store match for **Hafa Remote**, but this is not formal clearance.
 - App Review receives a short pairing/usage video and clear hardware-review notes.
 - A clearly labeled offline demo mode lets App Review inspect the interface and state transitions without pretending to control a television.
-- App metadata says the product is independently developed and not affiliated with Samsung.
-- The icon and screenshots contain no Samsung logo or copied remote trade dress.
+- App metadata says the product is independently developed and not affiliated with Samsung, Sony, or Vizio.
+- The icon and screenshots contain no manufacturer logo or copied remote trade dress.
 - App Privacy answers match the shipped binary; version one should qualify as **Data Not Collected** only if no SDK or feature changes that fact.
 
 ## Product success measures
@@ -387,14 +387,14 @@ The public-release decision is based on the device matrix and TestFlight crash d
 ## Branding and App Store positioning
 
 - **Product name:** Hafa Remote
-- **Working subtitle:** TV Remote — No Subscription
+- **Working subtitle:** Simple Wi-Fi TV remote
 - **Promise:** Fast local control without an account, ads, or a weekly subscription
 - **Tone:** Calm, trustworthy, direct, and local—not a loud “universal remote” clone
 - **Bundle ID:** `com.shimizutechnology.hafaremote`
 - **Category:** Utilities
 - **Age rating:** Expected 4+, subject to final App Store questionnaire
 
-The listing may use Samsung descriptively to explain compatibility, but the product name, icon, and visual system remain Hafa Remote.
+The listing may use manufacturer names descriptively to explain compatibility, but the product name, icon, and visual system remain Hafa Remote.
 
 ## Release sequence
 
@@ -411,12 +411,10 @@ The listing may use Samsung descriptively to explain compatibility, but the prod
 These do not block the protocol spike:
 
 - Final icon, palette, and visual identity
-- Public privacy-policy and support URLs
-- Final App Store subtitle and keywords
 - Whether a later one-time Supporter purchase is worth adding
-- The exact Samsung model/firmware compatibility claims, which must come from testing
-- Whether Apple grants the multicast entitlement needed for future Wake-on-LAN
-- Whether Samsung will authorize public use of its local-control protocol; this is the largest release blocker
+- The exact Samsung, Sony, and Vizio model/firmware compatibility claims, which must come from testing
+- Whether a future broadcast Wake-on-LAN path is needed; build 2 uses unicast and requests no multicast entitlement
+- Whether each manufacturer integration has a defensible public-distribution basis; this is the largest public-release blocker
 
 ## Reference material
 

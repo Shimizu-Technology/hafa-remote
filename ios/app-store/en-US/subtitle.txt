@@ -1,1 +1,1 @@
-Simple Samsung TV control
+Simple Wi-Fi TV remote

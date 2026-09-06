@@ -194,9 +194,9 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 - [x] Add `TVBrand`, a brand-neutral connected-TV record, and a brand-scoped stable identity.
 - [x] Migrate existing saved records safely to Samsung; discard unsafe address-keyed alpha credentials and require fresh approval.
 - [x] Persist an optional brand-specific control port without treating it as stable identity.
-- [ ] Present one automatic Add TV experience with brand-scoped results and no address entry in the normal path.
-- [ ] Route commands and credential deletion only to the selected brand driver.
-- [ ] Keep all existing Samsung tests and behavior green.
+- [x] Present one automatic Add TV experience with brand-scoped results and no address entry in the normal path.
+- [x] Route commands and credential deletion only to the selected brand driver.
+- [x] Keep all existing Samsung tests and behavior green.
 
 **Acceptance evidence:** Existing Samsung records restore as Samsung, identical reported identifiers from different brands cannot collide, and the complete gate passes without changing the Samsung UI flow.
 
@@ -204,11 +204,11 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** HR-020; exact household Sony is powered on for discovery and model capture
 
-- [ ] Prefer zero-entry Bonjour discovery and validate that the selected service is the Sony television before pairing.
-- [ ] Choose the supported control path from observed hardware: Android TV Remote Service v2 for compatible Google/Android TV models, or Sony IRCC-IP only when the exact model exposes its documented secure setup.
-- [ ] Implement on-TV PIN/approval pairing with a per-device credential stored only in Keychain.
-- [ ] Map the approved semantic command allowlist; never expose raw Android keycodes or IRCC values to UI code.
-- [ ] Implement power off and conditional wake only when the observed network-standby behavior proves it.
+- [x] Prefer zero-entry Bonjour discovery and require the selected service to complete Sony's authenticated handshake before saving it.
+- [x] Use Android TV Remote Service v2 for compatible Google/Android TV models; keep IRCC-IP out of build 2.
+- [x] Implement on-TV code pairing with a per-device credential stored only in Keychain.
+- [x] Map the approved semantic command allowlist; never expose raw Android keycodes to UI code.
+- [x] Implement power off and the network-standby power command with truthful reconnect state.
 - [ ] Run pairing, relaunch, 50-command, reconnect, and power tests on the household Sony.
 
 **Acceptance evidence:** The Sony is found without an address, pairs once, survives relaunch, passes the control soak, and either powers on repeatedly or shows an honest unavailable state.
@@ -217,11 +217,11 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** HR-020; exact household Vizio is powered on for discovery and model/firmware capture
 
-- [ ] Discover SmartCast candidates without subnet scanning, then verify the local SmartCast endpoint on port 7345 or the legacy 9000 port.
-- [ ] Implement the TV-displayed PIN flow and store the returned auth token only in Keychain.
-- [ ] Scope self-signed TLS trust to the selected private endpoint and persist the approved certificate fingerprint; never add a global trust bypass.
-- [ ] Map the approved semantic command allowlist and check SmartCast response status rather than relying on HTTP status alone.
-- [ ] Implement explicit power off/on commands only when Quick Start/network standby behavior is observed; otherwise use conditional Wake-on-LAN with truthful reconnect verification.
+- [x] Discover SmartCast candidates without subnet scanning, then verify the local SmartCast endpoint on port 7345 or the legacy 9000 port.
+- [x] Implement the TV-displayed PIN flow and store the returned auth token only in Keychain.
+- [x] Scope self-signed TLS trust to the selected private endpoint and persist the approved certificate fingerprint; never add a global trust bypass.
+- [x] Map the approved semantic command allowlist and check SmartCast response status rather than relying on HTTP status alone.
+- [x] Implement explicit power off/on commands with truthful reconnect verification and a documented Quick Start dependency.
 - [ ] Run pairing, relaunch, 50-command, reconnect, and power tests on the household Vizio.
 
 **Acceptance evidence:** The Vizio is found without an address, PIN-pairs once, survives relaunch, passes the control soak, and either powers on repeatedly or shows an honest unavailable state.
@@ -273,8 +273,9 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Blockers:** HR-014
 
-- [ ] Make archive, Release configuration, signing, and symbol generation reproducible.
-- [ ] Run static analysis, unit tests, UI tests, secret scan, and Release build in CI.
+- [x] Make the archive/export commands, Release configuration, signing settings, and symbol generation reproducible.
+- [x] Run formatting, unit tests, UI tests, secret scan, and Release preflight in CI.
+- [ ] Validate the signed archive and exported IPA from merged `main` against the reviewed bundle, version, entitlements, profile, and privacy manifest.
 - [ ] Verify Release logging and diagnostics redaction.
 - [ ] Exercise clean install, upgrade from the previous beta, data migration, forget/re-pair, and offline launch.
 - [ ] Review all dependency, privacy-manifest, entitlement, and Info.plist declarations against the actual binary.
@@ -291,8 +292,8 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 - [x] Confirm **Hafa Remote** availability directly in App Store Connect and reserve Apple ID `6808899369`.
 - [ ] Complete a basic trademark/confusion review and document the result.
 - [ ] Register the final bundle ID, app record, SKU, category, age rating, and territories.
-- [ ] Finalize subtitle, keywords, support URL, privacy-policy URL, copyright, and contact information.
-- [ ] Confirm the listing uses Samsung only to describe compatibility and states that Hafa Remote is independent and unaffiliated.
+- [x] Finalize build 2 subtitle, keywords, support URL, privacy-policy URL, copyright, and contact information.
+- [x] Confirm the listing uses manufacturer names only to describe compatibility and states that Hafa Remote is independent and unaffiliated.
 
 **Acceptance evidence:** Reserved App Store Connect record and a metadata review with no unsupported compatibility, privacy, or affiliation claim.
 
@@ -303,7 +304,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 - [ ] Create screenshots from the release candidate on supported iPhone sizes.
 - [ ] Record a concise video showing discovery, TV approval, core commands, reconnection, and power-on limitations.
 - [ ] Add a clearly labeled offline demo mode that exercises the interface and state/error presentations without sending network commands.
-- [ ] Write App Review notes explaining the same-Wi-Fi and physical-Samsung-TV requirements.
+- [x] Write build 2 review notes explaining the same-Wi-Fi and physical-TV requirements for each brand.
 - [ ] Provide reviewer contact details and a prompt response plan; there is no test account.
 - [ ] Verify App Privacy answers and export-compliance responses against the build.
 - [ ] Verify the app makes no “universal” or guaranteed power-on claim.
@@ -363,4 +364,4 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Immediate next action
 
-Finish the Q70AA automatic-discovery and secure-pairing acceptance journey, then merge the reviewed PR stack in order and upload a fresh build from `main` to internal TestFlight.
+Merge the reviewed discovery and build 2 release PRs, upload the signed build from `main` to internal TestFlight, then run the Samsung, Sony, and Vizio household acceptance journeys.

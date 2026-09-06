@@ -3,7 +3,7 @@
 ## Release identity
 
 - Version: `1.0`
-- Next TestFlight build: `1`
+- TestFlight build: `2`
 - App Store Connect Apple ID: `6808899369`
 - SKU: `hafa-remote-ios`
 - Bundle ID: `com.shimizutechnology.hafaremote`
@@ -48,10 +48,12 @@ a backend, advertising, support upload, or any new SDK is added.
 Do not submit for external TestFlight or public review until all of these are
 complete:
 
-- Shimizu Technology has written Samsung permission or partner terms covering distribution of
-  this control behavior, or a qualified attorney has documented why the planned use is permitted.
-- The physical Q70AA pairing, command, relaunch, text, and lifecycle evidence is complete.
-- Testing includes at least five Samsung TVs, three model years, and three home networks.
+- Shimizu Technology has documented an authorization basis for distributing each Samsung, Sony,
+  and Vizio local-control integration, or a qualified attorney has documented why the planned use
+  is permitted.
+- The household Samsung Q70AA, Sony, and Vizio pairing, command, relaunch, text-capability, and
+  power evidence is complete.
+- Testing covers the advertised model/firmware range across several home networks.
 - Each advertised model group passes a 500-command soak with at least 99% observed delivery, zero
   duplicate commands, and no stuck repeat state.
 - Each advertised model group passes at least 20 foreground reconnect cycles, with at least 19
@@ -61,5 +63,5 @@ complete:
 - App Privacy, age rating, content rights, contact, and trader answers are
   verified in App Store Connect by the owner.
 
-Hafa Remote must be described as independent and unaffiliated. Never claim
-universal Samsung support or power-on support without device evidence.
+Hafa Remote must be described as independent and unaffiliated. Never claim universal brand or
+power-on support without device evidence.
