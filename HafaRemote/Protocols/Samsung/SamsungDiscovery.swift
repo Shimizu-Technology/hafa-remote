@@ -71,6 +71,11 @@ protocol TVDiscoveryBackend: AnyObject {
 @MainActor
 @Observable
 final class TVDiscoveryStore {
+    private static let genericDisplayNames: Set<String> = [
+        "android tv", "google tv", "samsung tv", "smart tv", "smartcast", "sony tv", "television",
+        "tv", "vizio tv",
+    ]
+
     private(set) var state: TVDiscoveryState = .idle
     private(set) var televisions: [DiscoveredTV] = []
 
@@ -132,8 +137,35 @@ final class TVDiscoveryStore {
 
         switch event {
         case .found(let television):
-            if let index = televisions.firstIndex(where: { $0.id == television.id }) {
-                televisions[index] = television
+            if var endpointIndex = televisions.firstIndex(where: {
+                $0.brand == television.brand && $0.address == television.address
+                    && $0.controlPort == television.controlPort
+            }) {
+                if televisions[endpointIndex].id == television.id {
+                    televisions[endpointIndex] = television
+                } else {
+                    if let identityIndex = televisions.firstIndex(where: { $0.id == television.id }) {
+                        televisions.remove(at: identityIndex)
+                        if identityIndex < endpointIndex {
+                            endpointIndex -= 1
+                        }
+                    }
+                    let existing = televisions[endpointIndex]
+                    if Self.displayNameScore(television.displayName)
+                        > Self.displayNameScore(existing.displayName)
+                    {
+                        televisions[endpointIndex] = DiscoveredTV(
+                            brand: existing.brand,
+                            reportedIdentifier: existing.reportedIdentifier,
+                            displayName: television.displayName,
+                            modelName: existing.modelName,
+                            address: existing.address,
+                            controlPort: existing.controlPort
+                        )
+                    }
+                }
+            } else if let identityIndex = televisions.firstIndex(where: { $0.id == television.id }) {
+                televisions[identityIndex] = television
             } else {
                 televisions.append(television)
             }
@@ -159,6 +191,19 @@ final class TVDiscoveryStore {
     private func finishSearch() {
         stop(resetState: false)
         state = televisions.isEmpty ? .noResults : .results
+    }
+
+    private static func displayNameScore(_ name: String) -> Int {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercased = normalized.lowercased()
+        var score = 0
+        if normalized.contains(" ") { score += 1 }
+        if lowercased.contains("tv") { score += 2 }
+        if normalized.contains(where: { $0.isNumber }) { score -= 1 }
+        if genericDisplayNames.contains(lowercased) {
+            score -= 3
+        }
+        return score
     }
 }
 

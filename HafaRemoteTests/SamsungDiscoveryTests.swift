@@ -89,6 +89,167 @@ struct SamsungDiscoveryTests {
     }
 
     @MainActor
+    @Test("Discovery collapses duplicate service names for one brand endpoint")
+    func deduplicatesByBrandEndpointAndKeepsTheFriendlierName() throws {
+        let address = try PrivateIPv4Address("192.168.10.30")
+        let modelAdvertisement = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: "sony-model-advertisement",
+            displayName: "XBR-55X700D",
+            modelName: "Google TV",
+            address: address,
+            controlPort: 6466
+        )
+        let roomAdvertisement = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: "sony-room-advertisement",
+            displayName: "Side Door TV",
+            modelName: "Google TV",
+            address: address,
+            controlPort: 6466
+        )
+        let backend = DiscoveryBackendSpy(
+            events: [.found(modelAdvertisement), .found(roomAdvertisement), .finished]
+        )
+        let store = TVDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
+
+        store.start()
+
+        #expect(store.televisions.count == 1)
+        #expect(store.televisions[0].reportedIdentifier == modelAdvertisement.reportedIdentifier)
+        #expect(store.televisions[0].displayName == roomAdvertisement.displayName)
+        #expect(store.televisions[0].connectionTarget == modelAdvertisement.connectionTarget)
+    }
+
+    @MainActor
+    @Test("Discovery does not replace a room name with a generic TV label")
+    func keepsRoomNameOverGenericLabel() throws {
+        let address = try PrivateIPv4Address("192.168.10.30")
+        let roomAdvertisement = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: "sony-room-advertisement",
+            displayName: "Living Room",
+            modelName: "Google TV",
+            address: address,
+            controlPort: 6466
+        )
+        let genericAdvertisement = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: "sony-generic-advertisement",
+            displayName: "TV",
+            modelName: "Google TV",
+            address: address,
+            controlPort: 6466
+        )
+        let backend = DiscoveryBackendSpy(
+            events: [.found(roomAdvertisement), .found(genericAdvertisement), .finished]
+        )
+        let store = TVDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
+
+        store.start()
+
+        #expect(store.televisions == [roomAdvertisement])
+    }
+
+    @MainActor
+    @Test("Discovery keeps different brands at the same endpoint separate")
+    func keepsSameEndpointAcrossBrandsSeparate() throws {
+        let address = try PrivateIPv4Address("192.168.10.30")
+        let sony = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: "sony-shared-endpoint",
+            displayName: "Living Room Sony",
+            modelName: "Google TV",
+            address: address,
+            controlPort: 6466
+        )
+        let vizio = DiscoveredTV(
+            brand: .vizio,
+            reportedIdentifier: "vizio-shared-endpoint",
+            displayName: "Living Room Vizio",
+            modelName: "SmartCast",
+            address: address,
+            controlPort: 6466
+        )
+        let backend = DiscoveryBackendSpy(events: [.found(sony), .found(vizio), .finished])
+        let store = TVDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
+
+        store.start()
+
+        #expect(store.televisions == [sony, vizio])
+    }
+
+    @MainActor
+    @Test("Discovery keeps same-brand services on different control ports separate")
+    func keepsDifferentControlEndpointsSeparate() throws {
+        let address = try PrivateIPv4Address("192.168.10.30")
+        let first = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: "sony-remote-service",
+            displayName: "Side Door TV",
+            modelName: "Google TV",
+            address: address,
+            controlPort: 6466
+        )
+        let second = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: "sony-other-service",
+            displayName: "Side Door TV",
+            modelName: "Google TV",
+            address: address,
+            controlPort: 6467
+        )
+        let backend = DiscoveryBackendSpy(events: [.found(first), .found(second), .finished])
+        let store = TVDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
+
+        store.start()
+
+        #expect(store.televisions == [first, second])
+    }
+
+    @MainActor
+    @Test("Discovery removes an old identity endpoint when it moves onto an existing endpoint")
+    func deduplicatesIdentityMovingOntoExistingEndpoint() throws {
+        let firstAddress = try PrivateIPv4Address("192.168.10.30")
+        let secondAddress = try PrivateIPv4Address("192.168.10.31")
+        let original = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: "sony-moving-service",
+            displayName: "Bedroom TV",
+            modelName: "Google TV",
+            address: firstAddress,
+            controlPort: 6466
+        )
+        let existingEndpoint = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: "sony-existing-service",
+            displayName: "TV",
+            modelName: "Google TV",
+            address: secondAddress,
+            controlPort: 6466
+        )
+        let moved = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: original.reportedIdentifier,
+            displayName: "Living Room TV",
+            modelName: "Google TV",
+            address: secondAddress,
+            controlPort: 6466
+        )
+        let backend = DiscoveryBackendSpy(
+            events: [.found(original), .found(existingEndpoint), .found(moved), .finished]
+        )
+        let store = TVDiscoveryStore(backend: backend, searchDuration: .milliseconds(50))
+
+        store.start()
+
+        #expect(store.televisions.count == 1)
+        #expect(store.televisions[0].reportedIdentifier == existingEndpoint.reportedIdentifier)
+        #expect(store.televisions[0].displayName == moved.displayName)
+        #expect(store.televisions[0].connectionTarget == existingEndpoint.connectionTarget)
+    }
+
+    @MainActor
     @Test("A completed search with no verified TVs has a useful empty state")
     func representsNoResults() {
         let backend = DiscoveryBackendSpy(events: [.finished])
