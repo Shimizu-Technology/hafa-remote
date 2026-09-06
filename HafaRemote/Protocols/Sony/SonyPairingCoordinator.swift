@@ -102,6 +102,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         guard isRemoteSessionAlive else {
             throw SonyTLSChannelError.connectionClosed
         }
+        try await controlChannel.checkConnection()
     }
 
     func forget(reportedDeviceID: String) async throws {

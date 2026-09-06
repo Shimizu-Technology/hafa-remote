@@ -133,12 +133,9 @@ final class TVDiscoveryStore {
 
     /// Finds a previously saved TV by stable brand-scoped identity, regardless of its current IP.
     func findDevice(stableDeviceKey: String) async -> TVConnectionTarget? {
-        if let match = televisions.first(where: { $0.id == stableDeviceKey }) {
-            return match.connectionTarget
-        }
-        if state != .searching {
-            start()
-        }
+        // A remembered endpoint is only a cache. Every recovery attempt needs a
+        // new scan so a second DHCP move cannot reuse the previous result.
+        start()
         guard state == .searching else {
             return televisions.first(where: { $0.id == stableDeviceKey })?.connectionTarget
         }
@@ -218,7 +215,9 @@ final class TVDiscoveryStore {
                 return $0.brand.rawValue < $1.brand.rawValue
             }
             state = .results
-            resolveIdentityWaiters(with: television)
+            if let canonical = televisions.first(where: { $0.id == television.id }) {
+                resolveIdentityWaiters(with: canonical)
+            }
         case .finished:
             finishSearch()
         case .permissionDenied:

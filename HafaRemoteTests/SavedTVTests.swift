@@ -820,6 +820,43 @@ struct SavedTVTests {
         #expect(connectedTargets == [moved.connectionTarget])
         #expect(!recovery.isRecovering)
     }
+
+    @MainActor
+    @Test("Cancelling saved-TV recovery stops discovery and cannot reconnect later")
+    func cancellingSavedTVRecoveryPreventsConnection() async throws {
+        let cached = TVConnectionTarget(
+            brand: .samsung,
+            reportedDeviceID: "saved-samsung",
+            address: try PrivateIPv4Address("192.168.10.30"),
+            controlPort: 8_002
+        )
+        let backend = PendingSavedTVRecoveryDiscoveryBackend()
+        let recovery = SavedTVAddressRecoveryCoordinator(
+            discovery: TVDiscoveryStore(backend: backend, searchDuration: .seconds(30))
+        )
+        var connectedTargets: [TVConnectionTarget] = []
+        recovery.recover(stableDeviceKey: "samsung:saved-samsung", cachedTarget: cached) {
+            connectedTargets.append($0)
+        }
+        await backend.waitUntilStarted()
+
+        recovery.cancel()
+        backend.emit(
+            .found(
+                DiscoveredTV(
+                    reportedIdentifier: "saved-samsung",
+                    displayName: "Living Room TV",
+                    modelName: "Samsung TV",
+                    address: try PrivateIPv4Address("192.168.10.31")
+                )
+            )
+        )
+        await Task.yield()
+
+        #expect(!recovery.isRecovering)
+        #expect(backend.stopCount >= 1)
+        #expect(connectedTargets.isEmpty)
+    }
 }
 
 private enum RestorationTestError: Error {
@@ -841,6 +878,37 @@ private final class SavedTVRecoveryDiscoveryBackend: TVDiscoveryBackend {
     }
 
     func stop() {}
+}
+
+@MainActor
+private final class PendingSavedTVRecoveryDiscoveryBackend: TVDiscoveryBackend {
+    private var eventHandler: (@MainActor @Sendable (TVDiscoveryBackendEvent) -> Void)?
+    private(set) var stopCount = 0
+    private var startCount = 0
+
+    func start(
+        eventHandler: @escaping @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void
+    ) {
+        startCount += 1
+        self.eventHandler = eventHandler
+    }
+
+    func stop() {
+        stopCount += 1
+    }
+
+    func emit(_ event: TVDiscoveryBackendEvent) {
+        eventHandler?(event)
+    }
+
+    func waitUntilStarted() async {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(2))
+        while startCount == 0, clock.now < deadline {
+            await Task.yield()
+        }
+        #expect(startCount == 1)
+    }
 }
 
 private actor SelectionCancellationGate {

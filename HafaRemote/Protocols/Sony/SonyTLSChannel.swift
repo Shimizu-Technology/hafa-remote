@@ -134,7 +134,12 @@ protocol SonyTLSChanneling: Sendable {
     ) async throws -> SonyTLSPeer
     func send(_ message: Data) async throws
     func receive() async throws -> Data
+    func checkConnection() async throws
     func disconnect() async
+}
+
+extension SonyTLSChanneling {
+    func checkConnection() async throws {}
 }
 
 /// Makes the non-Sendable Security identity safe to pass only as an immutable reference.
@@ -190,6 +195,10 @@ actor SonyTLSChannel: SonyTLSChanneling {
         }
         let tcpOptions = NWProtocolTCP.Options()
         tcpOptions.connectionTimeout = 10
+        tcpOptions.enableKeepalive = true
+        tcpOptions.keepaliveIdle = 15
+        tcpOptions.keepaliveInterval = 5
+        tcpOptions.keepaliveCount = 2
         let parameters = NWParameters(tls: tlsOptions, tcp: tcpOptions)
         parameters.requiredInterfaceType = .wifi
         let connection = NWConnection(
@@ -260,6 +269,20 @@ actor SonyTLSChannel: SonyTLSChanneling {
             ) {
                 return message
             }
+        }
+    }
+
+    func checkConnection() throws {
+        guard let connection else { throw SonyTLSChannelError.connectionClosed }
+        switch connection.state {
+        case .ready:
+            return
+        case .setup, .preparing, .waiting:
+            throw SonyTLSChannelError.unavailable
+        case .failed, .cancelled:
+            throw SonyTLSChannelError.connectionClosed
+        @unknown default:
+            throw SonyTLSChannelError.unavailable
         }
     }
 
