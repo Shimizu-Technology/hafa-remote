@@ -149,7 +149,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 - [x] Add deterministic tests for duplicate discovery, credential deletion, address refresh, and rapid switching.
 - [ ] Complete the ten-switch household hardware soak, including renamed TVs.
 
-**Acceptance evidence:** Multiple TVs can be paired, renamed, switched ten times, relaunched, and forgotten without crossing brand identity, credentials, or commands.
+**Acceptance evidence:** Automated coverage proves that multiple TVs can be saved, switched rapidly, restored, rediscovered at a changed address, and forgotten without crossing brand identity, credentials, or commands. Editable names and the ten-switch household soak remain pending.
 
 ### HR-009 — Complete the production-quality remote experience
 
