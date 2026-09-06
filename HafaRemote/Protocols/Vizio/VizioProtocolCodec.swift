@@ -168,9 +168,17 @@ enum VizioProtocolCodec {
     static func deviceInfo(from data: Data) throws -> VizioDeviceInfo {
         let response = try decode(VizioDeviceInfoResponse.self, from: data)
         try requireSuccess(response.status)
-        guard let item = response.preferredItem else {
-            throw VizioProtocolError.invalidResponse
+        for item in response.candidateItems {
+            if let deviceInfo = try? validatedDeviceInfo(from: item) {
+                return deviceInfo
+            }
         }
+        throw VizioProtocolError.invalidResponse
+    }
+
+    private static func validatedDeviceInfo(
+        from item: VizioDeviceInfoResponse.NormalizedItem
+    ) throws -> VizioDeviceInfo {
         let reportedDeviceID = try validatedText(item.serialNumber, maximumBytes: 512)
         let displayName = try validatedText(item.castName, maximumBytes: 80)
         let modelName = try validatedText(item.modelName, maximumBytes: 80)
@@ -394,24 +402,22 @@ private struct VizioDeviceInfoResponse: Decodable {
         let firmwareVersion: String?
     }
 
-    var preferredItem: NormalizedItem? {
+    var candidateItems: [NormalizedItem] {
         let values = items.compactMap(\.normalizedValue) + [item?.normalizedValue].compactMap { $0 }
-        guard
-            let value = values.first(where: {
-                $0.resolvedSerialNumber != nil && $0.castName != nil && $0.resolvedModelName != nil
-            }),
-            let serialNumber = value.resolvedSerialNumber,
-            let castName = value.castName,
-            let modelName = value.resolvedModelName
-        else {
-            return nil
+        return values.compactMap { value in
+            guard let serialNumber = value.resolvedSerialNumber,
+                let castName = value.castName,
+                let modelName = value.resolvedModelName
+            else {
+                return nil
+            }
+            return NormalizedItem(
+                serialNumber: serialNumber,
+                castName: castName,
+                modelName: modelName,
+                firmwareVersion: value.resolvedFirmwareVersion
+            )
         }
-        return NormalizedItem(
-            serialNumber: serialNumber,
-            castName: castName,
-            modelName: modelName,
-            firmwareVersion: value.resolvedFirmwareVersion
-        )
     }
 
     enum CodingKeys: String, CodingKey {
