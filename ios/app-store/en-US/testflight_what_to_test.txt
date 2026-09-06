@@ -1,9 +1,11 @@
-Build 3 household regression:
+Build 4 connection and saved-TV regression:
 
-1. Vizio: with the TV on, use Add TV and confirm discovery opens the PIN flow. Pair, send Power, D-pad, Home, Back, Volume, Mute, and playback commands, then relaunch and reconnect from My TVs.
-2. Sony: confirm Power Off puts the TV into standby and does not report success when delivery fails. Then test Power On with Remote Start or network standby enabled.
-3. Samsung: test Power On with Power On With Mobile enabled. Power-on support still depends on the TV remaining reachable in standby.
-4. My TVs: save all household TVs, add names and optional rooms, switch between each TV ten times without rescanning, relaunch the app, and confirm every TV remains available.
-5. Forget TV: forget an inactive TV and confirm the current remote stays connected. Forget the selected TV and confirm Hafa Remote chooses a valid remaining TV without selecting a broken or pending record.
+1. Foreground idle: connect to each Samsung, Sony, and Vizio TV, leave Hafa Remote open and untouched for at least two minutes, then send D-pad and volume commands. Control should resume without a manual reconnect.
+2. Background return: lock the iPhone or use another app for at least two minutes, return to Hafa Remote, and send a command. iOS suspends local-network connections in the background, so a brief automatic reconnect is expected; no button or re-pairing should be required.
+3. Network interruption: while connected, briefly disable and restore Wi-Fi. Leave Hafa Remote open and confirm it keeps retrying until the saved TV becomes reachable, then resumes control without re-pairing.
+4. My TVs persistence: save all household TVs with names and optional rooms, force-quit and relaunch Hafa Remote, and confirm every TV remains visible.
+5. Saved-TV switching: switch among the Samsung, Sony, and Vizio at least ten times without using Add TV. Each selection should connect to the intended TV.
+6. Address recovery: after a router restart or DHCP address change, select the saved TV. Hafa Remote should find it by device identity and update its cached address instead of requiring it to be added again.
+7. Power regression: confirm Samsung, Sony, and Vizio power behavior still matches the TV settings and capabilities. Power-on requires the TV's network standby or mobile-power setting.
 
 All tests require the iPhone and TV on the same non-guest local network. Pair each TV once while it is on; first-time pairing cannot be completed while a TV is off. No account or backend is used.
