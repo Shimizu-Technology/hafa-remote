@@ -280,7 +280,7 @@ actor SonyTLSChannel: SonyTLSChanneling {
         case .setup, .preparing:
             throw SonyTLSChannelError.unavailable
         case .waiting:
-            return
+            throw SonyTLSChannelError.unavailable
         case .failed, .cancelled:
             throw SonyTLSChannelError.connectionClosed
         @unknown default:

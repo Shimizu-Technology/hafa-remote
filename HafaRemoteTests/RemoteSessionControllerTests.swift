@@ -1157,8 +1157,10 @@ struct RemoteSessionControllerTests {
             driver: driver,
             clock: clock,
             configuration: testConfiguration(
+                commandTimeout: .seconds(9),
                 reconnectDelays: [.seconds(2)],
-                healthCheckInterval: .seconds(5)
+                healthCheckInterval: .seconds(5),
+                healthCheckTimeout: .seconds(7)
             )
         )
         await session.connect(to: tv.address.rawValue)
