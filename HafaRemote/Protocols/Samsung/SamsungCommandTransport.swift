@@ -266,10 +266,22 @@ enum SamsungPingProbe {
     static func run(
         _ sendPing: (@escaping @Sendable (Error?) -> Void) -> Void
     ) async throws {
+        try await run(beforeSending: {}, sendPing: sendPing)
+    }
+
+    static func run(
+        beforeSending: @escaping @Sendable () -> Void,
+        sendPing: (@escaping @Sendable (Error?) -> Void) -> Void
+    ) async throws {
         let race = SamsungPingProbeRace()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 guard race.install(continuation) else { return }
+                beforeSending()
+                guard !Task.isCancelled else {
+                    race.resolve(.failure(CancellationError()))
+                    return
+                }
                 sendPing { error in
                     if let error {
                         race.resolve(.failure(error))

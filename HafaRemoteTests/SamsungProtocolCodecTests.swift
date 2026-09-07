@@ -575,6 +575,26 @@ struct SamsungPingProbeTests {
         }
         harness.complete(error: nil)
     }
+
+    @Test("Cancellation before send suppresses the WebSocket ping")
+    func cancellationBeforeSendSuppressesPing() async {
+        let gate = SamsungPingCancellationGate()
+        let probe = Task {
+            try await SamsungPingProbe.run(
+                beforeSending: { gate.waitBeforeSending() },
+                sendPing: { _ in gate.recordPing() }
+            )
+        }
+        await waitForPingGate(gate)
+
+        probe.cancel()
+        gate.release()
+
+        await #expect(throws: CancellationError.self) {
+            try await probe.value
+        }
+        #expect(gate.pingCount == 0)
+    }
 }
 
 private enum SyntheticSamsungPingError: Error {
@@ -694,6 +714,47 @@ private final class SamsungPingProbeHarness: @unchecked Sendable {
     }
 }
 
+private final class SamsungPingCancellationGate: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var isReleased = false
+    private var waiting = false
+    private var recordedPingCount = 0
+
+    var isWaiting: Bool {
+        condition.lock()
+        defer { condition.unlock() }
+        return waiting
+    }
+
+    var pingCount: Int {
+        condition.lock()
+        defer { condition.unlock() }
+        return recordedPingCount
+    }
+
+    func waitBeforeSending() {
+        condition.lock()
+        waiting = true
+        while !isReleased {
+            condition.wait()
+        }
+        condition.unlock()
+    }
+
+    func release() {
+        condition.lock()
+        isReleased = true
+        condition.broadcast()
+        condition.unlock()
+    }
+
+    func recordPing() {
+        condition.lock()
+        recordedPingCount += 1
+        condition.unlock()
+    }
+}
+
 private func waitForPingInstallation(
     _ harness: SamsungPingProbeHarness,
     sourceLocation: SourceLocation = #_sourceLocation
@@ -703,6 +764,17 @@ private func waitForPingInstallation(
         await Task.yield()
     }
     Issue.record("Timed out waiting for the ping callback.", sourceLocation: sourceLocation)
+}
+
+private func waitForPingGate(
+    _ gate: SamsungPingCancellationGate,
+    sourceLocation: SourceLocation = #_sourceLocation
+) async {
+    for _ in 0..<10_000 {
+        if gate.isWaiting { return }
+        await Task.yield()
+    }
+    Issue.record("Timed out waiting for the pre-ping gate.", sourceLocation: sourceLocation)
 }
 
 private actor CommandOrderRecorder {
