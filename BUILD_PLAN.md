@@ -410,4 +410,4 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Immediate next action
 
-Merge the reviewed build 5 release PR, create the signed archive and exported IPA from `main`, and validate the reviewed bundle, version, entitlements, provisioning profile, and privacy manifest. Only after that validation passes, upload the same artifact to internal TestFlight and run the Samsung, Sony, and Vizio household acceptance journeys in `ios/app-store/en-US/testflight_what_to_test.txt`.
+On the exact build 5 PR head, pass `./scripts/gate.sh`, create the signed archive and exported IPA, and validate the reviewed bundle, version, entitlements, provisioning profile, and privacy manifest. Record the result before merging the PR. Only after that validation passes, upload the same artifact to internal TestFlight and run the Samsung, Sony, and Vizio household acceptance journeys in `ios/app-store/en-US/testflight_what_to_test.txt`.
