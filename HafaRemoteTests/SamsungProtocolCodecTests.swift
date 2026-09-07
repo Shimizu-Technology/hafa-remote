@@ -495,6 +495,112 @@ struct SamsungCommandSerializerTests {
     }
 }
 
+struct SamsungPingProbeTests {
+    @Test("The transport converts a pong error to unavailable")
+    func transportConvertsPongError() async {
+        await #expect(throws: SamsungConnectionError.unavailable) {
+            try await SamsungCommandTransport.runHealthProbe {
+                throw SyntheticSamsungPingError.failed
+            }
+        }
+    }
+
+    @Test("The transport preserves a terminal close when ping fails")
+    func transportPreservesTerminalClose() async {
+        await #expect(throws: SamsungConnectionError.notConnected) {
+            try await SamsungCommandTransport.runHealthProbe(
+                isTerminallyClosed: { true },
+                { throw SyntheticSamsungPingError.failed }
+            )
+        }
+    }
+
+    @Test("Cancellation wins when a terminal close races a ping error")
+    func cancellationWinsOverTerminalClose() async {
+        let (started, startedContinuation) = AsyncStream<Void>.makeStream()
+        let (release, releaseContinuation) = AsyncStream<Void>.makeStream()
+        let probe = Task {
+            try await SamsungCommandTransport.runHealthProbe(
+                isTerminallyClosed: { true },
+                {
+                    startedContinuation.yield()
+                    var releases = release.makeAsyncIterator()
+                    _ = await releases.next()
+                    throw SyntheticSamsungPingError.failed
+                }
+            )
+        }
+        var starts = started.makeAsyncIterator()
+        _ = await starts.next()
+
+        probe.cancel()
+        releaseContinuation.yield()
+
+        await #expect(throws: CancellationError.self) {
+            try await probe.value
+        }
+        startedContinuation.finish()
+        releaseContinuation.finish()
+    }
+
+    @Test("A pong completes the health probe")
+    func pongCompletesProbe() async throws {
+        let harness = SamsungPingProbeHarness()
+        let probe = Task {
+            try await SamsungPingProbe.run { callback in
+                harness.install(callback)
+            }
+        }
+        await waitForPingInstallation(harness)
+
+        harness.complete(error: nil)
+
+        try await probe.value
+    }
+
+    @Test("Cancellation releases a health probe before a late pong")
+    func cancellationWinsOverLatePong() async {
+        let harness = SamsungPingProbeHarness()
+        let probe = Task {
+            try await SamsungPingProbe.run { callback in
+                harness.install(callback)
+            }
+        }
+        await waitForPingInstallation(harness)
+
+        probe.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            try await probe.value
+        }
+        harness.complete(error: nil)
+    }
+
+    @Test("Cancellation before send suppresses the WebSocket ping")
+    func cancellationBeforeSendSuppressesPing() async {
+        let gate = SamsungPingCancellationGate()
+        let probe = Task {
+            try await SamsungPingProbe.run(
+                beforeSending: { gate.waitBeforeSending() },
+                sendPing: { _ in gate.recordPing() }
+            )
+        }
+        await waitForPingGate(gate)
+
+        probe.cancel()
+        gate.release()
+
+        await #expect(throws: CancellationError.self) {
+            try await probe.value
+        }
+        #expect(gate.pingCount == 0)
+    }
+}
+
+private enum SyntheticSamsungPingError: Error {
+    case failed
+}
+
 struct SamsungTrustPolicyTests {
     private let firstFingerprint = Data(repeating: 1, count: 32)
     private let otherFingerprint = Data(repeating: 2, count: 32)
@@ -580,6 +686,97 @@ struct SamsungTrustPolicyTests {
                 presentedFingerprint: firstFingerprint
             ) == .accept
         )
+    }
+}
+
+private final class SamsungPingProbeHarness: @unchecked Sendable {
+    private let lock = NSLock()
+    private var callback: (@Sendable (Error?) -> Void)?
+    let callbackInstalled: AsyncStream<Void>
+    private let callbackInstalledContinuation: AsyncStream<Void>.Continuation
+
+    init() {
+        (callbackInstalled, callbackInstalledContinuation) = AsyncStream.makeStream()
+    }
+
+    func install(_ callback: @escaping @Sendable (Error?) -> Void) {
+        lock.lock()
+        self.callback = callback
+        lock.unlock()
+        callbackInstalledContinuation.yield()
+    }
+
+    func complete(error: Error?) {
+        lock.lock()
+        let callback = callback
+        self.callback = nil
+        lock.unlock()
+        callback?(error)
+    }
+}
+
+private final class SamsungPingCancellationGate: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var isReleased = false
+    private var recordedPingCount = 0
+    let entered: AsyncStream<Void>
+    private let enteredContinuation: AsyncStream<Void>.Continuation
+
+    init() {
+        (entered, enteredContinuation) = AsyncStream.makeStream()
+    }
+
+    var pingCount: Int {
+        condition.lock()
+        defer { condition.unlock() }
+        return recordedPingCount
+    }
+
+    func waitBeforeSending() {
+        condition.lock()
+        enteredContinuation.yield()
+        let deadline = Date().addingTimeInterval(1)
+        while !isReleased {
+            guard condition.wait(until: deadline) else { break }
+        }
+        let released = isReleased
+        condition.unlock()
+        #expect(released, "The pre-ping cancellation gate timed out.")
+    }
+
+    func release() {
+        condition.lock()
+        isReleased = true
+        condition.broadcast()
+        condition.unlock()
+    }
+
+    func recordPing() {
+        condition.lock()
+        recordedPingCount += 1
+        condition.unlock()
+    }
+}
+
+private func waitForPingInstallation(
+    _ harness: SamsungPingProbeHarness,
+    sourceLocation: SourceLocation = #_sourceLocation
+) async {
+    var installations = harness.callbackInstalled.makeAsyncIterator()
+    guard await installations.next() != nil else {
+        Issue.record("The ping callback stream ended unexpectedly.", sourceLocation: sourceLocation)
+        return
+    }
+}
+
+private func waitForPingGate(
+    _ gate: SamsungPingCancellationGate,
+    sourceLocation: SourceLocation = #_sourceLocation
+) async {
+    var entries = gate.entered.makeAsyncIterator()
+    guard await entries.next() != nil else {
+        Issue.record("The pre-ping gate stream ended unexpectedly.", sourceLocation: sourceLocation)
+        return
     }
 }
 

@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 protocol RemoteSessionDriving: TVDriver {
     var brand: TVBrand { get }
@@ -115,6 +116,9 @@ struct RemoteSessionConfiguration: Equatable, Sendable {
     let repeatsLastReconnectDelay: Bool
     let healthCheckInterval: Duration?
     let healthCheckTimeout: Duration
+    let healthCheckRetryDelay: Duration
+    let healthFailureThreshold: Int
+    let networkLossGracePeriod: Duration
 
     static let production = RemoteSessionConfiguration(
         connectionTimeout: .seconds(12),
@@ -125,7 +129,10 @@ struct RemoteSessionConfiguration: Equatable, Sendable {
         reconnectDelays: [.milliseconds(250), .seconds(1), .seconds(2), .seconds(5), .seconds(10)],
         repeatsLastReconnectDelay: true,
         healthCheckInterval: .seconds(15),
-        healthCheckTimeout: .seconds(3)
+        healthCheckTimeout: .seconds(16),
+        healthCheckRetryDelay: .seconds(3),
+        healthFailureThreshold: 2,
+        networkLossGracePeriod: .seconds(2)
     )
 }
 
@@ -149,6 +156,11 @@ enum RemoteCredentialRemovalError: Error, Equatable, Sendable {
 
 /// Owns the single driver session, lifecycle cancellation, health checks, and reconnect policy.
 actor RemoteSessionController {
+    private static let logger = Logger(
+        subsystem: "com.shimizutechnology.hafaremote",
+        category: "RemoteSession"
+    )
+
     private(set) var state: RemoteSessionState
 
     private let driver: any RemoteSessionDriving
@@ -170,7 +182,12 @@ actor RemoteSessionController {
     private var pairingRemovalID: UUID?
     private var pairingRemovalWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var reconnectTask: Task<Void, Never>?
-    private var healthTask: Task<Void, Never>?
+    private var healthScheduleTask: Task<Void, Never>?
+    private var healthProbeID: UUID?
+    private var healthProbeTask: Task<Void, Error>?
+    private var consecutiveHealthFailures = 0
+    private var networkLossTask: Task<Void, Never>?
+    private var pendingCommandCount = 0
     private var commandTasks: [UUID: Task<Void, Error>] = [:]
     private var stateContinuations: [UUID: AsyncStream<RemoteSessionState>.Continuation] = [:]
 
@@ -269,8 +286,16 @@ actor RemoteSessionController {
             throw RemoteSessionControllerError.notConnected
         }
 
-        let commandID = UUID()
         let commandGeneration = generation
+        pendingCommandCount += 1
+        defer { finishPendingCommand() }
+        await pauseHealthChecksForCommand()
+        try Task.checkCancellation()
+        guard generation == commandGeneration, case .connected = state else {
+            throw RemoteSessionControllerError.notConnected
+        }
+
+        let commandID = UUID()
         let commandSerializer = commandSerializer
         let clock = clock
         let timeout = configuration.commandTimeout
@@ -296,6 +321,9 @@ actor RemoteSessionController {
             try result.get()
             commandTasks[commandID] = nil
             try Task.checkCancellation()
+            if generation == commandGeneration, case .connected = state {
+                consecutiveHealthFailures = 0
+            }
         } catch {
             commandTasks[commandID] = nil
             let wasCancelled = Task.isCancelled || error is CancellationError
@@ -553,6 +581,10 @@ actor RemoteSessionController {
 
         if !isReachable {
             guard targetAddressText != nil else { return }
+            if case .connected = state {
+                scheduleNetworkLossConfirmation(generation: generation)
+                return
+            }
             generation = UUID()
             await cancelInFlightWork()
             transition(to: .offline)
@@ -561,6 +593,13 @@ actor RemoteSessionController {
         }
 
         guard previous == false, isForeground, targetAddressText != nil else { return }
+        let networkLossTask = networkLossTask
+        self.networkLossTask = nil
+        networkLossTask?.cancel()
+        _ = await networkLossTask?.result
+        if case .connected = state {
+            return
+        }
         generation = UUID()
         let requestedGeneration = generation
         reconnectAttempt = 0
@@ -630,6 +669,7 @@ actor RemoteSessionController {
             connectionID = nil
             reconnectTask = nil
             reconnectAttempt = 0
+            consecutiveHealthFailures = 0
             transition(to: .connected(tv))
             startHealthChecks(generation: requestedGeneration)
         } catch {
@@ -736,9 +776,20 @@ actor RemoteSessionController {
     }
 
     private func cancelInFlightWork() async {
-        let healthTask = healthTask
-        self.healthTask = nil
-        healthTask?.cancel()
+        let healthScheduleTask = healthScheduleTask
+        self.healthScheduleTask = nil
+        healthScheduleTask?.cancel()
+
+        let healthProbeTask = healthProbeTask
+        self.healthProbeTask = nil
+        healthProbeID = nil
+        healthProbeTask?.cancel()
+
+        let networkLossTask = networkLossTask
+        self.networkLossTask = nil
+        networkLossTask?.cancel()
+
+        consecutiveHealthFailures = 0
 
         reconnectTask?.cancel()
         reconnectTask = nil
@@ -755,58 +806,190 @@ actor RemoteSessionController {
         }
 
         _ = await connectionTask?.result
-        _ = await healthTask?.result
+        _ = await healthScheduleTask?.result
+        _ = await healthProbeTask?.result
+        _ = await networkLossTask?.result
         for task in commandTasks {
             _ = await task.result
         }
     }
 
     private func startHealthChecks(generation requestedGeneration: UUID) {
-        healthTask?.cancel()
-        guard let interval = configuration.healthCheckInterval else {
-            healthTask = nil
+        scheduleHealthCheck(
+            generation: requestedGeneration,
+            after: configuration.healthCheckInterval
+        )
+    }
+
+    private func scheduleHealthCheck(
+        generation requestedGeneration: UUID,
+        after delay: Duration?
+    ) {
+        healthScheduleTask?.cancel()
+        healthScheduleTask = nil
+        guard let delay,
+            generation == requestedGeneration,
+            isForeground,
+            case .connected = state,
+            pendingCommandCount == 0,
+            commandTasks.isEmpty
+        else {
             return
         }
         let clock = clock
-        healthTask = Task { [weak self] in
-            while !Task.isCancelled {
-                do {
-                    try await clock.sleep(for: interval)
-                    try Task.checkCancellation()
-                } catch {
-                    return
-                }
-                guard await self?.performHealthCheck(generation: requestedGeneration) == true else {
-                    return
-                }
+        healthScheduleTask = Task { [weak self] in
+            do {
+                try await clock.sleep(for: delay)
+                try Task.checkCancellation()
+                await self?.beginHealthCheck(generation: requestedGeneration)
+            } catch {
+                return
             }
         }
     }
 
-    private func performHealthCheck(generation requestedGeneration: UUID) async -> Bool {
+    private func beginHealthCheck(generation requestedGeneration: UUID) async {
         guard generation == requestedGeneration, isForeground, case .connected = state else {
-            return false
+            return
         }
+        healthScheduleTask = nil
+        guard pendingCommandCount == 0, commandTasks.isEmpty else { return }
+
+        let probeID = UUID()
         let driver = driver
         let clock = clock
-        do {
+        let task = Task {
             try await RemoteSessionTimeout.run(
-                operation: .send,
+                operation: .healthCheck,
                 timeout: configuration.healthCheckTimeout,
                 clock: clock
             ) {
                 try await driver.checkConnection()
             }
-            return generation == requestedGeneration && isForeground
-        } catch {
-            guard generation == requestedGeneration, isForeground else { return false }
-            healthTask = nil
-            transition(to: .offline)
-            await disconnectDriverWithinLimit()
-            guard generation == requestedGeneration, isForeground else { return false }
-            scheduleReconnect(generation: requestedGeneration)
-            return false
         }
+        healthProbeID = probeID
+        healthProbeTask = task
+        let result = await withTaskCancellationHandler {
+            await task.result
+        } onCancel: {
+            task.cancel()
+        }
+        guard generation == requestedGeneration,
+            healthProbeID == probeID,
+            isForeground,
+            case .connected = state
+        else { return }
+        healthProbeID = nil
+        healthProbeTask = nil
+
+        switch result {
+        case .success:
+            consecutiveHealthFailures = 0
+            startHealthChecks(generation: requestedGeneration)
+        case .failure(let error):
+            if Task.isCancelled || error is CancellationError {
+                return
+            }
+            if Self.isDefinitiveOfflineError(error) {
+                Self.logger.notice("Health check confirmed a closed transport")
+                await confirmConnectionLoss(generation: requestedGeneration)
+                return
+            }
+            consecutiveHealthFailures += 1
+            if consecutiveHealthFailures < max(1, configuration.healthFailureThreshold) {
+                Self.logger.info(
+                    "Health check was inconclusive; keeping the session connected pending confirmation"
+                )
+                scheduleHealthCheck(
+                    generation: requestedGeneration,
+                    after: configuration.healthCheckRetryDelay
+                )
+                return
+            }
+            Self.logger.notice("Repeated health failures confirmed connection loss")
+            await confirmConnectionLoss(generation: requestedGeneration)
+        }
+    }
+
+    private func confirmConnectionLoss(generation requestedGeneration: UUID) async {
+        guard generation == requestedGeneration, isForeground else { return }
+        consecutiveHealthFailures = 0
+        healthScheduleTask?.cancel()
+        healthScheduleTask = nil
+        if healthProbeTask != nil {
+            healthProbeTask?.cancel()
+            healthProbeTask = nil
+            healthProbeID = nil
+        }
+        transition(to: .offline)
+        await disconnectDriverWithinLimit()
+        guard generation == requestedGeneration, isForeground else { return }
+        scheduleReconnect(generation: requestedGeneration)
+    }
+
+    private func pauseHealthChecksForCommand() async {
+        let healthScheduleTask = healthScheduleTask
+        self.healthScheduleTask = nil
+        healthScheduleTask?.cancel()
+
+        let healthProbeTask = healthProbeTask
+        self.healthProbeTask = nil
+        healthProbeID = nil
+        healthProbeTask?.cancel()
+
+        _ = await healthScheduleTask?.result
+        _ = await healthProbeTask?.result
+    }
+
+    private func finishPendingCommand() {
+        pendingCommandCount = max(0, pendingCommandCount - 1)
+        guard pendingCommandCount == 0, case .connected = state else { return }
+        startHealthChecks(generation: generation)
+    }
+
+    private func scheduleNetworkLossConfirmation(generation requestedGeneration: UUID) {
+        networkLossTask?.cancel()
+        let clock = clock
+        let delay = configuration.networkLossGracePeriod
+        networkLossTask = Task { [weak self] in
+            do {
+                try await clock.sleep(for: delay)
+                try Task.checkCancellation()
+                await self?.confirmNetworkLoss(generation: requestedGeneration)
+            } catch {
+                return
+            }
+        }
+    }
+
+    private func confirmNetworkLoss(generation requestedGeneration: UUID) async {
+        networkLossTask = nil
+        guard generation == requestedGeneration,
+            lastNetworkReachability == false,
+            isForeground,
+            targetAddressText != nil
+        else { return }
+        Self.logger.notice("Sustained Wi-Fi path loss confirmed connection loss")
+        generation = UUID()
+        await cancelInFlightWork()
+        transition(to: .offline)
+        await disconnectDriverWithinLimit()
+    }
+
+    private static func isDefinitiveOfflineError(_ error: Error) -> Bool {
+        if let error = error as? SamsungConnectionError {
+            return error == .notConnected
+        }
+        if let error = error as? SonyTLSChannelError {
+            return error == .connectionClosed
+        }
+        if let error = error as? VizioHTTPSClientError {
+            return error == .notConnected
+        }
+        if let error = error as? MultiBrandSessionDriverError {
+            return error == .notConnected
+        }
+        return false
     }
 
     @discardableResult

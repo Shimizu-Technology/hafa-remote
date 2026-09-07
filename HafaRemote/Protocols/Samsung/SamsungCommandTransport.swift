@@ -18,6 +18,7 @@ protocol SamsungTransporting: TVDriver {
 actor SamsungCommandTransport: SamsungTransporting {
     private var session: URLSession?
     private var webSocket: URLSessionWebSocketTask?
+    private var trustDelegate: SamsungTrustDelegate?
     private var attempts = SamsungConnectionAttemptTracker()
     private let commandSerializer = SamsungCommandSerializer()
     private let pairingTimeout: Duration
@@ -68,6 +69,7 @@ actor SamsungCommandTransport: SamsungTransporting {
             attemptSocket = createdSocket
             session = createdSession
             webSocket = createdSocket
+            trustDelegate = delegate
             createdSocket.resume()
 
             let token = try await waitForPairingToken(
@@ -147,25 +149,40 @@ actor SamsungCommandTransport: SamsungTransporting {
     }
 
     func checkConnection() async throws {
-        guard let webSocket else {
+        guard let webSocket, let trustDelegate else {
             throw SamsungConnectionError.notConnected
         }
+        let isTerminallyClosed: @Sendable () -> Bool = {
+            trustDelegate.isWebSocketClosed
+                || webSocket.state == .completed
+                || webSocket.state == .canceling
+        }
+        try Task.checkCancellation()
+        guard !isTerminallyClosed() else { throw SamsungConnectionError.notConnected }
+        try await Self.runHealthProbe(isTerminallyClosed: isTerminallyClosed) {
+            try await SamsungPingProbe.run(on: webSocket)
+        }
+        guard self.webSocket === webSocket else { throw CancellationError() }
+        guard !isTerminallyClosed() else { throw SamsungConnectionError.notConnected }
+    }
+
+    static func runHealthProbe(
+        isTerminallyClosed: @escaping @Sendable () -> Bool = { false },
+        _ operation: @escaping @Sendable () async throws -> Void
+    ) async throws {
         do {
-            try await commandSerializer.perform {
-                try await withCheckedThrowingContinuation {
-                    (continuation: CheckedContinuation<Void, Error>) in
-                    webSocket.sendPing { error in
-                        if let error {
-                            continuation.resume(throwing: error)
-                        } else {
-                            continuation.resume()
-                        }
-                    }
-                }
-            }
+            try await operation()
+            try Task.checkCancellation()
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            try Task.checkCancellation()
+            if let error = error as? SamsungConnectionError {
+                throw error
+            }
+            if isTerminallyClosed() {
+                throw SamsungConnectionError.notConnected
+            }
             throw SamsungConnectionError.unavailable
         }
     }
@@ -233,7 +250,91 @@ actor SamsungCommandTransport: SamsungTransporting {
         webSocket?.cancel(with: .goingAway, reason: nil)
         session?.invalidateAndCancel()
         webSocket = nil
+        trustDelegate = nil
         session = nil
+    }
+}
+
+/// Waits for one WebSocket pong without occupying the user-command FIFO.
+enum SamsungPingProbe {
+    static func run(on webSocket: URLSessionWebSocketTask) async throws {
+        try await run { handler in
+            webSocket.sendPing(pongReceiveHandler: handler)
+        }
+    }
+
+    static func run(
+        _ sendPing: (@escaping @Sendable (Error?) -> Void) -> Void
+    ) async throws {
+        try await run(beforeSending: {}, sendPing: sendPing)
+    }
+
+    static func run(
+        beforeSending: @escaping @Sendable () -> Void,
+        sendPing: (@escaping @Sendable (Error?) -> Void) -> Void
+    ) async throws {
+        let race = SamsungPingProbeRace()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard race.install(continuation) else { return }
+                beforeSending()
+                race.sendUnlessResolved(sendPing)
+            }
+        } onCancel: {
+            race.resolve(.failure(CancellationError()))
+        }
+    }
+}
+
+/// Resolves cancellation and a late pong callback exactly once.
+private final class SamsungPingProbeRace: @unchecked Sendable {
+    // Recursive locking lets a synthetic or future send implementation invoke its
+    // callback synchronously while cancellation and send remain one atomic decision.
+    private let lock = NSRecursiveLock()
+    private var continuation: CheckedContinuation<Void, Error>?
+    private var result: Result<Void, Error>?
+
+    func install(_ continuation: CheckedContinuation<Void, Error>) -> Bool {
+        lock.lock()
+        if let result {
+            lock.unlock()
+            continuation.resume(with: result)
+            return false
+        }
+        self.continuation = continuation
+        lock.unlock()
+        return true
+    }
+
+    func sendUnlessResolved(
+        _ sendPing: (@escaping @Sendable (Error?) -> Void) -> Void
+    ) {
+        lock.lock()
+        guard result == nil else {
+            lock.unlock()
+            return
+        }
+        sendPing { error in
+            if let error {
+                self.resolve(.failure(error))
+            } else {
+                self.resolve(.success(()))
+            }
+        }
+        lock.unlock()
+    }
+
+    func resolve(_ result: Result<Void, Error>) {
+        lock.lock()
+        guard self.result == nil else {
+            lock.unlock()
+            return
+        }
+        self.result = result
+        let continuation = continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(with: result)
     }
 }
 

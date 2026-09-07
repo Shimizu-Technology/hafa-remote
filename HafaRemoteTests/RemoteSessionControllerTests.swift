@@ -4,6 +4,16 @@ import Testing
 @testable import HafaRemote
 
 struct RemoteSessionControllerTests {
+    @Test("Production health policy tolerates one miss and the Vizio request deadline")
+    func productionHealthPolicyIsResilient() {
+        let configuration = RemoteSessionConfiguration.production
+
+        #expect(configuration.healthFailureThreshold == 2)
+        #expect(configuration.healthCheckTimeout == .seconds(16))
+        #expect(configuration.healthCheckRetryDelay == .seconds(3))
+        #expect(configuration.networkLossGracePeriod == .seconds(2))
+    }
+
     @MainActor
     @Test("The observable store exposes its matching initial state synchronously")
     func storeProjectsMatchingInitialStateSynchronously() throws {
@@ -935,8 +945,42 @@ struct RemoteSessionControllerTests {
         #expect(await clock.pendingSleeps.isEmpty)
     }
 
-    @Test("A failed idle health check reconnects before the next remote command")
-    func idleHealthFailureReconnectsProactively() async throws {
+    @Test("One transient health failure keeps the remote connected")
+    func transientHealthFailureKeepsSessionConnected() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false)],
+            healthFailures: [.unavailable]
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                reconnectDelays: [.seconds(2)],
+                healthCheckInterval: .seconds(5),
+                healthCheckTimeout: .seconds(9)
+            )
+        )
+
+        await session.connect(to: tv.address.rawValue)
+        await resume(clock: clock, duration: .seconds(5))
+        await waitUntil { await driver.healthCheckCallCount == 1 }
+
+        #expect(await session.state == .connected(tv))
+        #expect(await driver.healthCheckCallCount == 1)
+        #expect(await driver.connectCallCount == 1)
+        #expect(await driver.activeSessionDisconnectCallCount == 0)
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(1)) }
+        await session.disconnect()
+    }
+
+    @Test("Two consecutive transient health failures confirm connection loss")
+    func repeatedHealthFailuresReconnectProactively() async throws {
         let tv = try testTV(
             address: "192.168.10.20",
             reportedDeviceID: "synthetic-tv-a",
@@ -948,25 +992,140 @@ struct RemoteSessionControllerTests {
                 .success(tv: tv, announcesPairing: false),
                 .success(tv: tv, announcesPairing: false),
             ],
-            healthFailures: [.unavailable]
+            healthFailures: [.unavailable, .unavailable]
         )
         let session = RemoteSessionController(
             driver: driver,
             clock: clock,
             configuration: testConfiguration(
                 reconnectDelays: [.seconds(2)],
-                healthCheckInterval: .seconds(5)
+                healthCheckInterval: .seconds(5),
+                healthCheckTimeout: .seconds(9)
+            )
+        )
+
+        await session.connect(to: tv.address.rawValue)
+        await resume(clock: clock, duration: .seconds(5))
+        await waitUntil { await driver.healthCheckCallCount == 1 }
+        #expect(await session.state == .connected(tv))
+
+        await resume(clock: clock, duration: .seconds(1))
+        await waitUntil { await session.state == .offline }
+        #expect(await driver.healthCheckCallCount == 2)
+        #expect(await driver.activeSessionDisconnectCallCount == 1)
+
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(2)) }
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await session.state == .connected(tv) }
+        #expect(await driver.connectCallCount == 2)
+        await session.disconnect()
+    }
+
+    @Test("One timed-out health probe stays connected while awaiting confirmation")
+    func healthTimeoutKeepsSessionConnected() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = SuspendedHealthRemoteSessionDriver(televisions: [tv])
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                reconnectDelays: [.seconds(2)],
+                healthCheckInterval: .seconds(5),
+                healthCheckTimeout: .seconds(9)
+            )
+        )
+        await session.connect(to: tv.address.rawValue)
+        await resume(clock: clock, duration: .seconds(5))
+        var starts = driver.healthCheckStarts.makeAsyncIterator()
+        _ = await starts.next()
+
+        await resume(clock: clock, duration: .seconds(9))
+        await waitUntil { await driver.cancelledHealthCheckCount == 1 }
+
+        #expect(await session.state == .connected(tv))
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(1)) }
+        #expect(!(await clock.pendingSleeps.contains(.seconds(2))))
+        await session.disconnect()
+    }
+
+    @Test("A successful command resets health suspicion and the idle interval")
+    func commandResetsHealthSuspicion() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false)],
+            healthFailures: [.unavailable, .unavailable]
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                reconnectDelays: [.seconds(2)],
+                healthCheckInterval: .seconds(5),
+                healthCheckTimeout: .seconds(9)
+            )
+        )
+
+        await session.connect(to: tv.address.rawValue)
+        await resume(clock: clock, duration: .seconds(5))
+        await waitUntil { await driver.healthCheckCallCount == 1 }
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(1)) }
+
+        try await session.send(.select)
+        await waitUntil {
+            let sleeps = await clock.pendingSleeps
+            return sleeps.contains(.seconds(5)) && !sleeps.contains(.seconds(1))
+        }
+        await resume(clock: clock, duration: .seconds(5))
+        await waitUntil { await driver.healthCheckCallCount == 2 }
+
+        #expect(await session.state == .connected(tv))
+        #expect(await driver.sentCommands == [.select])
+        #expect(await driver.activeSessionDisconnectCallCount == 0)
+        await session.disconnect()
+    }
+
+    @Test("A definitive not-connected health result reconnects immediately")
+    func definitiveHealthFailureReconnectsImmediately() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [
+                .success(tv: tv, announcesPairing: false),
+                .success(tv: tv, announcesPairing: false),
+            ],
+            healthFailures: [.notConnected]
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                reconnectDelays: [.seconds(2)],
+                healthCheckInterval: .seconds(5),
+                healthCheckTimeout: .seconds(9)
             )
         )
 
         await session.connect(to: tv.address.rawValue)
         await resume(clock: clock, duration: .seconds(5))
         await waitUntil { await session.state == .offline }
-        await resume(clock: clock, duration: .seconds(2))
-        await waitUntil { await session.state == .connected(tv) }
 
         #expect(await driver.healthCheckCallCount == 1)
-        #expect(await driver.connectCallCount == 2)
+        #expect(await driver.activeSessionDisconnectCallCount == 1)
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(2)) }
         await session.disconnect()
     }
 
@@ -983,6 +1142,40 @@ struct RemoteSessionControllerTests {
     @Test("Replacing a session cancels its pending health check without stale state")
     func replacementCancelsPendingHealthCheck() async throws {
         try await verifyPendingHealthCancellation(.replaceSession)
+    }
+
+    @Test("A command preempts a pending health probe without dropping the session")
+    func commandPreemptsPendingHealthProbe() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = SuspendedHealthRemoteSessionDriver(televisions: [tv])
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                commandTimeout: .seconds(9),
+                reconnectDelays: [.seconds(2)],
+                healthCheckInterval: .seconds(5),
+                healthCheckTimeout: .seconds(7)
+            )
+        )
+        await session.connect(to: tv.address.rawValue)
+        await resume(clock: clock, duration: .seconds(5))
+        var starts = driver.healthCheckStarts.makeAsyncIterator()
+        _ = await starts.next()
+
+        try await session.send(.select)
+
+        #expect(await driver.cancelledHealthCheckCount == 1)
+        #expect(await driver.sentCommands == [.select])
+        #expect(await session.state == .connected(tv))
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(5)) }
+        #expect(!(await clock.pendingSleeps.contains(.seconds(2))))
+        await session.disconnect()
     }
 
     private func verifyPendingHealthCancellation(
@@ -1006,7 +1199,8 @@ struct RemoteSessionControllerTests {
             configuration: testConfiguration(
                 reconnectDelays: [.seconds(2)],
                 repeatsLastReconnectDelay: true,
-                healthCheckInterval: .seconds(5)
+                healthCheckInterval: .seconds(5),
+                healthCheckTimeout: .seconds(9)
             )
         )
         await session.connect(to: firstTV.address.rawValue)
@@ -1048,7 +1242,7 @@ struct RemoteSessionControllerTests {
                 .failure(.offline),
                 .success(tv: tv, announcesPairing: false),
             ],
-            healthFailures: [.unavailable]
+            healthFailures: [.unavailable, .unavailable]
         )
         let session = RemoteSessionController(
             driver: driver,
@@ -1056,12 +1250,15 @@ struct RemoteSessionControllerTests {
             configuration: testConfiguration(
                 reconnectDelays: [.seconds(2)],
                 repeatsLastReconnectDelay: true,
-                healthCheckInterval: .seconds(5)
+                healthCheckInterval: .seconds(5),
+                healthCheckTimeout: .seconds(9)
             )
         )
 
         await session.connect(to: tv.address.rawValue)
         await resume(clock: clock, duration: .seconds(5))
+        await waitUntil { await driver.healthCheckCallCount == 1 }
+        await resume(clock: clock, duration: .seconds(1))
         await waitUntil { await session.state == .offline }
         for expectedCallCount in 2...4 {
             await resume(clock: clock, duration: .seconds(2))
@@ -1130,6 +1327,59 @@ struct RemoteSessionControllerTests {
         #expect(await session.state == .connected(tv))
         #expect(await driver.connectCallCount == 2)
         await waitUntil { await clock.pendingSleeps.isEmpty }
+    }
+
+    @Test("A brief Wi-Fi path flap does not tear down a connected TV")
+    func briefNetworkLossKeepsSessionConnected() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false)]
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(reconnectDelays: [.seconds(30)])
+        )
+
+        await session.networkReachabilityChanged(isReachable: true)
+        await session.connect(to: tv.address.rawValue)
+        await session.networkReachabilityChanged(isReachable: false)
+        #expect(await session.state == .connected(tv))
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(1)) }
+
+        await session.networkReachabilityChanged(isReachable: true)
+
+        #expect(await session.state == .connected(tv))
+        #expect(await driver.connectCallCount == 1)
+        #expect(await driver.activeSessionDisconnectCallCount == 0)
+        #expect(await clock.pendingSleeps.isEmpty)
+        await session.disconnect()
+    }
+
+    @Test("Sustained Wi-Fi loss confirms the TV is offline")
+    func sustainedNetworkLossDisconnectsSession() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false)]
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(reconnectDelays: [.seconds(30)])
+        )
+
+        await session.networkReachabilityChanged(isReachable: true)
+        await session.connect(to: tv.address.rawValue)
+        await session.networkReachabilityChanged(isReachable: false)
+        await resume(clock: clock, duration: .seconds(1))
+        await waitUntil { await session.state == .offline }
+
+        #expect(await driver.activeSessionDisconnectCallCount == 1)
+        #expect(await driver.connectCallCount == 1)
     }
 
     @Test("Switching TVs cancels the old attempt before starting the new one")
@@ -1371,6 +1621,43 @@ struct RemoteSessionControllerTests {
         try await second.value
     }
 
+    @Test("Health checks stay paused until every concurrent command finishes")
+    func healthWaitsForAllPendingCommands() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = SuspendedCommandRemoteSessionDriver(tv: tv)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                commandTimeout: .seconds(9),
+                reconnectDelays: [],
+                healthCheckInterval: .seconds(5)
+            )
+        )
+        await session.connect(to: tv.address.rawValue)
+        var starts = driver.commandStarts.makeAsyncIterator()
+
+        let first = Task { try await session.send(.up) }
+        _ = await starts.next()
+        let second = Task { try await session.send(.down) }
+        await waitUntil {
+            await clock.pendingSleeps.filter { $0 == .seconds(9) }.count == 2
+        }
+        #expect(!(await clock.pendingSleeps.contains(.seconds(5))))
+
+        await driver.completeCommand()
+        try await first.value
+        _ = await starts.next()
+        #expect(!(await clock.pendingSleeps.contains(.seconds(5))))
+
+        await driver.completeCommand()
+        try await second.value
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(5)) }
+        await session.disconnect()
+    }
+
     @Test("A timed-out command keeps the driver write slot until the write finishes")
     func timedOutCommandCannotOverlapTheNextWrite() async throws {
         let tv = try testTV(
@@ -1506,6 +1793,7 @@ private actor SuspendedHealthRemoteSessionDriver: RemoteSessionDriving {
     private var televisions: [ConnectedTV]
     private var healthContinuation: CheckedContinuation<Void, Error>?
     private(set) var cancelledHealthCheckCount = 0
+    private(set) var sentCommands: [RemoteCommand] = []
 
     init(televisions: [ConnectedTV]) {
         self.televisions = televisions
@@ -1536,7 +1824,9 @@ private actor SuspendedHealthRemoteSessionDriver: RemoteSessionDriving {
         }
     }
 
-    func send(_ command: RemoteCommand) {}
+    func send(_ command: RemoteCommand) {
+        sentCommands.append(command)
+    }
     func forget(addressText: String) {}
     func disconnect() {}
 
@@ -1559,6 +1849,8 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
     private(set) var sentTextCharacterCounts: [Int] = []
     private(set) var presentedTargets: [TVConnectionTarget] = []
     private(set) var healthCheckCallCount = 0
+    private(set) var activeSessionDisconnectCallCount = 0
+    private(set) var sentCommands: [RemoteCommand] = []
 
     init(
         outcomes: [MockConnectionOutcome],
@@ -1617,7 +1909,9 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
         )
     }
 
-    func send(_ command: RemoteCommand) async throws {}
+    func send(_ command: RemoteCommand) async throws {
+        sentCommands.append(command)
+    }
 
     func checkConnection() throws {
         healthCheckCallCount += 1
@@ -1638,6 +1932,9 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
     }
 
     func disconnect() {
+        if activeConnectionCount > 0 {
+            activeSessionDisconnectCallCount += 1
+        }
         activeConnectionCount = max(0, activeConnectionCount - 1)
     }
 }
@@ -2209,7 +2506,10 @@ private func testConfiguration(
     reconnectDelays: [Duration],
     repeatsLastReconnectDelay: Bool = false,
     healthCheckInterval: Duration? = nil,
-    healthCheckTimeout: Duration = .seconds(1)
+    healthCheckTimeout: Duration = .seconds(1),
+    healthCheckRetryDelay: Duration = .seconds(1),
+    healthFailureThreshold: Int = 2,
+    networkLossGracePeriod: Duration = .seconds(1)
 ) -> RemoteSessionConfiguration {
     RemoteSessionConfiguration(
         connectionTimeout: connectionTimeout,
@@ -2220,7 +2520,10 @@ private func testConfiguration(
         reconnectDelays: reconnectDelays,
         repeatsLastReconnectDelay: repeatsLastReconnectDelay,
         healthCheckInterval: healthCheckInterval,
-        healthCheckTimeout: healthCheckTimeout
+        healthCheckTimeout: healthCheckTimeout,
+        healthCheckRetryDelay: healthCheckRetryDelay,
+        healthFailureThreshold: healthFailureThreshold,
+        networkLossGracePeriod: networkLossGracePeriod
     )
 }
 

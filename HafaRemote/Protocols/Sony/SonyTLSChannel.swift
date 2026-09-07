@@ -277,7 +277,9 @@ actor SonyTLSChannel: SonyTLSChanneling {
         switch connection.state {
         case .ready:
             return
-        case .setup, .preparing, .waiting:
+        case .setup, .preparing:
+            throw SonyTLSChannelError.unavailable
+        case .waiting:
             throw SonyTLSChannelError.unavailable
         case .failed, .cancelled:
             throw SonyTLSChannelError.connectionClosed
