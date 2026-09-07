@@ -151,18 +151,8 @@ actor SamsungCommandTransport: SamsungTransporting {
             throw SamsungConnectionError.notConnected
         }
         do {
-            try await commandSerializer.perform {
-                try await withCheckedThrowingContinuation {
-                    (continuation: CheckedContinuation<Void, Error>) in
-                    webSocket.sendPing { error in
-                        if let error {
-                            continuation.resume(throwing: error)
-                        } else {
-                            continuation.resume()
-                        }
-                    }
-                }
-            }
+            try await SamsungPingProbe.run(on: webSocket)
+            guard self.webSocket === webSocket else { throw CancellationError() }
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -234,6 +224,67 @@ actor SamsungCommandTransport: SamsungTransporting {
         session?.invalidateAndCancel()
         webSocket = nil
         session = nil
+    }
+}
+
+/// Waits for one WebSocket pong without occupying the user-command FIFO.
+enum SamsungPingProbe {
+    static func run(on webSocket: URLSessionWebSocketTask) async throws {
+        try await run { handler in
+            webSocket.sendPing(pongReceiveHandler: handler)
+        }
+    }
+
+    static func run(
+        _ sendPing: (@escaping @Sendable (Error?) -> Void) -> Void
+    ) async throws {
+        let race = SamsungPingProbeRace()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard race.install(continuation) else { return }
+                sendPing { error in
+                    if let error {
+                        race.resolve(.failure(error))
+                    } else {
+                        race.resolve(.success(()))
+                    }
+                }
+            }
+        } onCancel: {
+            race.resolve(.failure(CancellationError()))
+        }
+    }
+}
+
+/// Resolves cancellation and a late pong callback exactly once.
+private final class SamsungPingProbeRace: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Error>?
+    private var result: Result<Void, Error>?
+
+    func install(_ continuation: CheckedContinuation<Void, Error>) -> Bool {
+        lock.lock()
+        if let result {
+            lock.unlock()
+            continuation.resume(with: result)
+            return false
+        }
+        self.continuation = continuation
+        lock.unlock()
+        return true
+    }
+
+    func resolve(_ result: Result<Void, Error>) {
+        lock.lock()
+        guard self.result == nil else {
+            lock.unlock()
+            return
+        }
+        self.result = result
+        let continuation = continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(with: result)
     }
 }
 

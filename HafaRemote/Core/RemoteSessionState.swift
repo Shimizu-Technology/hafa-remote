@@ -18,6 +18,7 @@ enum RemoteSessionState: Equatable, Sendable {
 enum RemoteSessionOperation: String, Equatable, Sendable {
     case connect
     case send
+    case healthCheck
     case disconnect
     case forgetPairing
 }
@@ -33,6 +34,8 @@ enum RemoteSessionFailure: Equatable, Sendable {
             "The TV took too long to connect. Check that it is on and on the same Wi-Fi network."
         case .timedOut(.send):
             "The TV did not accept that command in time. Hafa Remote will reconnect."
+        case .timedOut(.healthCheck):
+            "The TV stopped responding. Hafa Remote will reconnect."
         case .timedOut(.disconnect):
             "The previous TV connection took too long to close."
         case .timedOut(.forgetPairing):

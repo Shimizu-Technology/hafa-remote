@@ -274,8 +274,19 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
 
     private func readRemoteEvents(generation: UUID) async {
         do {
+            var consecutiveProtocolFailures = 0
             while sessionGeneration == generation, !Task.isCancelled {
-                switch try SonyRemoteProtocolCodec.parse(await controlChannel.receive()) {
+                let message = try await controlChannel.receive()
+                let event: SonyRemoteEvent
+                do {
+                    event = try SonyRemoteProtocolCodec.parse(message)
+                    consecutiveProtocolFailures = 0
+                } catch is SonyProtocolCodecError {
+                    consecutiveProtocolFailures += 1
+                    guard consecutiveProtocolFailures >= 3 else { continue }
+                    throw SonyTLSChannelError.unavailable
+                }
+                switch event {
                 case .ping(let value):
                     try await writeSerializer.perform { [controlChannel] in
                         try await controlChannel.send(SonyRemoteProtocolCodec.pingResponse(value))

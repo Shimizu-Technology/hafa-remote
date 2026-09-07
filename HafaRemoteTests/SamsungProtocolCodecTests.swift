@@ -495,6 +495,41 @@ struct SamsungCommandSerializerTests {
     }
 }
 
+struct SamsungPingProbeTests {
+    @Test("A pong completes the health probe")
+    func pongCompletesProbe() async throws {
+        let harness = SamsungPingProbeHarness()
+        let probe = Task {
+            try await SamsungPingProbe.run { callback in
+                harness.install(callback)
+            }
+        }
+        await waitForPingInstallation(harness)
+
+        harness.complete(error: nil)
+
+        try await probe.value
+    }
+
+    @Test("Cancellation releases a health probe before a late pong")
+    func cancellationWinsOverLatePong() async {
+        let harness = SamsungPingProbeHarness()
+        let probe = Task {
+            try await SamsungPingProbe.run { callback in
+                harness.install(callback)
+            }
+        }
+        await waitForPingInstallation(harness)
+
+        probe.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            try await probe.value
+        }
+        harness.complete(error: nil)
+    }
+}
+
 struct SamsungTrustPolicyTests {
     private let firstFingerprint = Data(repeating: 1, count: 32)
     private let otherFingerprint = Data(repeating: 2, count: 32)
@@ -581,6 +616,42 @@ struct SamsungTrustPolicyTests {
             ) == .accept
         )
     }
+}
+
+private final class SamsungPingProbeHarness: @unchecked Sendable {
+    private let lock = NSLock()
+    private var callback: (@Sendable (Error?) -> Void)?
+
+    var isInstalled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return callback != nil
+    }
+
+    func install(_ callback: @escaping @Sendable (Error?) -> Void) {
+        lock.lock()
+        self.callback = callback
+        lock.unlock()
+    }
+
+    func complete(error: Error?) {
+        lock.lock()
+        let callback = callback
+        self.callback = nil
+        lock.unlock()
+        callback?(error)
+    }
+}
+
+private func waitForPingInstallation(
+    _ harness: SamsungPingProbeHarness,
+    sourceLocation: SourceLocation = #_sourceLocation
+) async {
+    for _ in 0..<10_000 {
+        if harness.isInstalled { return }
+        await Task.yield()
+    }
+    Issue.record("Timed out waiting for the ping callback.", sourceLocation: sourceLocation)
 }
 
 private actor CommandOrderRecorder {
