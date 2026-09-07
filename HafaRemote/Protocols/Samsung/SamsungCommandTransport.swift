@@ -150,9 +150,17 @@ actor SamsungCommandTransport: SamsungTransporting {
         guard let webSocket else {
             throw SamsungConnectionError.notConnected
         }
-        do {
+        try await Self.runHealthProbe {
             try await SamsungPingProbe.run(on: webSocket)
-            guard self.webSocket === webSocket else { throw CancellationError() }
+        }
+        guard self.webSocket === webSocket else { throw CancellationError() }
+    }
+
+    static func runHealthProbe(
+        _ operation: @escaping @Sendable () async throws -> Void
+    ) async throws {
+        do {
+            try await operation()
         } catch is CancellationError {
             throw CancellationError()
         } catch {

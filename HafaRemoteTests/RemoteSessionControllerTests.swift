@@ -1619,6 +1619,43 @@ struct RemoteSessionControllerTests {
         try await second.value
     }
 
+    @Test("Health checks stay paused until every concurrent command finishes")
+    func healthWaitsForAllPendingCommands() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = SuspendedCommandRemoteSessionDriver(tv: tv)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                commandTimeout: .seconds(9),
+                reconnectDelays: [],
+                healthCheckInterval: .seconds(5)
+            )
+        )
+        await session.connect(to: tv.address.rawValue)
+        var starts = driver.commandStarts.makeAsyncIterator()
+
+        let first = Task { try await session.send(.up) }
+        _ = await starts.next()
+        let second = Task { try await session.send(.down) }
+        await waitUntil {
+            await clock.pendingSleeps.filter { $0 == .seconds(9) }.count == 2
+        }
+        #expect(!(await clock.pendingSleeps.contains(.seconds(5))))
+
+        await driver.completeCommand()
+        try await first.value
+        _ = await starts.next()
+        #expect(!(await clock.pendingSleeps.contains(.seconds(5))))
+
+        await driver.completeCommand()
+        try await second.value
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(5)) }
+        await session.disconnect()
+    }
+
     @Test("A timed-out command keeps the driver write slot until the write finishes")
     func timedOutCommandCannotOverlapTheNextWrite() async throws {
         let tv = try testTV(

@@ -496,6 +496,15 @@ struct SamsungCommandSerializerTests {
 }
 
 struct SamsungPingProbeTests {
+    @Test("The transport converts a pong error to unavailable")
+    func transportConvertsPongError() async {
+        await #expect(throws: SamsungConnectionError.unavailable) {
+            try await SamsungCommandTransport.runHealthProbe {
+                throw SyntheticSamsungPingError.failed
+            }
+        }
+    }
+
     @Test("A pong completes the health probe")
     func pongCompletesProbe() async throws {
         let harness = SamsungPingProbeHarness()
@@ -528,6 +537,10 @@ struct SamsungPingProbeTests {
         }
         harness.complete(error: nil)
     }
+}
+
+private enum SyntheticSamsungPingError: Error {
+    case failed
 }
 
 struct SamsungTrustPolicyTests {

@@ -187,6 +187,7 @@ actor RemoteSessionController {
     private var healthProbeTask: Task<Void, Error>?
     private var consecutiveHealthFailures = 0
     private var networkLossTask: Task<Void, Never>?
+    private var pendingCommandCount = 0
     private var commandTasks: [UUID: Task<Void, Error>] = [:]
     private var stateContinuations: [UUID: AsyncStream<RemoteSessionState>.Continuation] = [:]
 
@@ -286,6 +287,8 @@ actor RemoteSessionController {
         }
 
         let commandGeneration = generation
+        pendingCommandCount += 1
+        defer { finishPendingCommand() }
         await pauseHealthChecksForCommand()
         try Task.checkCancellation()
         guard generation == commandGeneration, case .connected = state else {
@@ -320,7 +323,6 @@ actor RemoteSessionController {
             try Task.checkCancellation()
             if generation == commandGeneration, case .connected = state {
                 consecutiveHealthFailures = 0
-                restartHealthChecksAfterCommands(generation: commandGeneration)
             }
         } catch {
             commandTasks[commandID] = nil
@@ -347,8 +349,6 @@ actor RemoteSessionController {
                     guard generation == commandGeneration else { throw error }
                     scheduleReconnect(generation: commandGeneration)
                 }
-            } else if generation == commandGeneration, case .connected = state {
-                restartHealthChecksAfterCommands(generation: commandGeneration)
             }
             if wasCancelled {
                 throw CancellationError()
@@ -831,6 +831,7 @@ actor RemoteSessionController {
             generation == requestedGeneration,
             isForeground,
             case .connected = state,
+            pendingCommandCount == 0,
             commandTasks.isEmpty
         else {
             return
@@ -852,7 +853,7 @@ actor RemoteSessionController {
             return
         }
         healthScheduleTask = nil
-        guard commandTasks.isEmpty else { return }
+        guard pendingCommandCount == 0, commandTasks.isEmpty else { return }
 
         let probeID = UUID()
         let driver = driver
@@ -940,9 +941,10 @@ actor RemoteSessionController {
         _ = await healthProbeTask?.result
     }
 
-    private func restartHealthChecksAfterCommands(generation requestedGeneration: UUID) {
-        guard commandTasks.isEmpty else { return }
-        startHealthChecks(generation: requestedGeneration)
+    private func finishPendingCommand() {
+        pendingCommandCount = max(0, pendingCommandCount - 1)
+        guard pendingCommandCount == 0, case .connected = state else { return }
+        startHealthChecks(generation: generation)
     }
 
     private func scheduleNetworkLossConfirmation(generation requestedGeneration: UUID) {
