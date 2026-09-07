@@ -692,17 +692,18 @@ struct SamsungTrustPolicyTests {
 private final class SamsungPingProbeHarness: @unchecked Sendable {
     private let lock = NSLock()
     private var callback: (@Sendable (Error?) -> Void)?
+    let callbackInstalled: AsyncStream<Void>
+    private let callbackInstalledContinuation: AsyncStream<Void>.Continuation
 
-    var isInstalled: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return callback != nil
+    init() {
+        (callbackInstalled, callbackInstalledContinuation) = AsyncStream.makeStream()
     }
 
     func install(_ callback: @escaping @Sendable (Error?) -> Void) {
         lock.lock()
         self.callback = callback
         lock.unlock()
+        callbackInstalledContinuation.yield()
     }
 
     func complete(error: Error?) {
@@ -717,13 +718,12 @@ private final class SamsungPingProbeHarness: @unchecked Sendable {
 private final class SamsungPingCancellationGate: @unchecked Sendable {
     private let condition = NSCondition()
     private var isReleased = false
-    private var waiting = false
     private var recordedPingCount = 0
+    let entered: AsyncStream<Void>
+    private let enteredContinuation: AsyncStream<Void>.Continuation
 
-    var isWaiting: Bool {
-        condition.lock()
-        defer { condition.unlock() }
-        return waiting
+    init() {
+        (entered, enteredContinuation) = AsyncStream.makeStream()
     }
 
     var pingCount: Int {
@@ -734,7 +734,7 @@ private final class SamsungPingCancellationGate: @unchecked Sendable {
 
     func waitBeforeSending() {
         condition.lock()
-        waiting = true
+        enteredContinuation.yield()
         while !isReleased {
             condition.wait()
         }
@@ -759,22 +759,22 @@ private func waitForPingInstallation(
     _ harness: SamsungPingProbeHarness,
     sourceLocation: SourceLocation = #_sourceLocation
 ) async {
-    for _ in 0..<10_000 {
-        if harness.isInstalled { return }
-        await Task.yield()
+    var installations = harness.callbackInstalled.makeAsyncIterator()
+    guard await installations.next() != nil else {
+        Issue.record("The ping callback stream ended unexpectedly.", sourceLocation: sourceLocation)
+        return
     }
-    Issue.record("Timed out waiting for the ping callback.", sourceLocation: sourceLocation)
 }
 
 private func waitForPingGate(
     _ gate: SamsungPingCancellationGate,
     sourceLocation: SourceLocation = #_sourceLocation
 ) async {
-    for _ in 0..<10_000 {
-        if gate.isWaiting { return }
-        await Task.yield()
+    var entries = gate.entered.makeAsyncIterator()
+    guard await entries.next() != nil else {
+        Issue.record("The pre-ping gate stream ended unexpectedly.", sourceLocation: sourceLocation)
+        return
     }
-    Issue.record("Timed out waiting for the pre-ping gate.", sourceLocation: sourceLocation)
 }
 
 private actor CommandOrderRecorder {

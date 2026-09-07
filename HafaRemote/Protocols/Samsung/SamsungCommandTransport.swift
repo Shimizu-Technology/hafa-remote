@@ -278,17 +278,7 @@ enum SamsungPingProbe {
             try await withCheckedThrowingContinuation { continuation in
                 guard race.install(continuation) else { return }
                 beforeSending()
-                guard !Task.isCancelled else {
-                    race.resolve(.failure(CancellationError()))
-                    return
-                }
-                sendPing { error in
-                    if let error {
-                        race.resolve(.failure(error))
-                    } else {
-                        race.resolve(.success(()))
-                    }
-                }
+                race.sendUnlessResolved(sendPing)
             }
         } onCancel: {
             race.resolve(.failure(CancellationError()))
@@ -298,7 +288,9 @@ enum SamsungPingProbe {
 
 /// Resolves cancellation and a late pong callback exactly once.
 private final class SamsungPingProbeRace: @unchecked Sendable {
-    private let lock = NSLock()
+    // Recursive locking lets a synthetic or future send implementation invoke its
+    // callback synchronously while cancellation and send remain one atomic decision.
+    private let lock = NSRecursiveLock()
     private var continuation: CheckedContinuation<Void, Error>?
     private var result: Result<Void, Error>?
 
@@ -312,6 +304,24 @@ private final class SamsungPingProbeRace: @unchecked Sendable {
         self.continuation = continuation
         lock.unlock()
         return true
+    }
+
+    func sendUnlessResolved(
+        _ sendPing: (@escaping @Sendable (Error?) -> Void) -> Void
+    ) {
+        lock.lock()
+        guard result == nil else {
+            lock.unlock()
+            return
+        }
+        sendPing { error in
+            if let error {
+                self.resolve(.failure(error))
+            } else {
+                self.resolve(.success(()))
+            }
+        }
+        lock.unlock()
     }
 
     func resolve(_ result: Result<Void, Error>) {
