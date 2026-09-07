@@ -735,10 +735,13 @@ private final class SamsungPingCancellationGate: @unchecked Sendable {
     func waitBeforeSending() {
         condition.lock()
         enteredContinuation.yield()
+        let deadline = Date().addingTimeInterval(1)
         while !isReleased {
-            condition.wait()
+            guard condition.wait(until: deadline) else { break }
         }
+        let released = isReleased
         condition.unlock()
+        #expect(released, "The pre-ping cancellation gate timed out.")
     }
 
     func release() {
