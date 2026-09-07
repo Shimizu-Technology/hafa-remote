@@ -505,6 +505,16 @@ struct SamsungPingProbeTests {
         }
     }
 
+    @Test("The transport preserves a terminal close when ping fails")
+    func transportPreservesTerminalClose() async {
+        await #expect(throws: SamsungConnectionError.notConnected) {
+            try await SamsungCommandTransport.runHealthProbe(
+                isTerminallyClosed: { true },
+                { throw SyntheticSamsungPingError.failed }
+            )
+        }
+    }
+
     @Test("A pong completes the health probe")
     func pongCompletesProbe() async throws {
         let harness = SamsungPingProbeHarness()

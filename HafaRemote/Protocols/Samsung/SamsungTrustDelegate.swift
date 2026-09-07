@@ -58,10 +58,11 @@ struct SamsungTrustPolicy: Sendable {
 }
 
 /// Restricts Samsung's self-signed TLS certificate exception to one explicit private host.
-final class SamsungTrustDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
+final class SamsungTrustDelegate: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
     private let lock = NSLock()
     private var policy: SamsungTrustPolicy
     private var storedFailure: SamsungTrustFailure?
+    private var webSocketClosed = false
 
     init(address: PrivateIPv4Address, mode: SamsungTrustMode) {
         policy = SamsungTrustPolicy(address: address, mode: mode)
@@ -74,6 +75,10 @@ final class SamsungTrustDelegate: NSObject, URLSessionDelegate, @unchecked Senda
 
     var failure: SamsungTrustFailure? {
         lock.withLock { storedFailure }
+    }
+
+    var isWebSocketClosed: Bool {
+        lock.withLock { webSocketClosed }
     }
 
     func urlSession(
@@ -114,5 +119,23 @@ final class SamsungTrustDelegate: NSObject, URLSessionDelegate, @unchecked Senda
         }
 
         completionHandler(.useCredential, URLCredential(trust: trust))
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
+        reason: Data?
+    ) {
+        lock.withLock { webSocketClosed = true }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        guard task is URLSessionWebSocketTask else { return }
+        lock.withLock { webSocketClosed = true }
     }
 }

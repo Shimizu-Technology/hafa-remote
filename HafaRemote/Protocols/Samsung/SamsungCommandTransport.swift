@@ -18,6 +18,7 @@ protocol SamsungTransporting: TVDriver {
 actor SamsungCommandTransport: SamsungTransporting {
     private var session: URLSession?
     private var webSocket: URLSessionWebSocketTask?
+    private var trustDelegate: SamsungTrustDelegate?
     private var attempts = SamsungConnectionAttemptTracker()
     private let commandSerializer = SamsungCommandSerializer()
     private let pairingTimeout: Duration
@@ -68,6 +69,7 @@ actor SamsungCommandTransport: SamsungTransporting {
             attemptSocket = createdSocket
             session = createdSession
             webSocket = createdSocket
+            trustDelegate = delegate
             createdSocket.resume()
 
             let token = try await waitForPairingToken(
@@ -147,23 +149,36 @@ actor SamsungCommandTransport: SamsungTransporting {
     }
 
     func checkConnection() async throws {
-        guard let webSocket else {
+        guard let webSocket, let trustDelegate else {
             throw SamsungConnectionError.notConnected
         }
-        try await Self.runHealthProbe {
+        let isTerminallyClosed: @Sendable () -> Bool = {
+            trustDelegate.isWebSocketClosed
+                || webSocket.state == .completed
+                || webSocket.state == .canceling
+        }
+        guard !isTerminallyClosed() else { throw SamsungConnectionError.notConnected }
+        try await Self.runHealthProbe(isTerminallyClosed: isTerminallyClosed) {
             try await SamsungPingProbe.run(on: webSocket)
         }
         guard self.webSocket === webSocket else { throw CancellationError() }
+        guard !isTerminallyClosed() else { throw SamsungConnectionError.notConnected }
     }
 
     static func runHealthProbe(
+        isTerminallyClosed: @escaping @Sendable () -> Bool = { false },
         _ operation: @escaping @Sendable () async throws -> Void
     ) async throws {
         do {
             try await operation()
         } catch is CancellationError {
             throw CancellationError()
+        } catch let error as SamsungConnectionError {
+            throw error
         } catch {
+            if isTerminallyClosed() {
+                throw SamsungConnectionError.notConnected
+            }
             throw SamsungConnectionError.unavailable
         }
     }
@@ -231,6 +246,7 @@ actor SamsungCommandTransport: SamsungTransporting {
         webSocket?.cancel(with: .goingAway, reason: nil)
         session?.invalidateAndCancel()
         webSocket = nil
+        trustDelegate = nil
         session = nil
     }
 }
