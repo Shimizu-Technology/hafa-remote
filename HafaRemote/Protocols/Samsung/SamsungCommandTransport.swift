@@ -157,6 +157,7 @@ actor SamsungCommandTransport: SamsungTransporting {
                 || webSocket.state == .completed
                 || webSocket.state == .canceling
         }
+        try Task.checkCancellation()
         guard !isTerminallyClosed() else { throw SamsungConnectionError.notConnected }
         try await Self.runHealthProbe(isTerminallyClosed: isTerminallyClosed) {
             try await SamsungPingProbe.run(on: webSocket)
@@ -171,11 +172,14 @@ actor SamsungCommandTransport: SamsungTransporting {
     ) async throws {
         do {
             try await operation()
+            try Task.checkCancellation()
         } catch is CancellationError {
             throw CancellationError()
-        } catch let error as SamsungConnectionError {
-            throw error
         } catch {
+            try Task.checkCancellation()
+            if let error = error as? SamsungConnectionError {
+                throw error
+            }
             if isTerminallyClosed() {
                 throw SamsungConnectionError.notConnected
             }

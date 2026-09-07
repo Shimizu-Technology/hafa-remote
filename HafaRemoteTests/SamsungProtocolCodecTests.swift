@@ -515,6 +515,34 @@ struct SamsungPingProbeTests {
         }
     }
 
+    @Test("Cancellation wins when a terminal close races a ping error")
+    func cancellationWinsOverTerminalClose() async {
+        let (started, startedContinuation) = AsyncStream<Void>.makeStream()
+        let (release, releaseContinuation) = AsyncStream<Void>.makeStream()
+        let probe = Task {
+            try await SamsungCommandTransport.runHealthProbe(
+                isTerminallyClosed: { true },
+                {
+                    startedContinuation.yield()
+                    var releases = release.makeAsyncIterator()
+                    _ = await releases.next()
+                    throw SyntheticSamsungPingError.failed
+                }
+            )
+        }
+        var starts = started.makeAsyncIterator()
+        _ = await starts.next()
+
+        probe.cancel()
+        releaseContinuation.yield()
+
+        await #expect(throws: CancellationError.self) {
+            try await probe.value
+        }
+        startedContinuation.finish()
+        releaseContinuation.finish()
+    }
+
     @Test("A pong completes the health probe")
     func pongCompletesProbe() async throws {
         let harness = SamsungPingProbeHarness()
