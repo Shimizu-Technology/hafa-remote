@@ -345,6 +345,7 @@ actor RemoteSessionController {
                     shouldReconnect = false
                 }
                 if shouldReconnect {
+                    transitionToPendingReconnectIfAvailable(generation: commandGeneration)
                     await disconnectDriverWithinLimit()
                     guard generation == commandGeneration else { throw error }
                     scheduleReconnect(generation: commandGeneration)
@@ -739,16 +740,7 @@ actor RemoteSessionController {
 
     /// Keeps automatic retry visible while waiting for the next foreground connection attempt.
     private func scheduleReconnect(generation requestedGeneration: UUID) {
-        let delay: Duration
-        if configuration.reconnectDelays.indices.contains(reconnectAttempt) {
-            delay = configuration.reconnectDelays[reconnectAttempt]
-        } else if configuration.repeatsLastReconnectDelay,
-            let lastDelay = configuration.reconnectDelays.last
-        {
-            delay = lastDelay
-        } else {
-            return
-        }
+        guard let delay = reconnectDelay else { return }
         guard isForeground,
             reconnectTask == nil,
             lastNetworkReachability != false
@@ -764,6 +756,27 @@ actor RemoteSessionController {
                 await self?.clearReconnectTask(generation: requestedGeneration)
             }
         }
+        transition(to: .reconnecting(attempt: max(1, reconnectAttempt + 1)))
+    }
+
+    private var reconnectDelay: Duration? {
+        if configuration.reconnectDelays.indices.contains(reconnectAttempt) {
+            return configuration.reconnectDelays[reconnectAttempt]
+        }
+        if configuration.repeatsLastReconnectDelay {
+            return configuration.reconnectDelays.last
+        }
+        return nil
+    }
+
+    /// Projects automatic recovery before a potentially slow transport teardown begins.
+    private func transitionToPendingReconnectIfAvailable(generation requestedGeneration: UUID) {
+        guard generation == requestedGeneration,
+            reconnectDelay != nil,
+            isForeground,
+            reconnectTask == nil,
+            lastNetworkReachability != false
+        else { return }
         transition(to: .reconnecting(attempt: max(1, reconnectAttempt + 1)))
     }
 
@@ -926,6 +939,7 @@ actor RemoteSessionController {
             healthProbeID = nil
         }
         transition(to: .offline)
+        transitionToPendingReconnectIfAvailable(generation: requestedGeneration)
         await disconnectDriverWithinLimit()
         guard generation == requestedGeneration, isForeground else { return }
         scheduleReconnect(generation: requestedGeneration)

@@ -1895,6 +1895,35 @@ struct RemoteSessionControllerTests {
         #expect(await driver.cancelledDisconnectCount == 1)
     }
 
+    @Test("Automatic recovery is visible while failed-command teardown is suspended")
+    func reconnectStatePrecedesSuspendedCommandTeardown() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = SuspendedDisconnectRemoteSessionDriver(tv: tv, failsCommands: true)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                disconnectTimeout: .seconds(4),
+                reconnectDelays: [.seconds(2)]
+            )
+        )
+        await session.connect(to: tv.address.rawValue)
+
+        let command = Task { try await session.send(.select) }
+        var starts = driver.disconnectStarts.makeAsyncIterator()
+        _ = await starts.next()
+
+        #expect(await session.state == .reconnecting(attempt: 1))
+        await resume(clock: clock, duration: .seconds(4))
+        await #expect(throws: SamsungConnectionError.notConnected) {
+            try await command.value
+        }
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(2)) }
+        await session.disconnect()
+    }
+
     @Test("A timed out teardown cannot overlap the next connection")
     func delayedTeardownRemainsSerializedBeforeReconnect() async throws {
         let tv = try testTV(
@@ -2534,12 +2563,14 @@ private actor SuspendedDisconnectRemoteSessionDriver: RemoteSessionDriving {
     nonisolated let disconnectStarts: AsyncStream<Void>
     private let disconnectStartsContinuation: AsyncStream<Void>.Continuation
     private let tv: PairedSamsungTV
+    private let failsCommands: Bool
     private var hasConnected = false
     private var disconnectContinuations: [UUID: CheckedContinuation<Void, Never>] = [:]
     private(set) var cancelledDisconnectCount = 0
 
-    init(tv: PairedSamsungTV) {
+    init(tv: PairedSamsungTV, failsCommands: Bool = false) {
         self.tv = tv
+        self.failsCommands = failsCommands
         let (stream, continuation) = AsyncStream<Void>.makeStream()
         disconnectStarts = stream
         disconnectStartsContinuation = continuation
@@ -2553,7 +2584,11 @@ private actor SuspendedDisconnectRemoteSessionDriver: RemoteSessionDriving {
         return tv
     }
 
-    func send(_ command: RemoteCommand) async throws {}
+    func send(_ command: RemoteCommand) async throws {
+        if failsCommands {
+            throw SamsungConnectionError.notConnected
+        }
+    }
 
     func forget(addressText: String) async throws {}
 
