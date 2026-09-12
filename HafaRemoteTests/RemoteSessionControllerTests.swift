@@ -816,7 +816,7 @@ struct RemoteSessionControllerTests {
         await #expect(throws: SamsungConnectionError.unavailable) {
             try await session.sendText(RemoteTextInput("Håfa"))
         }
-        #expect(await session.state == .offline)
+        #expect(await session.state == .reconnecting(attempt: 1))
 
         await resume(clock: clock, duration: .seconds(5))
         await waitUntil { await session.state == .connected(tv) }
@@ -911,7 +911,7 @@ struct RemoteSessionControllerTests {
 
         await session.connect(to: tv.address.rawValue)
 
-        #expect(await session.state == .failed(.timedOut(.connect)))
+        #expect(await session.state == .reconnecting(attempt: 1))
         await resume(clock: clock, duration: .seconds(2))
         await waitUntil { await session.state == .connected(tv) }
         #expect(await driver.connectCallCount == 2)
@@ -931,7 +931,7 @@ struct RemoteSessionControllerTests {
         )
 
         await session.connect(to: "192.168.10.20")
-        #expect(await session.state == .offline)
+        #expect(await session.state == .reconnecting(attempt: 1))
 
         await resume(clock: clock, duration: .seconds(1))
         await waitUntil { await driver.connectCallCount == 2 }
@@ -979,6 +979,44 @@ struct RemoteSessionControllerTests {
         await session.disconnect()
     }
 
+    /// Proves a long foreground session keeps one transport despite health probes and commands.
+    @Test("Repeated idle probes and intermittent commands preserve one connection")
+    func extendedForegroundUseKeepsOneSession() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false)]
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                reconnectDelays: [.seconds(2)],
+                healthCheckInterval: .seconds(5),
+                healthCheckTimeout: .seconds(9)
+            )
+        )
+
+        await session.connect(to: tv.address.rawValue)
+        for probe in 1...20 {
+            await resume(clock: clock, duration: .seconds(5))
+            await waitUntil { await driver.healthCheckCallCount == probe }
+            if probe.isMultiple(of: 4) {
+                try await session.send(.select)
+            }
+            #expect(await session.state == .connected(tv))
+        }
+
+        #expect(await driver.connectCallCount == 1)
+        #expect(await driver.activeSessionDisconnectCallCount == 0)
+        #expect(await driver.sentCommands == Array(repeating: .select, count: 5))
+        await session.disconnect()
+    }
+
     @Test("Two consecutive transient health failures confirm connection loss")
     func repeatedHealthFailuresReconnectProactively() async throws {
         let tv = try testTV(
@@ -1010,7 +1048,8 @@ struct RemoteSessionControllerTests {
         #expect(await session.state == .connected(tv))
 
         await resume(clock: clock, duration: .seconds(1))
-        await waitUntil { await session.state == .offline }
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
+        await waitUntil { await driver.activeSessionDisconnectCallCount == 1 }
         #expect(await driver.healthCheckCallCount == 2)
         #expect(await driver.activeSessionDisconnectCallCount == 1)
 
@@ -1121,7 +1160,8 @@ struct RemoteSessionControllerTests {
 
         await session.connect(to: tv.address.rawValue)
         await resume(clock: clock, duration: .seconds(5))
-        await waitUntil { await session.state == .offline }
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
+        await waitUntil { await driver.activeSessionDisconnectCallCount == 1 }
 
         #expect(await driver.healthCheckCallCount == 1)
         #expect(await driver.activeSessionDisconnectCallCount == 1)
@@ -1259,11 +1299,18 @@ struct RemoteSessionControllerTests {
         await resume(clock: clock, duration: .seconds(5))
         await waitUntil { await driver.healthCheckCallCount == 1 }
         await resume(clock: clock, duration: .seconds(1))
-        await waitUntil { await session.state == .offline }
-        for expectedCallCount in 2...4 {
-            await resume(clock: clock, duration: .seconds(2))
-            await waitUntil { await driver.connectCallCount == expectedCallCount }
-        }
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
+
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await driver.connectCallCount == 2 }
+        await waitUntil { await session.state == .reconnecting(attempt: 2) }
+
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await driver.connectCallCount == 3 }
+        await waitUntil { await session.state == .reconnecting(attempt: 3) }
+
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await driver.connectCallCount == 4 }
 
         await waitUntil { await session.state == .connected(tv) }
         #expect(await session.state == .connected(tv))
@@ -1298,6 +1345,121 @@ struct RemoteSessionControllerTests {
 
         #expect(await session.state == .connected(tv))
         #expect(await driver.connectCallCount == 2)
+    }
+
+    /// Proves repeated background returns reconnect without overlapping driver sessions.
+    @Test("Ten background returns reconnect without overlapping sessions")
+    func repeatedBackgroundReturnsStayConnected() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let driver = MockRemoteSessionDriver(
+            outcomes: Array(
+                repeating: .success(tv: tv, announcesPairing: false),
+                count: 11
+            )
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            configuration: testConfiguration(reconnectDelays: [.seconds(2)])
+        )
+
+        await session.connect(to: tv.address.rawValue)
+        for _ in 0..<10 {
+            await session.applicationDidEnterBackground()
+            #expect(await session.state == .offline)
+            await session.applicationWillEnterForeground()
+            #expect(await session.state == .connected(tv))
+        }
+
+        #expect(await driver.connectCallCount == 11)
+        #expect(await driver.activeSessionDisconnectCallCount == 10)
+        #expect(await driver.maximumActiveConnectionCount == 1)
+        await session.disconnect()
+    }
+
+    /// Proves foreground recovery is visible before serialized driver teardown completes.
+    @Test("Foreground recovery is visible while background teardown finishes")
+    func foregroundRecoveryDoesNotWaitBehindBackgroundTeardown() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = ControlledPairingRemovalDriver(tv: tv)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                disconnectTimeout: .seconds(4),
+                reconnectDelays: [.seconds(30)]
+            )
+        )
+
+        await session.connect(to: tv.address.rawValue)
+        var disconnectStarts = driver.disconnectStarts.makeAsyncIterator()
+
+        await session.applicationDidEnterBackground()
+        _ = await disconnectStarts.next()
+
+        #expect(await session.state == .offline)
+        #expect(await driver.callLog == ["connect", "disconnect-start"])
+
+        let foreground = Task {
+            await session.applicationWillEnterForeground()
+        }
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
+
+        #expect(await driver.callLog == ["connect", "disconnect-start"])
+        await driver.completeDisconnect()
+        await foreground.value
+
+        #expect(await session.state == .connected(tv))
+        #expect(
+            await driver.callLog == [
+                "connect", "disconnect-start", "disconnect-finish", "connect",
+            ]
+        )
+        await session.disconnect()
+    }
+
+    /// Proves a second background event cancels recovery before a new connection starts.
+    @Test("Foreground recovery stops when the app backgrounds again")
+    func foregroundRecoveryStopsAfterAnotherBackgroundEvent() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let driver = ControlledPairingRemovalDriver(tv: tv)
+        let session = RemoteSessionController(
+            driver: driver,
+            configuration: testConfiguration(reconnectDelays: [.seconds(30)])
+        )
+
+        await session.connect(to: tv.address.rawValue)
+        var disconnectStarts = driver.disconnectStarts.makeAsyncIterator()
+
+        await session.applicationDidEnterBackground()
+        _ = await disconnectStarts.next()
+
+        let foreground = Task {
+            await session.applicationWillEnterForeground()
+        }
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
+
+        await session.applicationDidEnterBackground()
+        #expect(await session.state == .offline)
+
+        await driver.completeDisconnect()
+        await foreground.value
+
+        #expect(await session.state == .offline)
+        #expect(await driver.callLog == ["connect", "disconnect-start", "disconnect-finish"])
+        await session.disconnect()
     }
 
     @Test("A meaningful network recovery bypasses the pending delay")
@@ -1377,6 +1539,7 @@ struct RemoteSessionControllerTests {
         await session.networkReachabilityChanged(isReachable: false)
         await resume(clock: clock, duration: .seconds(1))
         await waitUntil { await session.state == .offline }
+        await waitUntil { await driver.activeSessionDisconnectCallCount == 1 }
 
         #expect(await driver.activeSessionDisconnectCallCount == 1)
         #expect(await driver.connectCallCount == 1)
@@ -1728,7 +1891,37 @@ struct RemoteSessionControllerTests {
         await disconnect.value
 
         #expect(await session.state == .idle)
+        await waitUntil { await driver.cancelledDisconnectCount == 1 }
         #expect(await driver.cancelledDisconnectCount == 1)
+    }
+
+    @Test("Automatic recovery is visible while failed-command teardown is suspended")
+    func reconnectStatePrecedesSuspendedCommandTeardown() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = SuspendedDisconnectRemoteSessionDriver(tv: tv, failsCommands: true)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                disconnectTimeout: .seconds(4),
+                reconnectDelays: [.seconds(2)]
+            )
+        )
+        await session.connect(to: tv.address.rawValue)
+
+        let command = Task { try await session.send(.select) }
+        var starts = driver.disconnectStarts.makeAsyncIterator()
+        _ = await starts.next()
+
+        #expect(await session.state == .reconnecting(attempt: 1))
+        await resume(clock: clock, duration: .seconds(4))
+        await #expect(throws: SamsungConnectionError.notConnected) {
+            try await command.value
+        }
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(2)) }
+        await session.disconnect()
     }
 
     @Test("A timed out teardown cannot overlap the next connection")
@@ -1761,6 +1954,73 @@ struct RemoteSessionControllerTests {
                 "connect", "disconnect-start", "disconnect-finish", "connect",
             ]
         )
+    }
+
+    @Test("Late background teardown completion resumes foreground recovery")
+    func lateBackgroundTeardownCompletionSchedulesReconnect() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = ControlledPairingRemovalDriver(tv: tv)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                disconnectTimeout: .seconds(4),
+                reconnectDelays: [.seconds(2)]
+            )
+        )
+        await session.connect(to: tv.address.rawValue)
+        var disconnectStarts = driver.disconnectStarts.makeAsyncIterator()
+
+        await session.applicationDidEnterBackground()
+        _ = await disconnectStarts.next()
+        let foreground = Task { await session.applicationWillEnterForeground() }
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
+        await resume(clock: clock, duration: .seconds(4))
+        await foreground.value
+
+        #expect(await session.state == .failed(.timedOut(.disconnect)))
+        await driver.completeDisconnect()
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await session.state == .connected(tv) }
+        #expect(
+            await driver.callLog == [
+                "connect", "disconnect-start", "disconnect-finish", "connect",
+            ]
+        )
+        await session.disconnect()
+    }
+
+    @Test("Cancellation-fast background teardown still resumes foreground recovery")
+    func cancelledBackgroundTeardownSchedulesReconnect() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = SuspendedDisconnectRemoteSessionDriver(tv: tv)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                disconnectTimeout: .seconds(4),
+                reconnectDelays: [.seconds(2)]
+            )
+        )
+        await session.connect(to: tv.address.rawValue)
+        var disconnectStarts = driver.disconnectStarts.makeAsyncIterator()
+
+        await session.applicationDidEnterBackground()
+        _ = await disconnectStarts.next()
+        let foreground = Task { await session.applicationWillEnterForeground() }
+        await resume(clock: clock, duration: .seconds(4))
+        await foreground.value
+
+        await waitUntil { await driver.cancelledDisconnectCount == 1 }
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(2)) }
+        #expect(await session.state == .reconnecting(attempt: 1))
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await session.state == .connected(tv) }
     }
 }
 
@@ -2370,12 +2630,14 @@ private actor SuspendedDisconnectRemoteSessionDriver: RemoteSessionDriving {
     nonisolated let disconnectStarts: AsyncStream<Void>
     private let disconnectStartsContinuation: AsyncStream<Void>.Continuation
     private let tv: PairedSamsungTV
+    private let failsCommands: Bool
     private var hasConnected = false
     private var disconnectContinuations: [UUID: CheckedContinuation<Void, Never>] = [:]
     private(set) var cancelledDisconnectCount = 0
 
-    init(tv: PairedSamsungTV) {
+    init(tv: PairedSamsungTV, failsCommands: Bool = false) {
         self.tv = tv
+        self.failsCommands = failsCommands
         let (stream, continuation) = AsyncStream<Void>.makeStream()
         disconnectStarts = stream
         disconnectStartsContinuation = continuation
@@ -2389,7 +2651,11 @@ private actor SuspendedDisconnectRemoteSessionDriver: RemoteSessionDriving {
         return tv
     }
 
-    func send(_ command: RemoteCommand) async throws {}
+    func send(_ command: RemoteCommand) async throws {
+        if failsCommands {
+            throw SamsungConnectionError.notConnected
+        }
+    }
 
     func forget(addressText: String) async throws {}
 

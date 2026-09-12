@@ -17,13 +17,33 @@ struct HafaRemoteApp: App {
         WindowGroup {
             #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("-ui-testing-remote-offline") {
-                    RemoteControlTestHarness(isConnected: false, powerOffFails: false)
+                    RemoteControlTestHarness(
+                        isConnected: false,
+                        isAwaitingApproval: false,
+                        powerOffFails: false
+                    )
+                } else if ProcessInfo.processInfo.arguments.contains(
+                    "-ui-testing-remote-pairing"
+                ) {
+                    RemoteControlTestHarness(
+                        isConnected: false,
+                        isAwaitingApproval: true,
+                        powerOffFails: false
+                    )
                 } else if ProcessInfo.processInfo.arguments.contains(
                     "-ui-testing-remote-power-off-failure"
                 ) {
-                    RemoteControlTestHarness(isConnected: true, powerOffFails: true)
+                    RemoteControlTestHarness(
+                        isConnected: true,
+                        isAwaitingApproval: false,
+                        powerOffFails: true
+                    )
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-remote") {
-                    RemoteControlTestHarness(isConnected: true, powerOffFails: false)
+                    RemoteControlTestHarness(
+                        isConnected: true,
+                        isAwaitingApproval: false,
+                        powerOffFails: false
+                    )
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-discovery-result") {
                     HomeView(
                         discovery: TVDiscoveryStore(
@@ -122,35 +142,27 @@ struct HafaRemoteApp: App {
         @Environment(\.modelContext) private var modelContext
         @State private var didSeed = false
         @State private var session: RemoteSessionStore
+        @State private var networkMonitor: LocalNetworkMonitor
 
         init() {
-            guard let address = try? PrivateIPv4Address("192.168.10.20") else {
-                preconditionFailure("The fixed UI-test address must remain valid")
-            }
-            let television = ConnectedTV(
-                brand: .samsung,
-                reportedDeviceID: "fixture-samsung",
-                address: address,
-                controlPort: 8_002,
-                modelName: "Q70AA",
-                firmwareVersion: "1.0"
-            )
-            let initialState = RemoteSessionState.connected(television)
             _session = State(
                 initialValue: RemoteSessionStore(
                     controller: RemoteSessionController(
-                        driver: SavedTVSwitchingUIFixtureDriver(),
-                        initialState: initialState
-                    ),
-                    initialState: initialState
+                        driver: SavedTVSwitchingUIFixtureDriver(
+                            delaysRepeatedConnections: ProcessInfo.processInfo.arguments.contains(
+                                "-ui-testing-saved-tv-lifecycle"
+                            )
+                        )
+                    )
                 )
             )
+            _networkMonitor = State(initialValue: LocalNetworkMonitor(fixedReachability: true))
         }
 
         var body: some View {
             Group {
                 if didSeed {
-                    HomeView(session: session)
+                    HomeView(session: session, networkMonitor: networkMonitor)
                 } else {
                     ProgressView("Preparing TVs…")
                 }

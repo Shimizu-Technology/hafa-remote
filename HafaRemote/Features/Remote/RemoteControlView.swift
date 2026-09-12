@@ -8,6 +8,8 @@ struct RemoteControlView: View {
     let modelName: String
     let statusLabel: String
     let isConnected: Bool
+    let isReconnecting: Bool
+    let isAwaitingApproval: Bool
     let supportsTextInput: Bool
     let canPowerOnTV: Bool
     let powerOnWasVerified: Bool
@@ -41,7 +43,11 @@ struct RemoteControlView: View {
                 VStack(spacing: 24) {
                     remoteHeader
                     if !isConnected {
-                        recoveryControls
+                        if isReconnecting {
+                            recoveryStatus
+                        } else {
+                            recoveryControls
+                        }
                     }
                     navigationControls
                     utilityControls
@@ -67,7 +73,14 @@ struct RemoteControlView: View {
                     powerFailure = nil
                 }
             }
-            guard wasConnected, !isConnected else { return }
+            guard wasConnected, !isConnected, !isReconnecting else { return }
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: "The TV connection is offline. Recovery controls are now available."
+            )
+        }
+        .onChange(of: isReconnecting) { wasReconnecting, isReconnecting in
+            guard wasReconnecting, !isReconnecting, !isConnected else { return }
             UIAccessibility.post(
                 notification: .announcement,
                 argument: "The TV connection is offline. Recovery controls are now available."
@@ -159,7 +172,8 @@ struct RemoteControlView: View {
                 .buttonStyle(.bordered)
                 .tint(isConnected ? .red : HafaTheme.accent)
                 .disabled(
-                    isPoweringOnTV || isPoweringOffTV || (!isConnected && !canPowerOnTV)
+                    isPoweringOnTV || isPoweringOffTV || isReconnecting
+                        || (!isConnected && !canPowerOnTV)
                 )
                 .accessibilityLabel(
                     powerAccessibilityLabel
@@ -294,6 +308,43 @@ struct RemoteControlView: View {
         }
         .padding(16)
         .background(HafaTheme.surface.opacity(0.76), in: RoundedRectangle(cornerRadius: 22))
+    }
+
+    private var recoveryStatus: some View {
+        HStack(alignment: .center, spacing: 14) {
+            ProgressView()
+                .tint(HafaTheme.accent)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(
+                    isAwaitingApproval
+                        ? "Approve Hafa Remote on your TV" : "Restoring your remote"
+                )
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                Text(
+                    isAwaitingApproval
+                        ? "Follow the approval prompt on your TV to finish connecting."
+                        : "Your saved TV will reconnect automatically. No action is needed."
+                )
+                .font(.caption)
+                .foregroundStyle(HafaTheme.secondaryText)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .background(HafaTheme.surface.opacity(0.76), in: RoundedRectangle(cornerRadius: 22))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            isAwaitingApproval
+                ? "Approve Hafa Remote on your TV. Follow the approval prompt to finish connecting."
+                : "Restoring your remote. Your saved TV will reconnect automatically."
+        )
+        .accessibilityIdentifier(
+            isAwaitingApproval ? "pairingApprovalStatus" : "automaticReconnectStatus"
+        )
     }
 
     private var utilityControls: some View {
@@ -554,6 +605,7 @@ private struct PowerFailure: Identifiable {
     struct RemoteControlTestHarness: View {
         @Environment(\.dynamicTypeSize) private var dynamicTypeSize
         let isConnected: Bool
+        let isAwaitingApproval: Bool
         let powerOffFails: Bool
         @State private var lastCommand = "none"
 
@@ -563,8 +615,10 @@ private struct PowerFailure: Identifiable {
                 RemoteControlView(
                     tvName: "Living Room TV",
                     modelName: "Q70AA",
-                    statusLabel: isConnected ? "Connected" : "Offline",
+                    statusLabel: isConnected ? "Connected" : isAwaitingApproval ? "Pairing…" : "Offline",
                     isConnected: isConnected,
+                    isReconnecting: isAwaitingApproval,
+                    isAwaitingApproval: isAwaitingApproval,
                     supportsTextInput: true,
                     canPowerOnTV: true,
                     powerOnWasVerified: false,

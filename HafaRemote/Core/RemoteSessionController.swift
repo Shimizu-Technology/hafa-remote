@@ -179,6 +179,7 @@ actor RemoteSessionController {
     private var connectionTask: Task<ConnectedTV, Error>?
     private var driverTeardownID: UUID?
     private var driverTeardownTask: Task<Void, Never>?
+    private var recoveryAfterDriverTeardownGeneration: UUID?
     private var pairingRemovalID: UUID?
     private var pairingRemovalWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var reconnectTask: Task<Void, Never>?
@@ -345,6 +346,7 @@ actor RemoteSessionController {
                     shouldReconnect = false
                 }
                 if shouldReconnect {
+                    transitionToPendingReconnectIfAvailable(generation: commandGeneration)
                     await disconnectDriverWithinLimit()
                     guard generation == commandGeneration else { throw error }
                     scheduleReconnect(generation: commandGeneration)
@@ -560,7 +562,7 @@ actor RemoteSessionController {
         let hasTarget = targetAddressText != nil
         await cancelInFlightWork()
         transition(to: hasTarget ? .offline : .idle)
-        await disconnectDriverWithinLimit()
+        beginDriverTeardownIfNeeded()
     }
 
     func applicationWillEnterForeground() async {
@@ -570,7 +572,9 @@ actor RemoteSessionController {
         generation = UUID()
         let requestedGeneration = generation
         reconnectAttempt = 0
+        transition(to: .reconnecting(attempt: 1))
         await cancelInFlightWork()
+        guard generation == requestedGeneration, isForeground else { return }
         await attemptConnection(generation: requestedGeneration, isReconnect: true)
     }
 
@@ -610,7 +614,16 @@ actor RemoteSessionController {
     private func attemptConnection(generation requestedGeneration: UUID, isReconnect: Bool) async {
         guard await waitForDriverTeardownWithinLimit() else {
             if generation == requestedGeneration {
+                if isReconnect, isForeground, targetAddressText != nil {
+                    recoveryAfterDriverTeardownGeneration = requestedGeneration
+                }
                 transition(to: .failed(.timedOut(.disconnect)))
+                if recoveryAfterDriverTeardownGeneration == requestedGeneration,
+                    driverTeardownTask == nil
+                {
+                    recoveryAfterDriverTeardownGeneration = nil
+                    scheduleReconnect(generation: requestedGeneration)
+                }
             }
             return
         }
@@ -735,17 +748,9 @@ actor RemoteSessionController {
         }
     }
 
+    /// Keeps automatic retry visible while waiting for the next foreground connection attempt.
     private func scheduleReconnect(generation requestedGeneration: UUID) {
-        let delay: Duration
-        if configuration.reconnectDelays.indices.contains(reconnectAttempt) {
-            delay = configuration.reconnectDelays[reconnectAttempt]
-        } else if configuration.repeatsLastReconnectDelay,
-            let lastDelay = configuration.reconnectDelays.last
-        {
-            delay = lastDelay
-        } else {
-            return
-        }
+        guard let delay = reconnectDelay else { return }
         guard isForeground,
             reconnectTask == nil,
             lastNetworkReachability != false
@@ -761,6 +766,28 @@ actor RemoteSessionController {
                 await self?.clearReconnectTask(generation: requestedGeneration)
             }
         }
+        transition(to: .reconnecting(attempt: max(1, reconnectAttempt + 1)))
+    }
+
+    private var reconnectDelay: Duration? {
+        if configuration.reconnectDelays.indices.contains(reconnectAttempt) {
+            return configuration.reconnectDelays[reconnectAttempt]
+        }
+        if configuration.repeatsLastReconnectDelay {
+            return configuration.reconnectDelays.last
+        }
+        return nil
+    }
+
+    /// Projects automatic recovery before a potentially slow transport teardown begins.
+    private func transitionToPendingReconnectIfAvailable(generation requestedGeneration: UUID) {
+        guard generation == requestedGeneration,
+            reconnectDelay != nil,
+            isForeground,
+            reconnectTask == nil,
+            lastNetworkReachability != false
+        else { return }
+        transition(to: .reconnecting(attempt: max(1, reconnectAttempt + 1)))
     }
 
     private func runScheduledReconnect(generation requestedGeneration: UUID) async {
@@ -922,6 +949,7 @@ actor RemoteSessionController {
             healthProbeID = nil
         }
         transition(to: .offline)
+        transitionToPendingReconnectIfAvailable(generation: requestedGeneration)
         await disconnectDriverWithinLimit()
         guard generation == requestedGeneration, isForeground else { return }
         scheduleReconnect(generation: requestedGeneration)
@@ -994,12 +1022,13 @@ actor RemoteSessionController {
 
     @discardableResult
     private func disconnectDriverWithinLimit() async -> Bool {
-        if let driverTeardownTask, let driverTeardownID {
-            return await waitForDriverTeardownWithinLimit(
-                task: driverTeardownTask,
-                id: driverTeardownID
-            )
-        }
+        beginDriverTeardownIfNeeded()
+        return await waitForDriverTeardownWithinLimit()
+    }
+
+    /// Starts transport teardown without making a queued foreground event wait for it.
+    private func beginDriverTeardownIfNeeded() {
+        guard driverTeardownTask == nil else { return }
 
         let driver = driver
         let teardownID = UUID()
@@ -1012,8 +1041,6 @@ actor RemoteSessionController {
             await task.value
             await self?.finishDriverTeardown(id: teardownID)
         }
-
-        return await waitForDriverTeardownWithinLimit(task: task, id: teardownID)
     }
 
     private func waitForDriverTeardownWithinLimit() async -> Bool {
@@ -1050,6 +1077,13 @@ actor RemoteSessionController {
         guard driverTeardownID == id else { return }
         driverTeardownID = nil
         driverTeardownTask = nil
+        let recoveryGeneration = recoveryAfterDriverTeardownGeneration
+        recoveryAfterDriverTeardownGeneration = nil
+        guard recoveryGeneration == generation,
+            isForeground,
+            targetAddressText != nil
+        else { return }
+        scheduleReconnect(generation: generation)
     }
 
     private func transition(to newState: RemoteSessionState) {

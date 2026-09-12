@@ -272,6 +272,20 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Acceptance evidence:** A user can open My TVs, understand what is saved, switch rooms, rename a TV, add another, or deliberately forget one without an account or backend. All metadata remains on the iPhone and all pairing secrets remain in Keychain.
 
+### HR-038 — Smooth foreground session continuity
+
+**Evidence:** A local lifecycle review found that background handling waited for transport teardown before processing the queued foreground event. A slow close could therefore leave the returning remote visibly offline for the full disconnect timeout even though automatic reconnection was already expected.
+
+- [x] Start background teardown without blocking the next foreground lifecycle event.
+- [x] Keep teardown and the replacement connection serialized so two TV sessions cannot overlap.
+- [x] Present automatic restoration as a calm progress state instead of showing failure recovery controls during a normal reconnect.
+- [x] Suppress the offline VoiceOver announcement and power action while automatic restoration is active.
+- [x] Add deterministic coverage for extended idle use, intermittent commands, ten background returns, and delayed teardown.
+- [x] Exercise a saved-TV background and return through SpringBoard in the simulator.
+- [ ] Repeat the background-return and extended-idle journeys on each household TV.
+
+**Acceptance evidence:** The full local gate passes. Automated tests preserve one foreground session through repeated health checks, reconnect ten times without overlap, and restore a saved remote after a real simulator background transition. Samsung, Sony, and Vizio hardware confirmation remains required.
+
 ## Phase 3 — External TestFlight
 
 ### HR-012 — Resolve each brand's distribution basis

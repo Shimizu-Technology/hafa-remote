@@ -455,6 +455,12 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
 
     actor SavedTVSwitchingUIFixtureDriver: RemoteSessionDriving {
         nonisolated var brand: TVBrand { .samsung }
+        private let delaysRepeatedConnections: Bool
+        private var connectedTargets: Set<String> = []
+
+        init(delaysRepeatedConnections: Bool = false) {
+            self.delaysRepeatedConnections = delaysRepeatedConnections
+        }
 
         nonisolated func supports(_ brand: TVBrand) -> Bool {
             true
@@ -465,6 +471,7 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
             onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
         ) async throws -> ConnectedTV {
             let address = try PrivateIPv4Address(addressText)
+            await delayRepeatedConnectionIfNeeded(key: "samsung:\(address.rawValue)")
             return ConnectedTV(
                 reportedDeviceID: "fixture-samsung",
                 address: address,
@@ -477,6 +484,9 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
             to target: TVConnectionTarget,
             onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
         ) async throws -> ConnectedTV {
+            await delayRepeatedConnectionIfNeeded(
+                key: "\(target.brand.rawValue):\(target.reportedDeviceID)"
+            )
             if target.brand == .sony {
                 try await Task.sleep(for: .seconds(3))
             }
@@ -501,5 +511,13 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
             brand: TVBrand
         ) async throws {}
         func disconnect() async {}
+
+        /// Holds only a repeated fixture connection long enough for UI tests to observe recovery.
+        private func delayRepeatedConnectionIfNeeded(key: String) async {
+            let isFirstConnection = connectedTargets.insert(key).inserted
+            if delaysRepeatedConnections, !isFirstConnection {
+                try? await Task.sleep(for: .seconds(6))
+            }
+        }
     }
 #endif

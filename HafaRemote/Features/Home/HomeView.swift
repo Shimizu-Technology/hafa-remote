@@ -23,10 +23,12 @@ struct HomeView: View {
     init(
         session: RemoteSessionStore = RemoteSessionStore(),
         discovery: TVDiscoveryStore = TVDiscoveryStore(),
+        networkMonitor: LocalNetworkMonitor = LocalNetworkMonitor(),
         wakeService: any SamsungTVWaking = SamsungWakeOnLANService()
     ) {
         _session = State(initialValue: session)
         _discovery = State(initialValue: discovery)
+        _networkMonitor = State(initialValue: networkMonitor)
         self.wakeService = wakeService
     }
 
@@ -40,6 +42,8 @@ struct HomeView: View {
                     modelName: tv.modelName,
                     statusLabel: statusLabel,
                     isConnected: isPresentedTVConnected,
+                    isReconnecting: isAutomaticallyRecovering,
+                    isAwaitingApproval: isAwaitingApproval,
                     supportsTextInput: tv.brand == .samsung,
                     canPowerOnTV: canPowerOn(tv, savedTV: savedTV),
                     powerOnWasVerified: savedTV?.wakeWasVerified ?? false,
@@ -305,11 +309,11 @@ struct HomeView: View {
         case .connected:
             isPresentedTVConnected ? "Connected" : "Offline"
         case .pairing:
-            "Pairing"
+            "Pairing…"
         case .connecting:
-            "Connecting"
-        case .reconnecting(let attempt):
-            "Reconnecting (attempt \(attempt))"
+            "Connecting…"
+        case .reconnecting:
+            "Reconnecting…"
         case .offline:
             "Offline"
         case .denied:
@@ -325,6 +329,21 @@ struct HomeView: View {
         case .idle:
             "Disconnected"
         }
+    }
+
+    private var isAutomaticallyRecovering: Bool {
+        if selection.isSwitching || addressRecovery.isRecovering { return true }
+        return switch session.state {
+        case .pairing, .connecting, .reconnecting:
+            true
+        default:
+            false
+        }
+    }
+
+    private var isAwaitingApproval: Bool {
+        if case .pairing = session.state { return true }
+        return false
     }
 
     private func restoreLastUsedTVIfNeeded() async {
