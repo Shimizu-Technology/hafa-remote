@@ -79,6 +79,13 @@ struct RemoteControlView: View {
                 argument: "The TV connection is offline. Recovery controls are now available."
             )
         }
+        .onChange(of: isReconnecting) { wasReconnecting, isReconnecting in
+            guard wasReconnecting, !isReconnecting, !isConnected else { return }
+            UIAccessibility.post(
+                notification: .announcement,
+                argument: "The TV connection is offline. Recovery controls are now available."
+            )
+        }
         .onChange(of: isPoweringOnTV) { _, isPoweringOnTV in
             guard isPoweringOnTV else { return }
             UIAccessibility.post(notification: .announcement, argument: recoveryMessage)

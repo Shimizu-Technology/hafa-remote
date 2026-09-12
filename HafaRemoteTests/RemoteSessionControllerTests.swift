@@ -1992,6 +1992,36 @@ struct RemoteSessionControllerTests {
         )
         await session.disconnect()
     }
+
+    @Test("Cancellation-fast background teardown still resumes foreground recovery")
+    func cancelledBackgroundTeardownSchedulesReconnect() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = SuspendedDisconnectRemoteSessionDriver(tv: tv)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                disconnectTimeout: .seconds(4),
+                reconnectDelays: [.seconds(2)]
+            )
+        )
+        await session.connect(to: tv.address.rawValue)
+        var disconnectStarts = driver.disconnectStarts.makeAsyncIterator()
+
+        await session.applicationDidEnterBackground()
+        _ = await disconnectStarts.next()
+        let foreground = Task { await session.applicationWillEnterForeground() }
+        await resume(clock: clock, duration: .seconds(4))
+        await foreground.value
+
+        await waitUntil { await driver.cancelledDisconnectCount == 1 }
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(2)) }
+        #expect(await session.state == .reconnecting(attempt: 1))
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await session.state == .connected(tv) }
+    }
 }
 
 private enum MockConnectionFailure: Sendable {

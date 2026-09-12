@@ -618,6 +618,12 @@ actor RemoteSessionController {
                     recoveryAfterDriverTeardownGeneration = requestedGeneration
                 }
                 transition(to: .failed(.timedOut(.disconnect)))
+                if recoveryAfterDriverTeardownGeneration == requestedGeneration,
+                    driverTeardownTask == nil
+                {
+                    recoveryAfterDriverTeardownGeneration = nil
+                    scheduleReconnect(generation: requestedGeneration)
+                }
             }
             return
         }
