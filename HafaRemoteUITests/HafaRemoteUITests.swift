@@ -208,6 +208,7 @@ final class HafaRemoteUITests: XCTestCase {
     func testSavedTVReconnectsAfterBackgroundReturn() throws {
         let app = makeApplication()
         app.launchArguments.append("-ui-testing-saved-tvs")
+        app.launchArguments.append("-ui-testing-saved-tv-lifecycle")
         app.launch()
 
         let status = app.staticTexts["remoteConnectionStatus"]
@@ -221,7 +222,7 @@ final class HafaRemoteUITests: XCTestCase {
 
         let recovery = app.descendants(matching: .any)["automaticReconnectStatus"]
         XCTAssertTrue(recovery.waitForExistence(timeout: 2))
-        XCTAssertTrue(recovery.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(recovery.waitForNonExistence(timeout: 10))
         expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
         waitForExpectations(timeout: 5)
         let select = app.buttons["remote-select"]

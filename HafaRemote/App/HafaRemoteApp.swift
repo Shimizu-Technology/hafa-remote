@@ -147,7 +147,13 @@ struct HafaRemoteApp: App {
         init() {
             _session = State(
                 initialValue: RemoteSessionStore(
-                    controller: RemoteSessionController(driver: SavedTVSwitchingUIFixtureDriver())
+                    controller: RemoteSessionController(
+                        driver: SavedTVSwitchingUIFixtureDriver(
+                            delaysRepeatedConnections: ProcessInfo.processInfo.arguments.contains(
+                                "-ui-testing-saved-tv-lifecycle"
+                            )
+                        )
+                    )
                 )
             )
             _networkMonitor = State(initialValue: LocalNetworkMonitor(fixedReachability: true))
