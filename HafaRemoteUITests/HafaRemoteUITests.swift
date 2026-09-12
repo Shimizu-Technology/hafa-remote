@@ -203,6 +203,29 @@ final class HafaRemoteUITests: XCTestCase {
         waitForExpectations(timeout: 15)
     }
 
+    /// Returning from another app reconnects the saved TV without user intervention.
+    @MainActor
+    func testSavedTVReconnectsAfterBackgroundReturn() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-saved-tvs")
+        app.launch()
+
+        let status = app.staticTexts["remoteConnectionStatus"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
+        waitForExpectations(timeout: 15)
+
+        XCUIDevice.shared.press(.home)
+        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
+        app.activate()
+
+        expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
+        waitForExpectations(timeout: 5)
+        let select = app.buttons["remote-select"]
+        XCTAssertTrue(select.waitForExistence(timeout: 2))
+        XCTAssertTrue(select.isEnabled)
+    }
+
     /// TV names and rooms remain editable from the visible saved-TV library.
     @MainActor
     func testMyTVsEditsNameAndRoom() throws {

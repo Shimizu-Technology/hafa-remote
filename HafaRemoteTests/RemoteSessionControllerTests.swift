@@ -979,6 +979,43 @@ struct RemoteSessionControllerTests {
         await session.disconnect()
     }
 
+    @Test("Repeated idle probes and intermittent commands preserve one connection")
+    func extendedForegroundUseKeepsOneSession() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false)]
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                reconnectDelays: [.seconds(2)],
+                healthCheckInterval: .seconds(5),
+                healthCheckTimeout: .seconds(9)
+            )
+        )
+
+        await session.connect(to: tv.address.rawValue)
+        for probe in 1...20 {
+            await resume(clock: clock, duration: .seconds(5))
+            await waitUntil { await driver.healthCheckCallCount == probe }
+            if probe.isMultiple(of: 4) {
+                try await session.send(.select)
+            }
+            #expect(await session.state == .connected(tv))
+        }
+
+        #expect(await driver.connectCallCount == 1)
+        #expect(await driver.activeSessionDisconnectCallCount == 0)
+        #expect(await driver.sentCommands == Array(repeating: .select, count: 5))
+        await session.disconnect()
+    }
+
     @Test("Two consecutive transient health failures confirm connection loss")
     func repeatedHealthFailuresReconnectProactively() async throws {
         let tv = try testTV(
@@ -1298,6 +1335,83 @@ struct RemoteSessionControllerTests {
 
         #expect(await session.state == .connected(tv))
         #expect(await driver.connectCallCount == 2)
+    }
+
+    @Test("Ten background returns reconnect without overlapping sessions")
+    func repeatedBackgroundReturnsStayConnected() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let driver = MockRemoteSessionDriver(
+            outcomes: Array(
+                repeating: .success(tv: tv, announcesPairing: false),
+                count: 11
+            )
+        )
+        let session = RemoteSessionController(
+            driver: driver,
+            configuration: testConfiguration(reconnectDelays: [.seconds(2)])
+        )
+
+        await session.connect(to: tv.address.rawValue)
+        for _ in 0..<10 {
+            await session.applicationDidEnterBackground()
+            #expect(await session.state == .offline)
+            await session.applicationWillEnterForeground()
+            #expect(await session.state == .connected(tv))
+        }
+
+        #expect(await driver.connectCallCount == 11)
+        #expect(await driver.activeSessionDisconnectCallCount == 10)
+        #expect(await driver.maximumActiveConnectionCount == 1)
+        await session.disconnect()
+    }
+
+    @Test("Foreground recovery is visible while background teardown finishes")
+    func foregroundRecoveryDoesNotWaitBehindBackgroundTeardown() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let clock = ManualRemoteSessionClock()
+        let driver = ControlledPairingRemovalDriver(tv: tv)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                disconnectTimeout: .seconds(4),
+                reconnectDelays: [.seconds(30)]
+            )
+        )
+
+        await session.connect(to: tv.address.rawValue)
+        var disconnectStarts = driver.disconnectStarts.makeAsyncIterator()
+
+        await session.applicationDidEnterBackground()
+        _ = await disconnectStarts.next()
+
+        #expect(await session.state == .offline)
+        #expect(await driver.callLog == ["connect", "disconnect-start"])
+
+        let foreground = Task {
+            await session.applicationWillEnterForeground()
+        }
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
+
+        #expect(await driver.callLog == ["connect", "disconnect-start"])
+        await driver.completeDisconnect()
+        await foreground.value
+
+        #expect(await session.state == .connected(tv))
+        #expect(
+            await driver.callLog == [
+                "connect", "disconnect-start", "disconnect-finish", "connect",
+            ]
+        )
+        await session.disconnect()
     }
 
     @Test("A meaningful network recovery bypasses the pending delay")

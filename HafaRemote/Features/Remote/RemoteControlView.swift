@@ -8,6 +8,7 @@ struct RemoteControlView: View {
     let modelName: String
     let statusLabel: String
     let isConnected: Bool
+    let isReconnecting: Bool
     let supportsTextInput: Bool
     let canPowerOnTV: Bool
     let powerOnWasVerified: Bool
@@ -41,7 +42,11 @@ struct RemoteControlView: View {
                 VStack(spacing: 24) {
                     remoteHeader
                     if !isConnected {
-                        recoveryControls
+                        if isReconnecting {
+                            automaticRecoveryStatus
+                        } else {
+                            recoveryControls
+                        }
                     }
                     navigationControls
                     utilityControls
@@ -67,7 +72,7 @@ struct RemoteControlView: View {
                     powerFailure = nil
                 }
             }
-            guard wasConnected, !isConnected else { return }
+            guard wasConnected, !isConnected, !isReconnecting else { return }
             UIAccessibility.post(
                 notification: .announcement,
                 argument: "The TV connection is offline. Recovery controls are now available."
@@ -159,7 +164,8 @@ struct RemoteControlView: View {
                 .buttonStyle(.bordered)
                 .tint(isConnected ? .red : HafaTheme.accent)
                 .disabled(
-                    isPoweringOnTV || isPoweringOffTV || (!isConnected && !canPowerOnTV)
+                    isPoweringOnTV || isPoweringOffTV || isReconnecting
+                        || (!isConnected && !canPowerOnTV)
                 )
                 .accessibilityLabel(
                     powerAccessibilityLabel
@@ -294,6 +300,30 @@ struct RemoteControlView: View {
         }
         .padding(16)
         .background(HafaTheme.surface.opacity(0.76), in: RoundedRectangle(cornerRadius: 22))
+    }
+
+    private var automaticRecoveryStatus: some View {
+        HStack(alignment: .center, spacing: 14) {
+            ProgressView()
+                .tint(HafaTheme.accent)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Restoring your remote")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                Text("Your saved TV will reconnect automatically. No action is needed.")
+                    .font(.caption)
+                    .foregroundStyle(HafaTheme.secondaryText)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(16)
+        .background(HafaTheme.surface.opacity(0.76), in: RoundedRectangle(cornerRadius: 22))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Restoring your remote. Your saved TV will reconnect automatically.")
+        .accessibilityIdentifier("automaticReconnectStatus")
     }
 
     private var utilityControls: some View {
@@ -565,6 +595,7 @@ private struct PowerFailure: Identifiable {
                     modelName: "Q70AA",
                     statusLabel: isConnected ? "Connected" : "Offline",
                     isConnected: isConnected,
+                    isReconnecting: false,
                     supportsTextInput: true,
                     canPowerOnTV: true,
                     powerOnWasVerified: false,

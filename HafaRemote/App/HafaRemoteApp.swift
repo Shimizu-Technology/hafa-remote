@@ -122,35 +122,21 @@ struct HafaRemoteApp: App {
         @Environment(\.modelContext) private var modelContext
         @State private var didSeed = false
         @State private var session: RemoteSessionStore
+        @State private var networkMonitor: LocalNetworkMonitor
 
         init() {
-            guard let address = try? PrivateIPv4Address("192.168.10.20") else {
-                preconditionFailure("The fixed UI-test address must remain valid")
-            }
-            let television = ConnectedTV(
-                brand: .samsung,
-                reportedDeviceID: "fixture-samsung",
-                address: address,
-                controlPort: 8_002,
-                modelName: "Q70AA",
-                firmwareVersion: "1.0"
-            )
-            let initialState = RemoteSessionState.connected(television)
             _session = State(
                 initialValue: RemoteSessionStore(
-                    controller: RemoteSessionController(
-                        driver: SavedTVSwitchingUIFixtureDriver(),
-                        initialState: initialState
-                    ),
-                    initialState: initialState
+                    controller: RemoteSessionController(driver: SavedTVSwitchingUIFixtureDriver())
                 )
             )
+            _networkMonitor = State(initialValue: LocalNetworkMonitor(fixedReachability: true))
         }
 
         var body: some View {
             Group {
                 if didSeed {
-                    HomeView(session: session)
+                    HomeView(session: session, networkMonitor: networkMonitor)
                 } else {
                     ProgressView("Preparing TVs…")
                 }

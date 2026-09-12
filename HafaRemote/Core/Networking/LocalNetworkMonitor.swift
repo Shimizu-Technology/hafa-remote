@@ -8,7 +8,7 @@ import Observation
 final class LocalNetworkMonitor {
     private(set) var isReachable: Bool?
 
-    private let monitor: NWPathMonitor
+    private let monitor: NWPathMonitor?
     private let queue = DispatchQueue(label: "com.shimizutechnology.hafaremote.network-path")
 
     init(monitor: NWPathMonitor = NWPathMonitor(requiredInterfaceType: .wifi)) {
@@ -22,7 +22,15 @@ final class LocalNetworkMonitor {
         monitor.start(queue: queue)
     }
 
+    #if DEBUG
+        /// Provides a stable path hint for deterministic lifecycle UI tests.
+        init(fixedReachability: Bool) {
+            monitor = nil
+            isReachable = fixedReachability
+        }
+    #endif
+
     isolated deinit {
-        monitor.cancel()
+        monitor?.cancel()
     }
 }

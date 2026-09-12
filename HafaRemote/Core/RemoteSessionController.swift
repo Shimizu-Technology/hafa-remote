@@ -560,7 +560,7 @@ actor RemoteSessionController {
         let hasTarget = targetAddressText != nil
         await cancelInFlightWork()
         transition(to: hasTarget ? .offline : .idle)
-        await disconnectDriverWithinLimit()
+        beginDriverTeardownIfNeeded()
     }
 
     func applicationWillEnterForeground() async {
@@ -570,7 +570,9 @@ actor RemoteSessionController {
         generation = UUID()
         let requestedGeneration = generation
         reconnectAttempt = 0
+        transition(to: .reconnecting(attempt: 1))
         await cancelInFlightWork()
+        guard generation == requestedGeneration, isForeground else { return }
         await attemptConnection(generation: requestedGeneration, isReconnect: true)
     }
 
@@ -994,12 +996,13 @@ actor RemoteSessionController {
 
     @discardableResult
     private func disconnectDriverWithinLimit() async -> Bool {
-        if let driverTeardownTask, let driverTeardownID {
-            return await waitForDriverTeardownWithinLimit(
-                task: driverTeardownTask,
-                id: driverTeardownID
-            )
-        }
+        beginDriverTeardownIfNeeded()
+        return await waitForDriverTeardownWithinLimit()
+    }
+
+    /// Starts transport teardown without making a queued foreground event wait for it.
+    private func beginDriverTeardownIfNeeded() {
+        guard driverTeardownTask == nil else { return }
 
         let driver = driver
         let teardownID = UUID()
@@ -1012,8 +1015,6 @@ actor RemoteSessionController {
             await task.value
             await self?.finishDriverTeardown(id: teardownID)
         }
-
-        return await waitForDriverTeardownWithinLimit(task: task, id: teardownID)
     }
 
     private func waitForDriverTeardownWithinLimit() async -> Bool {
