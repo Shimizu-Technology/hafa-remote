@@ -500,6 +500,9 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
             reportedDeviceID: String?,
             brand: TVBrand
         ) async throws {}
-        func disconnect() async {}
+        /// Keeps teardown observable long enough for the lifecycle UI test to assert recovery.
+        func disconnect() async {
+            try? await Task.sleep(for: .seconds(2))
+        }
     }
 #endif

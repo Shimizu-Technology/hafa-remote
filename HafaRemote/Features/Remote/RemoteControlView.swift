@@ -9,6 +9,7 @@ struct RemoteControlView: View {
     let statusLabel: String
     let isConnected: Bool
     let isReconnecting: Bool
+    let isAwaitingApproval: Bool
     let supportsTextInput: Bool
     let canPowerOnTV: Bool
     let powerOnWasVerified: Bool
@@ -43,7 +44,7 @@ struct RemoteControlView: View {
                     remoteHeader
                     if !isConnected {
                         if isReconnecting {
-                            automaticRecoveryStatus
+                            recoveryStatus
                         } else {
                             recoveryControls
                         }
@@ -302,19 +303,26 @@ struct RemoteControlView: View {
         .background(HafaTheme.surface.opacity(0.76), in: RoundedRectangle(cornerRadius: 22))
     }
 
-    private var automaticRecoveryStatus: some View {
+    private var recoveryStatus: some View {
         HStack(alignment: .center, spacing: 14) {
             ProgressView()
                 .tint(HafaTheme.accent)
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Restoring your remote")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
-                Text("Your saved TV will reconnect automatically. No action is needed.")
-                    .font(.caption)
-                    .foregroundStyle(HafaTheme.secondaryText)
+                Text(
+                    isAwaitingApproval
+                        ? "Approve Hafa Remote on your TV" : "Restoring your remote"
+                )
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                Text(
+                    isAwaitingApproval
+                        ? "Follow the approval prompt on your TV to finish connecting."
+                        : "Your saved TV will reconnect automatically. No action is needed."
+                )
+                .font(.caption)
+                .foregroundStyle(HafaTheme.secondaryText)
             }
 
             Spacer(minLength: 0)
@@ -322,8 +330,14 @@ struct RemoteControlView: View {
         .padding(16)
         .background(HafaTheme.surface.opacity(0.76), in: RoundedRectangle(cornerRadius: 22))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Restoring your remote. Your saved TV will reconnect automatically.")
-        .accessibilityIdentifier("automaticReconnectStatus")
+        .accessibilityLabel(
+            isAwaitingApproval
+                ? "Approve Hafa Remote on your TV. Follow the approval prompt to finish connecting."
+                : "Restoring your remote. Your saved TV will reconnect automatically."
+        )
+        .accessibilityIdentifier(
+            isAwaitingApproval ? "pairingApprovalStatus" : "automaticReconnectStatus"
+        )
     }
 
     private var utilityControls: some View {
@@ -584,6 +598,7 @@ private struct PowerFailure: Identifiable {
     struct RemoteControlTestHarness: View {
         @Environment(\.dynamicTypeSize) private var dynamicTypeSize
         let isConnected: Bool
+        let isAwaitingApproval: Bool
         let powerOffFails: Bool
         @State private var lastCommand = "none"
 
@@ -593,9 +608,10 @@ private struct PowerFailure: Identifiable {
                 RemoteControlView(
                     tvName: "Living Room TV",
                     modelName: "Q70AA",
-                    statusLabel: isConnected ? "Connected" : "Offline",
+                    statusLabel: isConnected ? "Connected" : isAwaitingApproval ? "Pairing…" : "Offline",
                     isConnected: isConnected,
-                    isReconnecting: false,
+                    isReconnecting: isAwaitingApproval,
+                    isAwaitingApproval: isAwaitingApproval,
                     supportsTextInput: true,
                     canPowerOnTV: true,
                     powerOnWasVerified: false,

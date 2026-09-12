@@ -979,6 +979,7 @@ struct RemoteSessionControllerTests {
         await session.disconnect()
     }
 
+    /// Proves a long foreground session keeps one transport despite health probes and commands.
     @Test("Repeated idle probes and intermittent commands preserve one connection")
     func extendedForegroundUseKeepsOneSession() async throws {
         let tv = try testTV(
@@ -1048,6 +1049,7 @@ struct RemoteSessionControllerTests {
 
         await resume(clock: clock, duration: .seconds(1))
         await waitUntil { await session.state == .offline }
+        await waitUntil { await driver.activeSessionDisconnectCallCount == 1 }
         #expect(await driver.healthCheckCallCount == 2)
         #expect(await driver.activeSessionDisconnectCallCount == 1)
 
@@ -1159,6 +1161,7 @@ struct RemoteSessionControllerTests {
         await session.connect(to: tv.address.rawValue)
         await resume(clock: clock, duration: .seconds(5))
         await waitUntil { await session.state == .offline }
+        await waitUntil { await driver.activeSessionDisconnectCallCount == 1 }
 
         #expect(await driver.healthCheckCallCount == 1)
         #expect(await driver.activeSessionDisconnectCallCount == 1)
@@ -1337,6 +1340,7 @@ struct RemoteSessionControllerTests {
         #expect(await driver.connectCallCount == 2)
     }
 
+    /// Proves repeated background returns reconnect without overlapping driver sessions.
     @Test("Ten background returns reconnect without overlapping sessions")
     func repeatedBackgroundReturnsStayConnected() async throws {
         let tv = try testTV(
@@ -1369,6 +1373,7 @@ struct RemoteSessionControllerTests {
         await session.disconnect()
     }
 
+    /// Proves foreground recovery is visible before serialized driver teardown completes.
     @Test("Foreground recovery is visible while background teardown finishes")
     func foregroundRecoveryDoesNotWaitBehindBackgroundTeardown() async throws {
         let tv = try testTV(
@@ -1411,6 +1416,42 @@ struct RemoteSessionControllerTests {
                 "connect", "disconnect-start", "disconnect-finish", "connect",
             ]
         )
+        await session.disconnect()
+    }
+
+    /// Proves a second background event cancels recovery before a new connection starts.
+    @Test("Foreground recovery stops when the app backgrounds again")
+    func foregroundRecoveryStopsAfterAnotherBackgroundEvent() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20",
+            reportedDeviceID: "synthetic-tv-a",
+            model: "TEST_MODEL_A"
+        )
+        let driver = ControlledPairingRemovalDriver(tv: tv)
+        let session = RemoteSessionController(
+            driver: driver,
+            configuration: testConfiguration(reconnectDelays: [.seconds(30)])
+        )
+
+        await session.connect(to: tv.address.rawValue)
+        var disconnectStarts = driver.disconnectStarts.makeAsyncIterator()
+
+        await session.applicationDidEnterBackground()
+        _ = await disconnectStarts.next()
+
+        let foreground = Task {
+            await session.applicationWillEnterForeground()
+        }
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
+
+        await session.applicationDidEnterBackground()
+        #expect(await session.state == .offline)
+
+        await driver.completeDisconnect()
+        await foreground.value
+
+        #expect(await session.state == .offline)
+        #expect(await driver.callLog == ["connect", "disconnect-start", "disconnect-finish"])
         await session.disconnect()
     }
 
@@ -1491,6 +1532,7 @@ struct RemoteSessionControllerTests {
         await session.networkReachabilityChanged(isReachable: false)
         await resume(clock: clock, duration: .seconds(1))
         await waitUntil { await session.state == .offline }
+        await waitUntil { await driver.activeSessionDisconnectCallCount == 1 }
 
         #expect(await driver.activeSessionDisconnectCallCount == 1)
         #expect(await driver.connectCallCount == 1)

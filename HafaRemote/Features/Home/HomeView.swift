@@ -43,6 +43,7 @@ struct HomeView: View {
                     statusLabel: statusLabel,
                     isConnected: isPresentedTVConnected,
                     isReconnecting: isAutomaticallyRecovering,
+                    isAwaitingApproval: isAwaitingApproval,
                     supportsTextInput: tv.brand == .samsung,
                     canPowerOnTV: canPowerOn(tv, savedTV: savedTV),
                     powerOnWasVerified: savedTV?.wakeWasVerified ?? false,
@@ -338,6 +339,11 @@ struct HomeView: View {
         default:
             false
         }
+    }
+
+    private var isAwaitingApproval: Bool {
+        if case .pairing = session.state { return true }
+        return false
     }
 
     private func restoreLastUsedTVIfNeeded() async {

@@ -219,6 +219,9 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
         app.activate()
 
+        let recovery = app.descendants(matching: .any)["automaticReconnectStatus"]
+        XCTAssertTrue(recovery.waitForExistence(timeout: 2))
+        XCTAssertTrue(recovery.waitForNonExistence(timeout: 5))
         expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
         waitForExpectations(timeout: 5)
         let select = app.buttons["remote-select"]
@@ -608,6 +611,20 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(tvSetup.isHittable)
         tvSetup.tap()
         XCTAssertEqual(app.staticTexts["lastRemoteCommand"].label, "setup")
+    }
+
+    /// Pairing recovery tells the user to approve the connection on the TV.
+    @MainActor
+    func testPairingRemoteShowsTVApprovalInstructions() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-remote-pairing")
+        app.launch()
+
+        let approval = app.descendants(matching: .any)["pairingApprovalStatus"]
+        XCTAssertTrue(approval.waitForExistence(timeout: 5))
+        XCTAssertTrue(approval.label.contains("Approve Hafa Remote on your TV"))
+        XCTAssertFalse(app.buttons["retryConnectionButton"].exists)
+        XCTAssertFalse(app.buttons["remote-select"].isEnabled)
     }
 
     @MainActor
