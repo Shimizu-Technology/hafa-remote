@@ -1955,6 +1955,43 @@ struct RemoteSessionControllerTests {
             ]
         )
     }
+
+    @Test("Late background teardown completion resumes foreground recovery")
+    func lateBackgroundTeardownCompletionSchedulesReconnect() async throws {
+        let tv = try testTV(
+            address: "192.168.10.20", reportedDeviceID: "synthetic-tv-a", model: "TEST_MODEL_A")
+        let clock = ManualRemoteSessionClock()
+        let driver = ControlledPairingRemovalDriver(tv: tv)
+        let session = RemoteSessionController(
+            driver: driver,
+            clock: clock,
+            configuration: testConfiguration(
+                disconnectTimeout: .seconds(4),
+                reconnectDelays: [.seconds(2)]
+            )
+        )
+        await session.connect(to: tv.address.rawValue)
+        var disconnectStarts = driver.disconnectStarts.makeAsyncIterator()
+
+        await session.applicationDidEnterBackground()
+        _ = await disconnectStarts.next()
+        let foreground = Task { await session.applicationWillEnterForeground() }
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
+        await resume(clock: clock, duration: .seconds(4))
+        await foreground.value
+
+        #expect(await session.state == .failed(.timedOut(.disconnect)))
+        await driver.completeDisconnect()
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await session.state == .connected(tv) }
+        #expect(
+            await driver.callLog == [
+                "connect", "disconnect-start", "disconnect-finish", "connect",
+            ]
+        )
+        await session.disconnect()
+    }
 }
 
 private enum MockConnectionFailure: Sendable {

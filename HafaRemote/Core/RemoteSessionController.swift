@@ -179,6 +179,7 @@ actor RemoteSessionController {
     private var connectionTask: Task<ConnectedTV, Error>?
     private var driverTeardownID: UUID?
     private var driverTeardownTask: Task<Void, Never>?
+    private var recoveryAfterDriverTeardownGeneration: UUID?
     private var pairingRemovalID: UUID?
     private var pairingRemovalWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var reconnectTask: Task<Void, Never>?
@@ -613,6 +614,9 @@ actor RemoteSessionController {
     private func attemptConnection(generation requestedGeneration: UUID, isReconnect: Bool) async {
         guard await waitForDriverTeardownWithinLimit() else {
             if generation == requestedGeneration {
+                if isReconnect, isForeground, targetAddressText != nil {
+                    recoveryAfterDriverTeardownGeneration = requestedGeneration
+                }
                 transition(to: .failed(.timedOut(.disconnect)))
             }
             return
@@ -1067,6 +1071,13 @@ actor RemoteSessionController {
         guard driverTeardownID == id else { return }
         driverTeardownID = nil
         driverTeardownTask = nil
+        let recoveryGeneration = recoveryAfterDriverTeardownGeneration
+        recoveryAfterDriverTeardownGeneration = nil
+        guard recoveryGeneration == generation,
+            isForeground,
+            targetAddressText != nil
+        else { return }
+        scheduleReconnect(generation: generation)
     }
 
     private func transition(to newState: RemoteSessionState) {
