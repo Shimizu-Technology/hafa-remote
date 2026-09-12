@@ -624,7 +624,9 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(approval.waitForExistence(timeout: 5))
         XCTAssertTrue(approval.label.contains("Approve Hafa Remote on your TV"))
         XCTAssertFalse(app.buttons["retryConnectionButton"].exists)
-        XCTAssertFalse(app.buttons["remote-select"].isEnabled)
+        let select = app.buttons["remote-select"]
+        XCTAssertTrue(select.waitForExistence(timeout: 2))
+        XCTAssertFalse(select.isEnabled)
     }
 
     @MainActor

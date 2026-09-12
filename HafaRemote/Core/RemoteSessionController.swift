@@ -737,6 +737,7 @@ actor RemoteSessionController {
         }
     }
 
+    /// Keeps automatic retry visible while waiting for the next foreground connection attempt.
     private func scheduleReconnect(generation requestedGeneration: UUID) {
         let delay: Duration
         if configuration.reconnectDelays.indices.contains(reconnectAttempt) {
@@ -763,6 +764,7 @@ actor RemoteSessionController {
                 await self?.clearReconnectTask(generation: requestedGeneration)
             }
         }
+        transition(to: .reconnecting(attempt: max(1, reconnectAttempt + 1)))
     }
 
     private func runScheduledReconnect(generation requestedGeneration: UUID) async {

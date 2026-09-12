@@ -816,7 +816,7 @@ struct RemoteSessionControllerTests {
         await #expect(throws: SamsungConnectionError.unavailable) {
             try await session.sendText(RemoteTextInput("Håfa"))
         }
-        #expect(await session.state == .offline)
+        #expect(await session.state == .reconnecting(attempt: 1))
 
         await resume(clock: clock, duration: .seconds(5))
         await waitUntil { await session.state == .connected(tv) }
@@ -911,7 +911,7 @@ struct RemoteSessionControllerTests {
 
         await session.connect(to: tv.address.rawValue)
 
-        #expect(await session.state == .failed(.timedOut(.connect)))
+        #expect(await session.state == .reconnecting(attempt: 1))
         await resume(clock: clock, duration: .seconds(2))
         await waitUntil { await session.state == .connected(tv) }
         #expect(await driver.connectCallCount == 2)
@@ -931,7 +931,7 @@ struct RemoteSessionControllerTests {
         )
 
         await session.connect(to: "192.168.10.20")
-        #expect(await session.state == .offline)
+        #expect(await session.state == .reconnecting(attempt: 1))
 
         await resume(clock: clock, duration: .seconds(1))
         await waitUntil { await driver.connectCallCount == 2 }
@@ -1048,7 +1048,7 @@ struct RemoteSessionControllerTests {
         #expect(await session.state == .connected(tv))
 
         await resume(clock: clock, duration: .seconds(1))
-        await waitUntil { await session.state == .offline }
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
         await waitUntil { await driver.activeSessionDisconnectCallCount == 1 }
         #expect(await driver.healthCheckCallCount == 2)
         #expect(await driver.activeSessionDisconnectCallCount == 1)
@@ -1160,7 +1160,7 @@ struct RemoteSessionControllerTests {
 
         await session.connect(to: tv.address.rawValue)
         await resume(clock: clock, duration: .seconds(5))
-        await waitUntil { await session.state == .offline }
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
         await waitUntil { await driver.activeSessionDisconnectCallCount == 1 }
 
         #expect(await driver.healthCheckCallCount == 1)
@@ -1299,11 +1299,18 @@ struct RemoteSessionControllerTests {
         await resume(clock: clock, duration: .seconds(5))
         await waitUntil { await driver.healthCheckCallCount == 1 }
         await resume(clock: clock, duration: .seconds(1))
-        await waitUntil { await session.state == .offline }
-        for expectedCallCount in 2...4 {
-            await resume(clock: clock, duration: .seconds(2))
-            await waitUntil { await driver.connectCallCount == expectedCallCount }
-        }
+        await waitUntil { await session.state == .reconnecting(attempt: 1) }
+
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await driver.connectCallCount == 2 }
+        await waitUntil { await session.state == .reconnecting(attempt: 2) }
+
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await driver.connectCallCount == 3 }
+        await waitUntil { await session.state == .reconnecting(attempt: 3) }
+
+        await resume(clock: clock, duration: .seconds(2))
+        await waitUntil { await driver.connectCallCount == 4 }
 
         await waitUntil { await session.state == .connected(tv) }
         #expect(await session.state == .connected(tv))
@@ -1884,6 +1891,7 @@ struct RemoteSessionControllerTests {
         await disconnect.value
 
         #expect(await session.state == .idle)
+        await waitUntil { await driver.cancelledDisconnectCount == 1 }
         #expect(await driver.cancelledDisconnectCount == 1)
     }
 
