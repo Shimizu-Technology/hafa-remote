@@ -300,6 +300,9 @@ if [[ -n "$export_path" ]]; then
   codesign -d --entitlements :- "$exported_app" >"$export_tmp/entitlements.plist" 2>/dev/null
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' "$export_tmp/entitlements.plist")" == "4T358A5S74.com.shimizutechnology.hafaremote" ]] || { echo "Exported application identifier does not match." >&2; exit 1; }
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :get-task-allow' "$export_tmp/entitlements.plist")" == "false" ]] || { echo "Exported app is debuggable." >&2; exit 1; }
+  codesign -d --entitlements :- "$exported_control" >"$export_tmp/control-entitlements.plist" 2>/dev/null
+  [[ "$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' "$export_tmp/control-entitlements.plist")" == "4T358A5S74.com.shimizutechnology.hafaremote.controls" ]] || { echo "Exported control application identifier does not match." >&2; exit 1; }
+  [[ "$(/usr/libexec/PlistBuddy -c 'Print :get-task-allow' "$export_tmp/control-entitlements.plist")" == "false" ]] || { echo "Exported control is debuggable." >&2; exit 1; }
 fi
 
 echo "iOS release preflight passed for Hafa Remote $(setting MARKETING_VERSION) ($(setting CURRENT_PROJECT_VERSION)) with Xcode $xcode_version / iOS SDK $sdk_version"
