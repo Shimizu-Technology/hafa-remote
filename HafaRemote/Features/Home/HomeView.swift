@@ -615,6 +615,7 @@ struct HomeView: View {
                     controlPort: tv.controlPort,
                     macAddress: canPersistWakeMetadata ? tv.macAddress?.persistedValue : nil,
                     wakeWasVerified: canPersistWakeMetadata && wakeWasJustVerified,
+                    capabilities: tv.capabilities,
                     lastSeenAt: now,
                     lastUsedAt: now
                 )

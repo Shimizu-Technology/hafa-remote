@@ -372,28 +372,34 @@ struct RemoteControlView: View {
     private var volumeControls: some View {
         controlGroup(title: "Volume") {
             HStack(spacing: 18) {
-                labeledControl(
-                    command: .volumeDown,
-                    systemImage: "speaker.minus.fill",
-                    label: "Down",
-                    hint: "Lowers volume. Hold to repeat.",
-                    accessibilityLabel: "Volume down",
-                    repeats: true
-                )
-                labeledControl(
-                    command: .mute,
-                    systemImage: "speaker.slash.fill",
-                    label: "Mute",
-                    hint: "Toggles mute."
-                )
-                labeledControl(
-                    command: .volumeUp,
-                    systemImage: "speaker.plus.fill",
-                    label: "Up",
-                    hint: "Raises volume. Hold to repeat.",
-                    accessibilityLabel: "Volume up",
-                    repeats: true
-                )
+                if capabilities.contains(.volume) {
+                    labeledControl(
+                        command: .volumeDown,
+                        systemImage: "speaker.minus.fill",
+                        label: "Down",
+                        hint: "Lowers volume. Hold to repeat.",
+                        accessibilityLabel: "Volume down",
+                        repeats: true
+                    )
+                }
+                if capabilities.contains(.mute) {
+                    labeledControl(
+                        command: .mute,
+                        systemImage: "speaker.slash.fill",
+                        label: "Mute",
+                        hint: "Toggles mute."
+                    )
+                }
+                if capabilities.contains(.volume) {
+                    labeledControl(
+                        command: .volumeUp,
+                        systemImage: "speaker.plus.fill",
+                        label: "Up",
+                        hint: "Raises volume. Hold to repeat.",
+                        accessibilityLabel: "Volume up",
+                        repeats: true
+                    )
+                }
             }
         }
     }

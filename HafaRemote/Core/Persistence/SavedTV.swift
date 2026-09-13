@@ -18,6 +18,7 @@ final class SavedTV: CustomStringConvertible {
     var wakeWasVerified: Bool = false
     var pendingCredentialRemoval: Bool = false
     /// Comma-separated raw values keep the additive SwiftData migration inspectable.
+    /// An empty string means the field predates capabilities; `none` is an explicit empty set.
     var capabilitiesRawValue: String = ""
     var lastSeenAt: Date
     var lastUsedAt: Date
@@ -72,13 +73,17 @@ final class SavedTV: CustomStringConvertible {
     }
 
     var capabilities: Set<TVCapability> {
+        guard !capabilitiesRawValue.isEmpty else {
+            return Self.defaultCapabilities(for: brand, macAddress: macAddress)
+        }
+        guard capabilitiesRawValue != Self.emptyCapabilitiesMarker else { return [] }
+
         let decoded = Set(
             capabilitiesRawValue.split(separator: ",").compactMap {
                 TVCapability(rawValue: String($0))
             }
         )
-        return decoded.isEmpty
-            ? Self.defaultCapabilities(for: brand, macAddress: macAddress) : decoded
+        return decoded
     }
 
     var validatedControlPort: UInt16? {
@@ -175,8 +180,11 @@ final class SavedTV: CustomStringConvertible {
     }
 
     private static func encodeCapabilities(_ capabilities: Set<TVCapability>) -> String {
-        capabilities.map(\.rawValue).sorted().joined(separator: ",")
+        guard !capabilities.isEmpty else { return emptyCapabilitiesMarker }
+        return capabilities.map(\.rawValue).sorted().joined(separator: ",")
     }
+
+    private static let emptyCapabilitiesMarker = "none"
 
     private static func defaultCapabilities(
         for brand: TVBrand,

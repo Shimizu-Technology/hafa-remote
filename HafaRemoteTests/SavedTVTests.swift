@@ -78,6 +78,48 @@ struct SavedTVTests {
         #expect(saved.rememberedTV?.capabilities == [.navigation, .volume])
     }
 
+    @MainActor
+    @Test("An explicitly empty capability set survives persistence")
+    func preservesExplicitlyEmptyCapabilities() throws {
+        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try ModelContainer(for: SavedTV.self, configurations: configuration)
+        let saved = SavedTV(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Limited TV",
+            modelName: "TEST_MODEL",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.0.2.20",
+            capabilities: []
+        )
+        container.mainContext.insert(saved)
+        try container.mainContext.save()
+
+        let restoredContext = ModelContext(container)
+        let restored = try #require(
+            restoredContext.fetch(FetchDescriptor<SavedTV>()).first
+        )
+
+        #expect(restored.capabilitiesRawValue == "none")
+        #expect(restored.capabilities.isEmpty)
+    }
+
+    @Test("A missing legacy capability value uses safe brand defaults")
+    func defaultsOnlyMissingLegacyCapabilities() {
+        let saved = SavedTV(
+            brand: .sony,
+            reportedDeviceID: "synthetic-device-id",
+            displayName: "Legacy TV",
+            modelName: "TEST_MODEL",
+            firmwareVersion: nil,
+            lastKnownAddress: "192.0.2.20",
+            capabilities: []
+        )
+        saved.capabilitiesRawValue = ""
+
+        #expect(saved.capabilities == TVCapability.implemented(for: .sony))
+    }
+
     @Test("Existing Samsung records keep a safe brand default")
     func defaultsLegacyRecordsToSamsung() {
         let saved = SavedTV(
