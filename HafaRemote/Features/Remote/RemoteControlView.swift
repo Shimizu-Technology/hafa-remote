@@ -3,6 +3,7 @@ import UIKit
 
 struct RemoteControlView: View {
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let tvName: String
     let modelName: String
@@ -10,7 +11,7 @@ struct RemoteControlView: View {
     let isConnected: Bool
     let isReconnecting: Bool
     let isAwaitingApproval: Bool
-    let supportsTextInput: Bool
+    let capabilities: Set<TVCapability>
     let canPowerOnTV: Bool
     let powerOnWasVerified: Bool
     let powerOnHelpText: String
@@ -40,7 +41,7 @@ struct RemoteControlView: View {
                 .ignoresSafeArea()
 
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 24 : 18) {
                     remoteHeader
                     if !isConnected {
                         if isReconnecting {
@@ -49,24 +50,27 @@ struct RemoteControlView: View {
                             recoveryControls
                         }
                     }
-                    navigationControls
-                    utilityControls
-                    volumeControls
-                    playbackControls
-                    if supportsTextInput {
-                        keyboardControl
+                    if capabilities.contains(.navigation) {
+                        navigationControls
+                        utilityControls
+                    }
+                    if capabilities.contains(.volume) || capabilities.contains(.mute) {
+                        volumeControls
+                    }
+                    if capabilities.contains(.playback) {
+                        playbackControls
+                    } else if capabilities.contains(.textInput) {
+                        textControls
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 28)
+                .padding(.top, 8)
+                .padding(.bottom, 20)
             }
             .scrollBounceBehavior(.basedOnSize)
         }
         .navigationTitle("Remote")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .preferredColorScheme(.dark)
         .onChange(of: isConnected) { wasConnected, isConnected in
             if isConnected, !isPoweringOnTV {
                 if powerFailure?.operation == .powerOn {
@@ -139,7 +143,7 @@ struct RemoteControlView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(tvName)
                         .font(.title3.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(HafaTheme.primaryText)
                         .lineLimit(1)
                         .accessibilityIdentifier("remoteTVName")
 
@@ -173,7 +177,8 @@ struct RemoteControlView: View {
                 .tint(isConnected ? .red : HafaTheme.accent)
                 .disabled(
                     isPoweringOnTV || isPoweringOffTV || isReconnecting
-                        || (!isConnected && !canPowerOnTV)
+                        || (isConnected && !capabilities.contains(.powerOff))
+                        || (!isConnected && (!canPowerOnTV || !capabilities.contains(.powerOn)))
                 )
                 .accessibilityLabel(
                     powerAccessibilityLabel
@@ -322,7 +327,7 @@ struct RemoteControlView: View {
                         ? "Approve Hafa Remote on your TV" : "Restoring your remote"
                 )
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(HafaTheme.primaryText)
                 Text(
                     isAwaitingApproval
                         ? "Follow the approval prompt on your TV to finish connecting."
@@ -367,39 +372,69 @@ struct RemoteControlView: View {
     private var volumeControls: some View {
         controlGroup(title: "Volume") {
             HStack(spacing: 18) {
-                labeledControl(
-                    command: .volumeDown,
-                    systemImage: "speaker.minus.fill",
-                    label: "Down",
-                    hint: "Lowers volume. Hold to repeat.",
-                    accessibilityLabel: "Volume down",
-                    repeats: true
-                )
-                labeledControl(
-                    command: .mute,
-                    systemImage: "speaker.slash.fill",
-                    label: "Mute",
-                    hint: "Toggles mute."
-                )
-                labeledControl(
-                    command: .volumeUp,
-                    systemImage: "speaker.plus.fill",
-                    label: "Up",
-                    hint: "Raises volume. Hold to repeat.",
-                    accessibilityLabel: "Volume up",
-                    repeats: true
-                )
+                if capabilities.contains(.volume) {
+                    labeledControl(
+                        command: .volumeDown,
+                        systemImage: "speaker.minus.fill",
+                        label: "Down",
+                        hint: "Lowers volume. Hold to repeat.",
+                        accessibilityLabel: "Volume down",
+                        repeats: true
+                    )
+                }
+                if capabilities.contains(.mute) {
+                    labeledControl(
+                        command: .mute,
+                        systemImage: "speaker.slash.fill",
+                        label: "Mute",
+                        hint: "Toggles mute."
+                    )
+                }
+                if capabilities.contains(.volume) {
+                    labeledControl(
+                        command: .volumeUp,
+                        systemImage: "speaker.plus.fill",
+                        label: "Up",
+                        hint: "Raises volume. Hold to repeat.",
+                        accessibilityLabel: "Volume up",
+                        repeats: true
+                    )
+                }
             }
         }
     }
 
     private var playbackControls: some View {
-        controlGroup(title: "Playback") {
-            HStack(spacing: 12) {
-                compactControl(.rewind, image: "backward.fill", label: "Rewind")
-                compactControl(.play, image: "play.fill", label: "Play")
-                compactControl(.pause, image: "pause.fill", label: "Pause")
-                compactControl(.fastForward, image: "forward.fill", label: "Fast forward")
+        let includesTextInput = capabilities.contains(.textInput)
+        return controlGroup(title: includesTextInput ? "Playback & Text" : "Playback") {
+            HStack(spacing: includesTextInput ? 8 : 12) {
+                compactControl(
+                    .rewind,
+                    image: "backward.fill",
+                    label: "Rewind",
+                    size: includesTextInput ? 52 : 56
+                )
+                compactControl(
+                    .play,
+                    image: "play.fill",
+                    label: "Play",
+                    size: includesTextInput ? 52 : 56
+                )
+                compactControl(
+                    .pause,
+                    image: "pause.fill",
+                    label: "Pause",
+                    size: includesTextInput ? 52 : 56
+                )
+                compactControl(
+                    .fastForward,
+                    image: "forward.fill",
+                    label: "Fast forward",
+                    size: includesTextInput ? 52 : 56
+                )
+                if includesTextInput {
+                    keyboardControl
+                }
             }
         }
     }
@@ -408,16 +443,24 @@ struct RemoteControlView: View {
         Button {
             isShowingKeyboard = true
         } label: {
-            Label("Keyboard", systemImage: "keyboard")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 50)
+            Image(systemName: "keyboard")
+                .font(.system(size: 18, weight: .semibold))
+                .frame(width: 52, height: 52)
+                .contentShape(.circle)
         }
         .buttonStyle(.bordered)
+        .buttonBorderShape(.circle)
         .tint(HafaTheme.accent)
         .disabled(!isConnected)
+        .accessibilityLabel("Keyboard")
         .accessibilityHint("Opens text entry. Focus a text field on the TV first.")
         .accessibilityIdentifier("remote-keyboard")
+    }
+
+    private var textControls: some View {
+        controlGroup(title: "Text") {
+            keyboardControl
+        }
     }
 
     private func controlGroup<Content: View>(
@@ -433,7 +476,7 @@ struct RemoteControlView: View {
             content()
                 .frame(maxWidth: .infinity)
         }
-        .padding(16)
+        .padding(14)
         .background(HafaTheme.surface.opacity(0.52), in: RoundedRectangle(cornerRadius: 22))
     }
 
@@ -466,7 +509,8 @@ struct RemoteControlView: View {
     private func compactControl(
         _ command: RemoteCommand,
         image: String,
-        label: String
+        label: String,
+        size: CGFloat = 56
     ) -> some View {
         RemoteControlButton(
             command: command,
@@ -474,7 +518,7 @@ struct RemoteControlView: View {
             accessibilityLabel: label,
             accessibilityHint: "Sends \(label.lowercased()) to the active TV app.",
             isEnabled: isConnected,
-            size: 56,
+            size: size,
             action: action
         )
     }
@@ -619,7 +663,7 @@ private struct PowerFailure: Identifiable {
                     isConnected: isConnected,
                     isReconnecting: isAwaitingApproval,
                     isAwaitingApproval: isAwaitingApproval,
-                    supportsTextInput: true,
+                    capabilities: TVCapability.implemented(for: .samsung).union([.powerOn]),
                     canPowerOnTV: true,
                     powerOnWasVerified: false,
                     powerOnHelpText: "Requires the TV's network standby setting.",

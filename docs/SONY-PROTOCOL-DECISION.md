@@ -24,10 +24,9 @@ The app will not silently fall back to subnet scanning or treat an IP address as
 - Store Sony trust material under Sony-specific Keychain services. Samsung and Vizio code cannot read, reuse, or delete it.
 - Encode the bounded protocol subset directly in Swift. No protobuf or Android-TV package is added to the app binary.
 - Expose only semantic `RemoteCommand` values to the UI. The Sony module alone maps them to Android key codes.
-- Treat the current power key as a toggle until hardware behavior is proven. Do not label wake as supported merely because power-off works.
+- Keep power actions explicit: Android TV `SLEEP` (`223`) is used for power off and `WAKEUP` (`224`) for power on. Hardware support remains capability-gated; never infer verified wake support merely because power-off works.
 
 ## Sources
 
 - Android Open Source Project, Google TV Pairing Protocol: <https://android.googlesource.com/platform/external/google-tv-pairing-protocol/>
 - Android TV Remote Service v2 interoperability reference (Apache-2.0): <https://github.com/tronikos/androidtvremote2>
-

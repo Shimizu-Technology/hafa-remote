@@ -5,6 +5,36 @@ import Testing
 
 /// Foundation tests that hold release metadata to the product's privacy promise.
 struct HafaRemoteTests {
+    @Test("Implemented capabilities stay brand-neutral and truthful")
+    func implementedCapabilities() {
+        let samsung = TVCapability.implemented(for: .samsung)
+        let sony = TVCapability.implemented(for: .sony)
+        let vizio = TVCapability.implemented(for: .vizio)
+
+        #expect(samsung.contains(.textInput))
+        #expect(!sony.contains(.textInput))
+        #expect(!vizio.contains(.textInput))
+        #expect(!samsung.contains(.powerOn))
+        #expect(sony.contains(.powerOn))
+        #expect(vizio.contains(.powerOn))
+    }
+
+    @Test("An explicit device capability set remains authoritative")
+    func explicitCapabilitiesRemainAuthoritative() throws {
+        let tv = ConnectedTV(
+            brand: .samsung,
+            reportedDeviceID: "synthetic-device-id",
+            address: try PrivateIPv4Address("192.168.10.20"),
+            modelName: "Q70AA",
+            firmwareVersion: nil,
+            networkConnection: .wireless,
+            macAddress: try TVMACAddress("02:00:5E:10:00:01"),
+            capabilities: [.navigation]
+        )
+
+        #expect(tv.capabilities == [.navigation])
+    }
+
     /// Verifies the user-facing name and required platform declarations in the built app.
     @Test("The shipped metadata matches the product's privacy promise")
     func appMetadataMatchesPrivacyPromise() throws {

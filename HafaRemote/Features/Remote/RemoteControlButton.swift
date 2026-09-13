@@ -46,11 +46,11 @@ private struct RemoteControlButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(role == .destructive ? Color.red : Color.white)
+            .foregroundStyle(role == .destructive ? Color.red : HafaTheme.primaryText)
             .background(Circle().fill(backgroundColor(isPressed: configuration.isPressed)))
             .overlay {
                 Circle()
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(HafaTheme.controlBorder, lineWidth: 1)
             }
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.94 : 1)
             .opacity(isEnabled ? 1 : 0.34)

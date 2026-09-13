@@ -9,7 +9,7 @@ echo "Running credential scan"
 ./scripts/scan-secrets.sh
 
 echo "Checking Swift formatting"
-xcrun swift-format lint --strict --recursive HafaRemote HafaRemoteTests HafaRemoteUITests
+xcrun swift-format lint --strict --recursive HafaRemote HafaRemoteControls HafaRemoteTests HafaRemoteUITests
 
 echo "Checking release configuration"
 ./scripts/test-ios-release-preflight.sh
@@ -79,6 +79,16 @@ app_path="$derived_data/Build/Products/Debug-iphonesimulator/Hafa Remote.app"
 bundle_id="$(plutil -extract CFBundleIdentifier raw "$app_path/Info.plist")"
 if [[ "$bundle_id" != "com.shimizutechnology.hafaremote" ]]; then
   echo "Unexpected app bundle identifier: $bundle_id" >&2
+  exit 1
+fi
+
+control_path="$app_path/PlugIns/HafaRemoteControls.appex"
+if [[ ! -d "$control_path" ]]; then
+  echo "Control Center extension was not embedded." >&2
+  exit 1
+fi
+if [[ "$(plutil -extract CFBundleIdentifier raw "$control_path/Info.plist")" != "com.shimizutechnology.hafaremote.controls" ]]; then
+  echo "Unexpected Control Center extension bundle identifier." >&2
   exit 1
 fi
 

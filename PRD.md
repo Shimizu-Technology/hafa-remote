@@ -2,7 +2,7 @@
 ## Product Requirements Document
 
 **Version:** 0.3
-**Date:** September 6, 2026
+**Date:** September 13, 2026
 **Owner:** Shimizu Technology
 **Status:** Three-brand internal TestFlight candidate; household hardware validation pending
 
@@ -101,7 +101,7 @@ The main session state machine must represent at least:
 - LG, Roku, Fire TV, generic infrared remotes, casting, or devices that cannot complete a supported local pairing flow
 - Casting, screen mirroring, media browsing, or content recommendations
 - User accounts, cloud sync, remote-outside-the-home control, or a backend
-- Siri, widgets, Shortcuts, Live Activities, or home-screen controls
+- Siri, home-screen widgets, Shortcuts automations, Live Activities, or direct background TV commands. Version one includes one static Control Center/Lock Screen/Action Button control that only opens the remembered remote.
 - Custom layouts, macros, scenes, or automations
 - Subscription billing, advertising, telemetry, or behavioral analytics
 - Claims of universal brand or model compatibility

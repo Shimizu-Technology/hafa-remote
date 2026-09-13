@@ -4,7 +4,7 @@ Hafa Remote is a native iPhone remote for compatible Samsung, Sony, and Vizio sm
 
 ## Status
 
-The native SwiftUI personal alpha includes one automatic nearby-TV search, brand-specific secure pairing, saved-TV switching, connection recovery, everyday remote controls, text entry where supported, and power controls for saved TVs. Samsung wake uses a verified Wake-on-LAN target; Sony and Vizio use their local standby controls. Manual IP entry remains available only as a troubleshooting fallback.
+The native SwiftUI personal alpha includes automatic nearby-TV search, brand-specific secure pairing, saved-TV switching, connection recovery, capability-driven controls, and a Control Center/Lock Screen/Action Button launcher for the remembered remote. Samsung wake uses a verified Wake-on-LAN target; Sony and Vizio use their local standby controls. Manual IP entry remains available only as a troubleshooting fallback.
 
 ## Documents
 
@@ -14,6 +14,7 @@ The native SwiftUI personal alpha includes one automatic nearby-TV search, brand
 ## Intended stack
 
 - SwiftUI
+- WidgetKit and App Intents for the stateless system launcher
 - Swift 6
 - Network.framework and Security.framework
 - SwiftData for non-secret device metadata
