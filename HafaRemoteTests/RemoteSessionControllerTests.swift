@@ -2069,14 +2069,16 @@ private actor SuspendedHealthRemoteSessionDriver: RemoteSessionDriving {
     }
 
     func checkConnection() async throws {
-        healthCheckStartsContinuation.yield()
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<Void, Error>) in
                 if Task.isCancelled {
+                    cancelledHealthCheckCount += 1
                     continuation.resume(throwing: CancellationError())
                 } else {
                     healthContinuation = continuation
+                    // Signal only after cancellation has a continuation to release.
+                    healthCheckStartsContinuation.yield()
                 }
             }
         } onCancel: {

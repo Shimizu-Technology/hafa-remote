@@ -44,7 +44,7 @@ struct HomeView: View {
                     isConnected: isPresentedTVConnected,
                     isReconnecting: isAutomaticallyRecovering,
                     isAwaitingApproval: isAwaitingApproval,
-                    supportsTextInput: tv.brand == .samsung,
+                    capabilities: tv.capabilities,
                     canPowerOnTV: canPowerOn(tv, savedTV: savedTV),
                     powerOnWasVerified: savedTV?.wakeWasVerified ?? false,
                     powerOnHelpText: powerOnHelpText(for: tv.brand),
@@ -87,7 +87,6 @@ struct HomeView: View {
                 emptyState
             }
         }
-        .preferredColorScheme(.dark)
         .sheet(isPresented: $isShowingSetup) {
             TVSetupView(
                 session: session,
@@ -221,7 +220,7 @@ struct HomeView: View {
                         VStack(spacing: 10) {
                             Text("Your remote, without the rental fee.")
                                 .font(.title2.weight(.semibold))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(HafaTheme.primaryText)
                                 .multilineTextAlignment(.center)
 
                             Text(
@@ -255,7 +254,6 @@ struct HomeView: View {
             }
         }
         .navigationTitle("Hafa Remote")
-        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbar {
             if !savedTVs.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -279,7 +277,7 @@ struct HomeView: View {
 
                 Text(presentation.title)
                     .font(.headline)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(HafaTheme.primaryText)
 
                 if let instruction = presentation.instruction {
                     Text(instruction)
@@ -299,7 +297,6 @@ struct HomeView: View {
             .accessibilityIdentifier("restoringSavedTVState")
         }
         .navigationTitle("Hafa Remote")
-        .toolbarColorScheme(.dark, for: .navigationBar)
     }
 
     private var statusLabel: String {
@@ -618,6 +615,7 @@ struct HomeView: View {
                     controlPort: tv.controlPort,
                     macAddress: canPersistWakeMetadata ? tv.macAddress?.persistedValue : nil,
                     wakeWasVerified: canPersistWakeMetadata && wakeWasJustVerified,
+                    capabilities: tv.capabilities,
                     lastSeenAt: now,
                     lastUsedAt: now
                 )
@@ -693,6 +691,7 @@ private struct MyTVsView: View {
     @State private var editRequest: SavedTVEditRequest?
     @State private var activeAlert: MyTVsAlert?
     @State private var forgettingDeviceKey: String?
+    @State private var isShowingHelp = false
 
     /// Builds a local, account-free library for every previously paired TV.
     var body: some View {
@@ -713,12 +712,42 @@ private struct MyTVsView: View {
                             "Saved only on this iPhone. Pairing credentials stay protected in Keychain."
                         )
                     }
+
+                    Section("Quick Access") {
+                        Button {
+                            isShowingHelp = true
+                        } label: {
+                            Label {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("Add to Control Center")
+                                        .foregroundStyle(HafaTheme.primaryText)
+                                    Text("Open your remote from anywhere on this iPhone")
+                                        .font(.caption)
+                                        .foregroundStyle(HafaTheme.secondaryText)
+                                }
+                            } icon: {
+                                Image(systemName: "switch.2")
+                                    .foregroundStyle(HafaTheme.accent)
+                            }
+                        }
+                        .frame(minHeight: 44)
+                        .accessibilityLabel("Add Hafa Remote to Control Center")
+                        .accessibilityHint("Shows setup instructions")
+                        .accessibilityIdentifier("controlCenterHelpButton")
+                    }
+
+                    Section("Help & Privacy") {
+                        Button("About Hafa Remote", systemImage: "info.circle") {
+                            isShowingHelp = true
+                        }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("aboutHafaRemoteButton")
+                    }
                 }
                 .scrollContentBackground(.hidden)
             }
             .navigationTitle("My TVs")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") {
@@ -744,7 +773,6 @@ private struct MyTVsView: View {
                 .background(.ultraThinMaterial)
             }
         }
-        .preferredColorScheme(.dark)
         .sheet(item: $editRequest) { request in
             SavedTVEditor(savedTV: request.savedTV) { displayName, roomName in
                 try saveEdits(
@@ -753,6 +781,9 @@ private struct MyTVsView: View {
                     roomName: roomName
                 )
             }
+        }
+        .sheet(isPresented: $isShowingHelp) {
+            HafaRemoteHelpView()
         }
         .alert(item: $activeAlert) { alert in
             switch alert.kind {
@@ -797,7 +828,7 @@ private struct MyTVsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(savedTV.displayName)
                             .font(.headline)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(HafaTheme.primaryText)
                             .lineLimit(1)
 
                         Text(savedTVDetail(savedTV))
@@ -919,6 +950,80 @@ private struct MyTVsView: View {
     }
 }
 
+private struct HafaRemoteHelpView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    helpStep(1, "Open Control Center, then touch and hold an empty area.")
+                    helpStep(2, "Tap Add a Control and search for Hafa Remote.")
+                    helpStep(3, "Add the control. Tap it whenever you want your remote.")
+                } header: {
+                    Text("Control Center")
+                } footer: {
+                    Text(
+                        "iOS controls the layout. Hafa Remote cannot add or rearrange the control for you."
+                    )
+                }
+
+                Section("Why It’s Safe") {
+                    Label("The control only opens Hafa Remote.", systemImage: "arrow.up.forward.app")
+                    Label("TV credentials stay in this app’s Keychain.", systemImage: "key.fill")
+                    Label("Commands stay on your local network.", systemImage: "wifi")
+                }
+
+                Section("About") {
+                    LabeledContent("Version", value: appVersion)
+                    Text("No account, cloud sync, ads, tracking, or subscription.")
+                    Link(
+                        "Support",
+                        destination: URL(string: "https://shimizu-technology.com/hafa-remote/support")!
+                    )
+                    Link(
+                        "Privacy Policy",
+                        destination: URL(string: "https://shimizu-technology.com/hafa-remote/privacy")!
+                    )
+                }
+            }
+            .navigationTitle("Help & About")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+
+    private var appVersion: String {
+        let version =
+            Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+            as? String ?? "—"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
+        return "\(version) (\(build))"
+    }
+
+    private func helpStep(_ number: Int, _ instruction: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text("\(number)")
+                .font(.caption.weight(.bold).monospacedDigit())
+                .foregroundStyle(HafaTheme.canvas)
+                .frame(width: 28, height: 28)
+                .background(HafaTheme.accent, in: Circle())
+                .accessibilityHidden(true)
+            Text(instruction)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Step \(number). \(instruction)")
+    }
+}
+
 private struct SavedTVEditRequest: Identifiable {
     let id = UUID()
     let savedTV: SavedTV
@@ -1016,7 +1121,6 @@ private struct SavedTVEditor: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
         .alert(
             "Couldn’t Save TV",
             isPresented: Binding(

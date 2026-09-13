@@ -21,6 +21,31 @@ enum TVBrand: String, Codable, CaseIterable, Hashable, Sendable {
     }
 }
 
+/// Brand-neutral features a connected television makes available to the app.
+/// Presentation code consumes this set instead of guessing from a brand name.
+enum TVCapability: String, Codable, CaseIterable, Hashable, Sendable {
+    case navigation
+    case volume
+    case mute
+    case playback
+    case textInput
+    case powerOff
+    case powerOn
+
+    static func implemented(for brand: TVBrand) -> Set<TVCapability> {
+        var capabilities: Set<TVCapability> = [
+            .navigation, .volume, .mute, .playback, .powerOff,
+        ]
+        switch brand {
+        case .samsung:
+            capabilities.insert(.textInput)
+        case .sony, .vizio:
+            capabilities.insert(.powerOn)
+        }
+        return capabilities
+    }
+}
+
 enum TVNetworkConnection: Equatable, Sendable {
     case unavailable
     case wireless
@@ -111,6 +136,7 @@ struct ConnectedTV: Equatable, Sendable {
     let firmwareVersion: String?
     let networkConnection: TVNetworkConnection
     let macAddress: TVMACAddress?
+    let capabilities: Set<TVCapability>
 
     init(
         brand: TVBrand = .samsung,
@@ -121,7 +147,8 @@ struct ConnectedTV: Equatable, Sendable {
         modelName: String,
         firmwareVersion: String?,
         networkConnection: TVNetworkConnection = .unavailable,
-        macAddress: TVMACAddress? = nil
+        macAddress: TVMACAddress? = nil,
+        capabilities: Set<TVCapability>? = nil
     ) {
         self.brand = brand
         self.reportedDeviceID = reportedDeviceID
@@ -132,6 +159,11 @@ struct ConnectedTV: Equatable, Sendable {
         self.firmwareVersion = firmwareVersion
         self.networkConnection = networkConnection
         self.macAddress = macAddress
+        var resolvedCapabilities = capabilities ?? TVCapability.implemented(for: brand)
+        if capabilities == nil, brand == .samsung, networkConnection == .wireless, macAddress != nil {
+            resolvedCapabilities.insert(.powerOn)
+        }
+        self.capabilities = resolvedCapabilities
     }
 
     var stableDeviceKey: String {
@@ -159,7 +191,8 @@ struct ConnectedTV: Equatable, Sendable {
             modelName: modelName,
             firmwareVersion: firmwareVersion,
             networkConnection: networkConnection,
-            macAddress: macAddress
+            macAddress: macAddress,
+            capabilities: capabilities
         )
     }
 
