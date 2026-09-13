@@ -3,7 +3,7 @@
 ## Release identity
 
 - Version: `1.0`
-- TestFlight build: `6`
+- TestFlight build: `7`
 - App Store Connect Apple ID: `6808899369`
 - SKU: `hafa-remote-ios`
 - Bundle ID: `com.shimizutechnology.hafaremote`
