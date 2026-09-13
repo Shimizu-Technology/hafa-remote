@@ -324,6 +324,37 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Add TV"].waitForExistence(timeout: 3))
     }
 
+    /// Control Center setup is discoverable and explains the privacy boundary.
+    @MainActor
+    func testMyTVsExplainsControlCenterAccess() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-saved-tvs")
+        app.launch()
+
+        XCTAssertTrue(app.buttons["myTVsButton"].waitForExistence(timeout: 5))
+        app.buttons["myTVsButton"].tap()
+        let help = app.buttons["controlCenterHelpButton"]
+        for _ in 0..<3 where !help.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(help.waitForExistence(timeout: 2))
+        help.tap()
+
+        XCTAssertTrue(app.navigationBars["Help & About"].waitForExistence(timeout: 2))
+        XCTAssertTrue(
+            app.staticTexts["Step 1. Open Control Center, then touch and hold an empty area."].exists)
+        let privacyBoundary = app.staticTexts["The control only opens Hafa Remote."]
+        for _ in 0..<3 where !privacyBoundary.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(privacyBoundary.waitForExistence(timeout: 2))
+        let noAccount = app.staticTexts["No account, cloud sync, ads, tracking, or subscription."]
+        for _ in 0..<3 where !noAccount.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(noAccount.waitForExistence(timeout: 2))
+    }
+
     /// A malformed saved endpoint remains visible and manageable instead of stranding the user.
     @MainActor
     func testMyTVsRemainsAvailableForMalformedSavedTV() throws {

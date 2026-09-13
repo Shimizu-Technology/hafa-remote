@@ -110,7 +110,6 @@ struct TVSetupView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 
     @ViewBuilder

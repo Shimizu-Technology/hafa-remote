@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E11000000000000000000001 /* OpenHafaRemoteIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12000000000000000000001 /* OpenHafaRemoteIntent.swift */; };
+		E11000000000000000000002 /* OpenHafaRemoteIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12000000000000000000001 /* OpenHafaRemoteIntent.swift */; };
+		E11000000000000000000003 /* HafaRemoteControlsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12000000000000000000002 /* HafaRemoteControlsBundle.swift */; };
+		E11000000000000000000004 /* HafaRemoteLauncherControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12000000000000000000003 /* HafaRemoteLauncherControl.swift */; };
+		E11000000000000000000005 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = E12000000000000000000005 /* PrivacyInfo.xcprivacy */; };
+		E11000000000000000000006 /* HafaRemoteControls.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E12000000000000000000006 /* HafaRemoteControls.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		11DFB409FF879A160B1AB3C4 /* PrivateIPv4Address.swift in Sources */ = {isa = PBXBuildFile; fileRef = D90C5FC34ABBF76738E4A178 /* PrivateIPv4Address.swift */; };
 		174B2BC669B6814751000001 /* RemoteSessionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 174B2BC669B6814751000011 /* RemoteSessionController.swift */; };
 		174B2BC669B6814751000002 /* RemoteSessionState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 174B2BC669B6814751000012 /* RemoteSessionState.swift */; };
@@ -69,6 +75,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		E16000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CC818B5E44F16785E01C3CD4 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E15000000000000000000001;
+			remoteInfo = HafaRemoteControls;
+		};
 		22AA0F6BC95F09E6D2149D2C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = CC818B5E44F16785E01C3CD4 /* Project object */;
@@ -85,7 +98,27 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		E14000000000000000000004 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				E11000000000000000000006 /* HafaRemoteControls.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		E12000000000000000000001 /* OpenHafaRemoteIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OpenHafaRemoteIntent.swift; sourceTree = "<group>"; };
+		E12000000000000000000002 /* HafaRemoteControlsBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HafaRemoteControlsBundle.swift; sourceTree = "<group>"; };
+		E12000000000000000000003 /* HafaRemoteLauncherControl.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HafaRemoteLauncherControl.swift; sourceTree = "<group>"; };
+		E12000000000000000000004 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E12000000000000000000005 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		E12000000000000000000006 /* HafaRemoteControls.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = HafaRemoteControls.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		05F87DEC2C03FC39EAECAB38 /* SamsungTrustDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungTrustDelegate.swift; sourceTree = "<group>"; };
 		10AAEEB17C3074710C8B3AD8 /* SamsungSetupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungSetupView.swift; sourceTree = "<group>"; };
 		11CFB329B0E5168B6E0EC74E /* SamsungPairingCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungPairingCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -151,6 +184,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		E14000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		06227FB8A04581201C671B2B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -178,6 +218,36 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		E13000000000000000000001 /* AppIntents */ = {
+			isa = PBXGroup;
+			children = (
+				E12000000000000000000001 /* OpenHafaRemoteIntent.swift */,
+			);
+			name = AppIntents;
+			path = AppIntents;
+			sourceTree = "<group>";
+		};
+		E13000000000000000000002 /* HafaRemoteControls */ = {
+			isa = PBXGroup;
+			children = (
+				E12000000000000000000002 /* HafaRemoteControlsBundle.swift */,
+				E12000000000000000000003 /* HafaRemoteLauncherControl.swift */,
+				E12000000000000000000004 /* Info.plist */,
+				E13000000000000000000003 /* Resources */,
+			);
+			name = HafaRemoteControls;
+			path = HafaRemoteControls;
+			sourceTree = "<group>";
+		};
+		E13000000000000000000003 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				E12000000000000000000005 /* PrivacyInfo.xcprivacy */,
+			);
+			name = Resources;
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		088025519B8EA59CEFAD391A /* Samsung */ = {
 			isa = PBXGroup;
 			children = (
@@ -288,6 +358,7 @@
 				7C928A991764F83D53D78435 /* Products */,
 				E0279846EC80226126686A3D /* Frameworks */,
 				F2624935A3BB8084521F5294 /* HafaRemote */,
+				E13000000000000000000002 /* HafaRemoteControls */,
 				788EB1518D6036019F1270CC /* HafaRemoteTests */,
 				2CF6AD0EE094B893960FF0D4 /* HafaRemoteUITests */,
 			);
@@ -322,6 +393,7 @@
 			isa = PBXGroup;
 			children = (
 				6027352C8DF125BE3FD89916 /* HafaRemote.app */,
+				E12000000000000000000006 /* HafaRemoteControls.appex */,
 				459EA73C20961A77BD5E1123 /* HafaRemoteTests.xctest */,
 				2A939B24A7E535AB6DA1B6D7 /* HafaRemoteUITests.xctest */,
 			);
@@ -385,6 +457,7 @@
 			isa = PBXGroup;
 			children = (
 				5F11E2A820EC89F7AD933554 /* HafaRemoteApp.swift */,
+				E13000000000000000000001 /* AppIntents */,
 				621127FDEF5F6BE4013D7C65 /* HafaTheme.swift */,
 				D907E6B71E286A4EA2A187FA /* HomeView.swift */,
 				8C278492A67B0829A5B2722B /* Resources */,
@@ -399,6 +472,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		E15000000000000000000001 /* HafaRemoteControls */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E17000000000000000000003 /* Build configuration list for PBXNativeTarget "HafaRemoteControls" */;
+			buildPhases = (
+				E14000000000000000000001 /* Sources */,
+				E14000000000000000000002 /* Frameworks */,
+				E14000000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HafaRemoteControls;
+			productName = HafaRemoteControls;
+			productReference = E12000000000000000000006 /* HafaRemoteControls.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		AD9E80BF995450A4C26F0552 /* HafaRemoteTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = D191DF54FC30F2B709ACB7B9 /* Build configuration list for PBXNativeTarget "HafaRemoteTests" */;
@@ -424,10 +514,12 @@
 				D822003268461B8DA0932DFD /* Sources */,
 				56DE0147D9EC9D848A222782 /* Frameworks */,
 				54ACFC9984E08B95CFA2CA30 /* Resources */,
+				E14000000000000000000004 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				E16000000000000000000002 /* PBXTargetDependency */,
 			);
 			name = HafaRemote;
 			productName = HafaRemote;
@@ -461,6 +553,11 @@
 				LastSwiftUpdateCheck = 2660;
 				LastUpgradeCheck = 2660;
 				TargetAttributes = {
+					E15000000000000000000001 = {
+						CreatedOnToolsVersion = 26.6;
+						DevelopmentTeam = 4T358A5S74;
+						ProvisioningStyle = Automatic;
+					};
 					AD9E80BF995450A4C26F0552 = {
 						CreatedOnToolsVersion = 26.6;
 						DevelopmentTeam = 4T358A5S74;
@@ -494,6 +591,7 @@
 			projectRoot = "";
 			targets = (
 				C7F7ECCCCB0641A5E074A0B8 /* HafaRemote */,
+				E15000000000000000000001 /* HafaRemoteControls */,
 				AD9E80BF995450A4C26F0552 /* HafaRemoteTests */,
 				FA09C26D567DA024832990BA /* HafaRemoteUITests */,
 			);
@@ -501,6 +599,14 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		E14000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E11000000000000000000005 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		54ACFC9984E08B95CFA2CA30 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -527,6 +633,16 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		E14000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E11000000000000000000002 /* OpenHafaRemoteIntent.swift in Sources */,
+				E11000000000000000000003 /* HafaRemoteControlsBundle.swift in Sources */,
+				E11000000000000000000004 /* HafaRemoteLauncherControl.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		101924123B2AA9A12EFF6EEA /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -564,6 +680,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AF670AF8B9F1EB53EEAF349B /* HafaRemoteApp.swift in Sources */,
+				E11000000000000000000001 /* OpenHafaRemoteIntent.swift in Sources */,
 				6C519C628890A5AF91F135B9 /* HafaTheme.swift in Sources */,
 				F338C28FB5D32B11FAA6CD02 /* HomeView.swift in Sources */,
 				CBD8CDA113D850514C799BCD /* RemoteCommand.swift in Sources */,
@@ -605,6 +722,12 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		E16000000000000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = HafaRemoteControls;
+			target = E15000000000000000000001 /* HafaRemoteControls */;
+			targetProxy = E16000000000000000000001 /* PBXContainerItemProxy */;
+		};
 		BB9333B9780FAD0FDE0EB146 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = HafaRemote;
@@ -620,6 +743,61 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		E17000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 6;
+				DEVELOPMENT_TEAM = 4T358A5S74;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HafaRemoteControls/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote.controls;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		E17000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 6;
+				DEVELOPMENT_TEAM = 4T358A5S74;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = HafaRemoteControls/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote.controls;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		197B971B2729416562AF958E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -628,7 +806,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = HafaRemote/Resources/HafaRemote.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 4T358A5S74;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -696,7 +874,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = HafaRemote/Resources/HafaRemote.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = 4T358A5S74;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -873,6 +1051,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		E17000000000000000000003 /* Build configuration list for PBXNativeTarget "HafaRemoteControls" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E17000000000000000000001 /* Debug */,
+				E17000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		B6C50CA4996A2731922E1720 /* Build configuration list for PBXNativeTarget "HafaRemoteUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

@@ -2,9 +2,9 @@
 ## Build Plan
 
 **Version:** 0.2
-**Last updated:** September 7, 2026
-**Current status:** Internal TestFlight build 4 exposed overly aggressive foreground health handling; the build 5 release candidate keeps a usable session connected through one inconclusive probe, coordinates probes with commands, and confirms sustained network loss before recovery UI appears
-**Current execution frontier:** Upload internal build 5, then repeat extended idle, intermittent-command, background-return, network-interruption, saved-TV persistence, switching, address-recovery, and power tests on Leon's exact household TVs
+**Last updated:** September 13, 2026
+**Current status:** Build 6 adds a safe iOS Control Center launcher, persists brand-neutral TV capabilities, and completes adaptive Light/Dark appearance plus in-app help
+**Current execution frontier:** Validate and upload internal build 6, then test the system control, accessibility settings, and existing remote regressions on Leon's iPhone and exact household TVs
 
 ## Delivery targets
 
@@ -286,6 +286,20 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 **Acceptance evidence:** The full local gate passes. Automated tests preserve one foreground session through repeated health checks, reconnect ten times without overlap, and restore a saved remote after a real simulator background transition. Samsung, Sony, and Vizio hardware confirmation remains required.
 
+### HR-039 — Add immediate iOS system access and capability-driven polish
+
+**Evidence:** iOS 18 supports third-party controls in Control Center, the Lock Screen, and the Action Button. Hafa Remote already restores the last-used TV when opened, so a launcher provides fast access without copying pairing credentials into an extension or relying on a background network session that iOS may suspend.
+
+- [x] Add a static WidgetKit control that opens the remembered remote from iOS system surfaces.
+- [x] Keep the extension account-free and stateless, with no TV credentials, App Group, local-network session, or direct background command.
+- [x] Explain the three manual Control Center setup steps in My TVs and provide privacy/support access.
+- [x] Represent TV features as persisted brand-neutral capabilities and render only supported control groups.
+- [x] Support system Light/Dark appearance, Increased Contrast, Dynamic Type, VoiceOver, and Reduce Motion without reducing controls below 44 points.
+- [x] Extend the code and release gates to validate the embedded extension, privacy manifest, bundle identity, and matching build number.
+- [ ] Confirm adding and launching the control on Leon's physical iPhone; the simulator validates the extension bundle but does not replace this system-surface test.
+
+**Acceptance evidence:** The full local gate passes on build 6, the extension is embedded and release-validated, and simulator UI checks cover the in-app setup guidance and adaptive remote. Physical-iPhone Control Center confirmation remains required after TestFlight processing.
+
 ## Phase 3 — External TestFlight
 
 ### HR-012 — Resolve each brand's distribution basis
@@ -424,4 +438,4 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Immediate next action
 
-On the exact build 5 PR head, pass `./scripts/gate.sh`, create the signed archive and exported IPA, and validate the reviewed bundle, version, entitlements, provisioning profile, and privacy manifest. Record the result before merging the PR. Only after that validation passes, upload the same artifact to internal TestFlight and run the Samsung, Sony, and Vizio household acceptance journeys in `ios/app-store/en-US/testflight_what_to_test.txt`.
+On the exact build 6 PR head, pass `./scripts/gate.sh` and validate the app plus embedded control. After the reviewed PR merges, create and validate the signed archive and exported IPA from the merge commit, upload that artifact to internal TestFlight, and run the Control Center, accessibility, Samsung, Sony, and Vizio journeys in `ios/app-store/en-US/testflight_what_to_test.txt`.

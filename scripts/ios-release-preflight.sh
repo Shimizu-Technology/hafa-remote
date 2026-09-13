@@ -43,11 +43,13 @@ scheme="HafaRemote"
 info_plist="HafaRemote/Resources/Info.plist"
 privacy_manifest="HafaRemote/Resources/PrivacyInfo.xcprivacy"
 entitlements="HafaRemote/Resources/HafaRemote.entitlements"
+control_info_plist="HafaRemoteControls/Info.plist"
+control_privacy_manifest="HafaRemoteControls/Resources/PrivacyInfo.xcprivacy"
 app_icon_set="HafaRemote/Resources/Assets.xcassets/AppIcon.appiconset"
 metadata_path="ios/app-store/en-US"
 export_options="ios/app-store/ExportOptions.plist"
 
-for required in "$project/project.pbxproj" "$info_plist" "$privacy_manifest" "$entitlements" "$metadata_path" "$export_options"; do
+for required in "$project/project.pbxproj" "$info_plist" "$privacy_manifest" "$entitlements" "$control_info_plist" "$control_privacy_manifest" "$metadata_path" "$export_options"; do
   if [[ ! -e "$required" ]]; then
     echo "Missing release source: $required" >&2
     exit 1
@@ -63,7 +65,7 @@ if (( xcode_major < 26 || sdk_major < 26 )); then
   exit 1
 fi
 
-for plist in "$info_plist" "$privacy_manifest" "$entitlements"; do
+for plist in "$info_plist" "$privacy_manifest" "$entitlements" "$control_info_plist" "$control_privacy_manifest"; do
   plutil -lint "$plist" >/dev/null
 done
 
@@ -92,10 +94,36 @@ assert_setting PRODUCT_NAME "Hafa Remote"
 assert_setting PRODUCT_MODULE_NAME HafaRemote
 assert_setting DEVELOPMENT_TEAM 4T358A5S74
 assert_setting MARKETING_VERSION 1.0
-assert_setting CURRENT_PROJECT_VERSION 5
+assert_setting CURRENT_PROJECT_VERSION 6
 assert_setting IPHONEOS_DEPLOYMENT_TARGET 18.4
 assert_setting TARGETED_DEVICE_FAMILY 1
 assert_setting CODE_SIGN_STYLE Automatic
+
+control_settings="$(xcodebuild \
+  -project "$project" \
+  -target HafaRemoteControls \
+  -configuration Release \
+  -showBuildSettings)"
+control_setting() {
+  local key="$1"
+  awk -F ' = ' -v key="$key" '$1 ~ "^[[:space:]]*" key "$" { print $2; exit }' <<<"$control_settings"
+}
+assert_control_setting() {
+  local key="$1" expected="$2" actual
+  actual="$(control_setting "$key")"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "Expected HafaRemoteControls $key=$expected, found ${actual:-<missing>}." >&2
+    exit 1
+  fi
+}
+
+assert_control_setting PRODUCT_BUNDLE_IDENTIFIER com.shimizutechnology.hafaremote.controls
+assert_control_setting MARKETING_VERSION 1.0
+assert_control_setting CURRENT_PROJECT_VERSION 6
+assert_control_setting IPHONEOS_DEPLOYMENT_TARGET 18.4
+assert_control_setting TARGETED_DEVICE_FAMILY 1
+assert_control_setting APPLICATION_EXTENSION_API_ONLY YES
+assert_control_setting SKIP_INSTALL YES
 
 local_network_copy="$(plutil -extract NSLocalNetworkUsageDescription raw "$info_plist")"
 if [[ "$local_network_copy" != *"supported TVs"* ]]; then
@@ -127,6 +155,7 @@ if plutil -extract UIBackgroundModes raw "$info_plist" >/dev/null 2>&1; then
 fi
 
 "$repo_root/scripts/validate-privacy-manifest.sh" "$privacy_manifest"
+"$repo_root/scripts/validate-privacy-manifest.sh" "$control_privacy_manifest"
 
 entitlement_count="$(plutil -convert json -o - "$entitlements" | ruby -rjson -e 'puts JSON.parse(STDIN.read).length')"
 if [[ "$entitlement_count" != "0" ]]; then
@@ -218,6 +247,11 @@ if [[ -n "$archive_path" ]]; then
   [[ "$(plutil -extract CFBundleVersion raw "$archived_info")" == "$(setting CURRENT_PROJECT_VERSION)" ]] || { echo "Archived build number does not match." >&2; exit 1; }
   [[ "$(plutil -extract DTSDKName raw "$archived_info")" == iphoneos26.* ]] || { echo "Archive was not built with the iOS 26 SDK." >&2; exit 1; }
   "$repo_root/scripts/validate-privacy-manifest.sh" "$archived_app/PrivacyInfo.xcprivacy"
+  archived_control="$archived_app/PlugIns/HafaRemoteControls.appex"
+  [[ -d "$archived_control" ]] || { echo "Archived Control Center extension is missing." >&2; exit 1; }
+  [[ "$(plutil -extract CFBundleIdentifier raw "$archived_control/Info.plist")" == "com.shimizutechnology.hafaremote.controls" ]] || { echo "Archived control bundle ID does not match." >&2; exit 1; }
+  [[ "$(plutil -extract CFBundleVersion raw "$archived_control/Info.plist")" == "$(setting CURRENT_PROJECT_VERSION)" ]] || { echo "Archived control build number does not match." >&2; exit 1; }
+  "$repo_root/scripts/validate-privacy-manifest.sh" "$archived_control/PrivacyInfo.xcprivacy"
 
   preflight_tmp="$(mktemp -d "${TMPDIR:-/tmp}/hafa-release-preflight.XXXXXX")"
   cleanup_preflight() { rm -rf -- "$preflight_tmp"; }
@@ -226,6 +260,10 @@ if [[ -n "$archive_path" ]]; then
   "$repo_root/scripts/validate-provisioning-profile.sh" \
     "$archived_app/embedded.mobileprovision" \
     "4T358A5S74.com.shimizutechnology.hafaremote" \
+    true
+  "$repo_root/scripts/validate-provisioning-profile.sh" \
+    "$archived_control/embedded.mobileprovision" \
+    "4T358A5S74.com.shimizutechnology.hafaremote.controls" \
     true
 fi
 
@@ -253,6 +291,11 @@ if [[ -n "$export_path" ]]; then
   [[ "$(plutil -extract CFBundleShortVersionString raw "$exported_info")" == "$(setting MARKETING_VERSION)" ]] || { echo "Exported marketing version does not match." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleVersion raw "$exported_info")" == "$(setting CURRENT_PROJECT_VERSION)" ]] || { echo "Exported build number does not match." >&2; exit 1; }
   "$repo_root/scripts/validate-privacy-manifest.sh" "$exported_app/PrivacyInfo.xcprivacy"
+  exported_control="$exported_app/PlugIns/HafaRemoteControls.appex"
+  [[ -d "$exported_control" ]] || { echo "Exported Control Center extension is missing." >&2; exit 1; }
+  [[ "$(plutil -extract CFBundleIdentifier raw "$exported_control/Info.plist")" == "com.shimizutechnology.hafaremote.controls" ]] || { echo "Exported control bundle ID does not match." >&2; exit 1; }
+  [[ "$(plutil -extract CFBundleVersion raw "$exported_control/Info.plist")" == "$(setting CURRENT_PROJECT_VERSION)" ]] || { echo "Exported control build number does not match." >&2; exit 1; }
+  "$repo_root/scripts/validate-privacy-manifest.sh" "$exported_control/PrivacyInfo.xcprivacy"
   codesign --verify --deep --strict "$exported_app"
   codesign -d --entitlements :- "$exported_app" >"$export_tmp/entitlements.plist" 2>/dev/null
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' "$export_tmp/entitlements.plist")" == "4T358A5S74.com.shimizutechnology.hafaremote" ]] || { echo "Exported application identifier does not match." >&2; exit 1; }
