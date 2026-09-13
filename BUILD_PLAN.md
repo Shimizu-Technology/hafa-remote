@@ -306,7 +306,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 - [x] Bump both the app and embedded control extension to build 7.
 - [x] Update release validation and TestFlight testing metadata to require build 7.
-- [ ] Pass the full local and hosted gates on the exact build 7 commit.
+- [x] Pass the full local and hosted gates on the exact build 7 commit.
 - [ ] Complete a current-head CodeRabbit review with no actionable findings and merge the release commit.
 - [ ] Archive, export, validate, and upload build 7 from the merged commit.
 
@@ -450,4 +450,4 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Immediate next action
 
-On the exact build 7 PR head, pass `./scripts/gate.sh` and validate the app plus embedded control. After the reviewed PR merges, create and validate the signed archive and exported IPA from the merge commit, upload that artifact to internal TestFlight, and run the Control Center, accessibility, Samsung, Sony, and Vizio journeys in `ios/app-store/en-US/testflight_what_to_test.txt`.
+The exact build 7 release commit `0c5255f126ae94a00f8de6cc13bffd663b989a3e` passed the local gate (294 tests / 312 executions, 0 failures, 0 skips) and hosted iOS CI. Complete the current-head CodeRabbit review, merge the release record, then create and validate the signed archive and exported IPA from the merge commit. Upload that artifact to internal TestFlight and run the Control Center, accessibility, Samsung, Sony, and Vizio journeys in `ios/app-store/en-US/testflight_what_to_test.txt`.
