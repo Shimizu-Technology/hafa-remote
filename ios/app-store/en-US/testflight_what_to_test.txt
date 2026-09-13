@@ -1,4 +1,4 @@
-Build 6 Control Center, accessibility, and resilient-connection regression:
+Build 7 Control Center, accessibility, and resilient-connection regression:
 
 1. Control Center: open My TVs, choose Add to Control Center, and follow the three in-app steps. Add the Hafa Remote control, leave the app, then tap the control. It should open the remembered remote without asking for a new account, permission, or pairing.
 2. Alternate system placements: if useful, assign the same control to the Lock Screen or Action Button and confirm it opens the remote. The control is a launcher by design; it does not send a TV command while Hafa Remote is suspended.
