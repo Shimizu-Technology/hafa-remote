@@ -55,9 +55,9 @@ Read `PRD.md` and `BUILD_PLAN.md` before implementation. Implement only the curr
 - Ticket branch names: `feature/HR-NNN-short-description` or `fix/HR-NNN-short-description`. Use a descriptive `docs/` or `chore/` branch for unticketed maintenance.
 - Ticket commit titles: `HR-NNN: concise imperative description`. Use a descriptive conventional title for unticketed maintenance.
 - PRs must include intent, acceptance criteria, gate output, hardware evidence when applicable, visual evidence for UI changes, privacy/security impact, and resource cleanup status.
-- Follow the shared `shimizu-pr-workflow` skill for implementation, QA, PR review, merge or hold, and cleanup. CodeRabbit is this repository's current reviewer. Check its summary, inline threads, commit status, and review coverage on the current head; a green check alone is insufficient.
+- Follow the shared `shimizu-pr-workflow` skill for implementation, QA, PR review, merge or hold, and cleanup. CodeRabbit is configured in `.coderabbit.yaml`; discover any other reviewer active on the PR. Check each reviewer's summary, inline threads, status, and coverage on the current head; a green check alone is insufficient.
 - Resolve material findings and rerun the complete gate after code changes. Aim for two substantive review rounds on an ordinary PR, but continue when a new material issue appears. Explain rejected, duplicate, and minor preference findings with evidence. A paused or incomplete review is not a clean review.
-- Leon's standing policy is to commit, push, create the PR, and merge when ready unless he says to hold. A task-specific hold overrides this default. Recheck the current head, required CI, CodeRabbit status, and unresolved material findings immediately before merging. Uploads to TestFlight and App Store Connect changes require task-specific authorization.
+- Leon's standing policy is to commit, push, create the PR, and merge when ready unless he says to hold. A task-specific hold overrides this default. Recheck the current head, required CI, active reviewer statuses, and unresolved material findings immediately before merging. Uploads to TestFlight and App Store Connect changes require task-specific authorization.
 
 ## Completion gate
 
@@ -67,5 +67,5 @@ Read `PRD.md` and `BUILD_PLAN.md` before implementation. Implement only the curr
 - affected simulator flows were exercised;
 - physical-TV behavior was tested when the ticket depends on it;
 - the diff matches the PRD and ticket without widening scope;
-- CodeRabbit has reviewed the current PR head, its required status passes, and no unresolved material finding remains;
+- CodeRabbit has reviewed the current PR head, required reviewer statuses pass, and no unresolved material finding remains;
 - owned development resources were cleaned or explicitly handed off.
