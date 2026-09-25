@@ -31,7 +31,7 @@ The canonical verification command is:
 
 Simulator checks prove interface and deterministic state behavior. Pairing, TV certificate trust, command delivery, and standby power behavior require a signed build on a physical iPhone and the target TV.
 
-The repository is public so its hosted macOS workflow can run on pull requests without paid private-repository Actions minutes. GitHub's active `Protect Main` ruleset enforces pull-request-only changes and blocks force-pushes and branch deletion. Before merging, the maintainer separately verifies a passing hosted workflow, a passing local gate, exact-head CodeRabbit approval, and zero unresolved review threads.
+The repository is public so its hosted macOS workflow can run on pull requests without paid private-repository Actions minutes. GitHub's active `Protect Main` ruleset enforces pull-request-only changes and blocks force-pushes and branch deletion. Before merging, the maintainer separately verifies a passing hosted workflow, a passing local gate, CodeRabbit review of the current head with a passing status, and review threads resolved after fixes or evidence-backed replies. Material findings remain blockers even after several review rounds.
 
 ## Distribution boundary
 
