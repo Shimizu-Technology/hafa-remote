@@ -42,21 +42,22 @@ Read `PRD.md` and `BUILD_PLAN.md` before implementation. Implement only the curr
 
 ## Development lifecycle
 
-- Record the simulator/device baseline before testing.
-- Claim an exact simulator UDID if this session boots it; shut down only that owned simulator.
+- Follow the shared `local-dev-lifecycle` skill. Record the lifecycle session and simulator/device baseline before testing.
+- Claim exact simulator UDIDs, browser tabs, processes, and containers started by this session. After each QA phase, close owned tabs with the browser tool and clean only claimed resources; verify lifecycle status.
 - Treat physical iPhones and TVs as borrowed hardware; never reset or unpair unrelated apps/devices.
-- Clean only resources started by the current session.
 - No server, container, or persistent local service is required.
+- A held PR keeps its named branch and worktree, but no QA resources run without an explicit resource handoff. After merge, remove only this task's clean worktree and merged branch. Never force-remove a dirty or borrowed worktree.
 
 ## Git and review
 
 - Default branch: `main`.
 - Use one worktree and branch per independently writable ticket.
-- Branch names: `feature/HR-NNN-short-description` or `fix/HR-NNN-short-description`.
-- Commit titles: `HR-NNN: concise imperative description`.
+- Ticket branch names: `feature/HR-NNN-short-description` or `fix/HR-NNN-short-description`. Use a descriptive `docs/` or `chore/` branch for unticketed maintenance.
+- Ticket commit titles: `HR-NNN: concise imperative description`. Use a descriptive conventional title for unticketed maintenance.
 - PRs must include intent, acceptance criteria, gate output, hardware evidence when applicable, visual evidence for UI changes, privacy/security impact, and resource cleanup status.
-- CodeRabbit is an additional reviewer. Resolve every actionable finding, rerun the complete gate, and obtain a current-head clean review before merging.
-- Do not push, open a PR, merge, upload to TestFlight, or change App Store Connect unless Leon has authorized it. Leon authorized those actions for the initial full delivery request on September 4, 2026.
+- Follow the shared `shimizu-pr-workflow` skill for implementation, QA, PR review, merge or hold, and cleanup. CodeRabbit is this repository's current reviewer. Check its summary, inline threads, commit status, and review coverage on the current head; a green check alone is insufficient.
+- Resolve material findings and rerun the complete gate after code changes. Aim for two substantive review rounds on an ordinary PR, but continue when a new material issue appears. Explain rejected, duplicate, and minor preference findings with evidence. A paused or incomplete review is not a clean review.
+- Leon's standing policy is to commit, push, create the PR, and merge when ready unless he says to hold. A task-specific hold overrides this default. Recheck the current head, required CI, CodeRabbit status, and unresolved material findings immediately before merging. Uploads to TestFlight and App Store Connect changes require task-specific authorization.
 
 ## Completion gate
 
@@ -66,5 +67,5 @@ Read `PRD.md` and `BUILD_PLAN.md` before implementation. Implement only the curr
 - affected simulator flows were exercised;
 - physical-TV behavior was tested when the ticket depends on it;
 - the diff matches the PRD and ticket without widening scope;
-- CodeRabbit has no unresolved actionable finding on the current PR head;
+- CodeRabbit has reviewed the current PR head, its required status passes, and no unresolved material finding remains;
 - owned development resources were cleaned or explicitly handed off.
