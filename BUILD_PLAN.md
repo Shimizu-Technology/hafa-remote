@@ -26,7 +26,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 - Hardware-dependent tickets include the TV model, firmware, iOS version, network condition, and observed result.
 - A passing unit test does not replace a real-TV check.
 - Each session owns and cleans the exact simulator/device logs or processes it starts.
-- No push, PR, TestFlight upload, App Store change, or merge without Leon's authorization for that action.
+- Leon's standing authorization covers commits, pushes, PRs, and merges when ready unless he says to hold. TestFlight uploads, App Store Connect changes, and external distribution still need task-specific authorization.
 
 ## Phase 0 — Repository and protocol proof
 
