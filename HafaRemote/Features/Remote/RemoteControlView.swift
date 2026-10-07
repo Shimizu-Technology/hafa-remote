@@ -347,7 +347,7 @@ struct RemoteControlView: View {
                 Text(
                     isAwaitingApproval
                         ? "Follow the approval prompt on your TV to finish connecting."
-                        : "Your saved TV will reconnect automatically. No action is needed."
+                        : "Trying to reconnect to your saved TV. You can use the recovery actions below."
                 )
                 .font(.caption)
                 .foregroundStyle(HafaTheme.secondaryText)
@@ -361,7 +361,7 @@ struct RemoteControlView: View {
         .accessibilityLabel(
             isAwaitingApproval
                 ? "Approve Hafa Remote on your TV. Follow the approval prompt to finish connecting."
-                : "Restoring your remote. Your saved TV will reconnect automatically."
+                : "Restoring your remote. Trying to reconnect to your saved TV. Recovery actions are available below."
         )
         .accessibilityIdentifier(
             isAwaitingApproval ? "pairingApprovalStatus" : "automaticReconnectStatus"
@@ -688,7 +688,11 @@ private struct PowerFailure: Identifiable {
                 RemoteControlView(
                     tvName: "Living Room TV",
                     modelName: "Q70AA",
-                    statusLabel: isConnected ? "Connected" : isAwaitingApproval ? "Pairing…" : "Offline",
+                    statusLabel:
+                        isConnected
+                        ? "Connected"
+                        : isAwaitingApproval
+                            ? "Pairing…" : isAutomaticallyReconnecting ? "Reconnecting…" : "Offline",
                     isConnected: isConnected,
                     powerState: powerState,
                     isReconnecting: isAwaitingApproval || isAutomaticallyReconnecting,

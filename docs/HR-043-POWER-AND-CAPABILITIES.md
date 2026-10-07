@@ -25,3 +25,11 @@ Focused regressions cover Sony power and feature negotiation, malformed power fi
 Strict formatting, credential scans, release fixture checks, and internal release preflight passed. Public preflight rejects as intended. Signed generic simulator `build-for-testing` compiled the application and unit/UI test targets. The integrating session must execute the full gate, computer-use simulator journeys, and current-head CodeRabbit review before merge.
 
 Physical power, network standby, DHCP changes, and wake acceptance remain pending for each exact household model and firmware. No hardware capability or successful power action is claimed from simulator evidence. No simulator, browser, server, or device was started by this implementation agent; generic build processes completed and their ownership records were released.
+
+## Integrated validation
+
+The full gate on `db5e7b8` passed 328 tests on iOS 18.5, with zero failures or skips. Six older UI assertions were updated to require the truthful unknown-power connection label. Computer use separately confirmed that connected standby disables ordinary controls while exposing Power On, and that wake remains callable during automatic recovery alongside Retry, Find TV, and iOS Settings. Both wake taps reached only the synthetic command sink.
+
+![Synthetic connected standby with ordinary controls paused](evidence/HR-043/standby-connected.png)
+
+Native inspection also prompted a copy correction: automatic recovery now describes attempts and available actions rather than promising a connection. Its DEBUG recovery fixture labels the header Reconnecting. Public preflight with `HAFA_DISTRIBUTION_AUDIENCE=public` rejected as intended because hardware and protocol-rights decisions remain incomplete. The final rebased commit still requires its complete gate and review; these checks are not physical-TV evidence.
