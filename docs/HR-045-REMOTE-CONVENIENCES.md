@@ -224,3 +224,13 @@ favorite without newly reported optional support. Public synthetic visual eviden
 is linked from the native QA record. The resulting head still requires its complete
 gate, current native QA, reviewer coverage and hosted CI before merge. Hardware
 acceptance and public distribution remain separate.
+
+The GitHub outside-diff manual-address note was accepted only for an unpaired
+candidate. Its discovery alias and observed legacy port now stay with the address
+where they were found. An authenticated saved identity intentionally survives a
+manual DHCP repair, including a known Vizio legacy port; an unexpected TV still
+fails identity validation. Dropping that identity merely because an address
+changed would weaken the saved-TV boundary and was rejected. Factory regressions
+cover fresh changed-address pairing, same-endpoint legacy candidates, and
+identity-preserving legacy repair. This core follow-up requires its own current
+head gate/review; the previous gate result is retained as historical evidence.

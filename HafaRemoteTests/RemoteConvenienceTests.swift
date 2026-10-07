@@ -569,6 +569,34 @@ struct RemoteConvenienceTests {
         #expect(throws: PrivateIPv4AddressError.notPrivate) { try PrivateIPv4Address("192.0.2.10") }
     }
 
+    @Test("Manual Vizio endpoints separate authenticated DHCP repair from fresh candidates")
+    func manualVizioCandidateAndSavedIdentity() throws {
+        let original = try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.56")
+        let moved = try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.56")
+        let candidate = TVConnectionTarget(
+            brand: .vizio, reportedDeviceID: "synthetic-legacy-advertisement", address: original,
+            controlPort: 9000, discoveryIdentifier: "synthetic-legacy-alias")
+        let same = ManualTVTargetFactory.target(address: original, brand: .vizio, savedTarget: candidate)
+        #expect(same.controlPort == 9000)
+        #expect(same.discoveryIdentifier == candidate.discoveryIdentifier)
+        let fresh = ManualTVTargetFactory.target(address: moved, brand: .vizio, savedTarget: candidate)
+        #expect(fresh.controlPort == 7345)
+        #expect(fresh.expectedSavedDeviceID == nil)
+        #expect(fresh.discoveryIdentifier == nil)
+        #expect(fresh.reportedDeviceID == "manual-pairing-candidate")
+        let saved = candidate.expectingSavedIdentity("synthetic-authenticated-vizio")
+        let repaired = ManualTVTargetFactory.target(address: moved, brand: .vizio, savedTarget: saved)
+        #expect(repaired.controlPort == 9000)
+        #expect(repaired.expectedSavedDeviceID == "synthetic-authenticated-vizio")
+        #expect(repaired.discoveryIdentifier == saved.discoveryIdentifier)
+        let other = ConnectedTV(
+            brand: .vizio, reportedDeviceID: "synthetic-other-vizio", address: moved,
+            modelName: "Synthetic Model", firmwareVersion: nil)
+        #expect(throws: TVDriverError.savedDeviceIdentityMismatch) {
+            try repaired.validateConnectedIdentity(other)
+        }
+    }
+
     @Test("A queued convenience is cancelled when TV selection changes")
     func queuedConvenienceDoesNotCrossTVs() async throws {
         let driver = ConvenienceTestDriver()

@@ -248,7 +248,13 @@ enum ManualTVTargetFactory {
         case .sony: port = 6466
         case .vizio: port = 7345
         }
-        let remembered = savedTarget?.brand == brand ? savedTarget : nil
+        // Authenticated identity survives DHCP moves. Unpaired discovery metadata
+        // describes only its observed endpoint and must not follow another address.
+        let remembered = savedTarget.flatMap { candidate in
+            candidate.brand == brand
+                && (candidate.expectedSavedDeviceID != nil || candidate.address == address)
+                ? candidate : nil
+        }
         let rememberedPort = remembered?.controlPort
         let usesKnownLegacyPort = brand == .vizio && rememberedPort == 9000
         return TVConnectionTarget(
