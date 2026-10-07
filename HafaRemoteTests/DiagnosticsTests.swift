@@ -5,12 +5,17 @@ import Testing
 
 @MainActor
 struct DiagnosticsTests {
-    @Test("Diagnostic metadata omits a protocol display name used as Sony model fallback")
-    func modelFallbackCannotExportTVName() throws {
+    @Test(
+        "Diagnostic metadata omits normalized protocol names used as Sony model fallback",
+        arguments: [
+            "Synthetic Room Name", "  Synthetic Room Name  ", "Synthetic\u{0000} Room Name",
+            "\nSynthetic Room Name\t",
+        ])
+    func modelFallbackCannotExportTVName(_ rawName: String) throws {
         let television = ConnectedTV(
             brand: .sony, reportedDeviceID: "synthetic-sony-tv",
             address: try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.46"),
-            displayName: "Synthetic Room Name", modelName: "Synthetic Room Name", firmwareVersion: nil
+            displayName: rawName, modelName: rawName, firmwareVersion: nil
         )
         let metadata = DiagnosticMetadata.current(verifiedTV: television)
         #expect(metadata.tvModel == "Not included")
@@ -33,6 +38,26 @@ struct DiagnosticsTests {
         #expect(recorder.events.isEmpty)
         recorder.setEnabled(true)
         #expect(recorder.events.isEmpty)
+    }
+
+    @Test("Clear and consent changes invalidate every prior collection lease")
+    func collectionEpochCannotResurrectDiscardedEvents() throws {
+        let recorder = DiagnosticRecorder()
+        let disabled = recorder.captureCollection()
+        recorder.setEnabled(true)
+        recorder.record(.commandSent, collection: disabled)
+        #expect(recorder.events.isEmpty)
+        let first = recorder.captureCollection()
+        recorder.clear()
+        recorder.record(.commandSent, collection: first)
+        #expect(recorder.events.isEmpty)
+        let second = recorder.captureCollection()
+        recorder.setEnabled(false)
+        recorder.setEnabled(true)
+        recorder.record(.textSent, collection: second)
+        #expect(recorder.events.isEmpty)
+        recorder.record(.commandSent, collection: recorder.captureCollection())
+        #expect(recorder.events.map(\.kind) == [.commandSent])
     }
 
     @Test("Timing is coarse and invalid values are never exported")

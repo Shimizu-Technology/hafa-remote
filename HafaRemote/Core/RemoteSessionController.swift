@@ -198,6 +198,11 @@ actor RemoteSessionController {
     private var networkLossTask: Task<Void, Never>?
     private var pendingCommandCount = 0
     private var commandTasks: [UUID: Task<Void, Error>] = [:]
+    private var stateRequestID = UUID()
+    private var publishedStateRequestID: UUID?
+    private var publishedStateGeneration: UUID?
+    private var publishedStateProducedAt: ContinuousClock.Instant = .now
+    private var stateUpdateContinuations: [UUID: AsyncStream<RemoteSessionStateUpdate>.Continuation] = [:]
     private var stateContinuations: [UUID: AsyncStream<RemoteSessionState>.Continuation] = [:]
 
     init(
@@ -210,6 +215,9 @@ actor RemoteSessionController {
         self.clock = clock
         self.configuration = configuration
         state = initialState
+        publishedStateRequestID = stateRequestID
+        publishedStateGeneration = generation
+        publishedStateProducedAt = .now
     }
 
     func states() -> AsyncStream<RemoteSessionState> {
@@ -225,13 +233,37 @@ actor RemoteSessionController {
         return stream
     }
 
-    func connect(to addressText: String) async {
-        await beginConnection(to: addressText, target: nil)
+    func stateUpdates() -> AsyncStream<RemoteSessionStateUpdate> {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream<RemoteSessionStateUpdate>.makeStream()
+        stateUpdateContinuations[id] = continuation
+        continuation.yield(currentStateUpdate())
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeStateUpdateContinuation(id) }
+        }
+        return stream
     }
 
-    func connect(to target: TVConnectionTarget) async {
+    func ownsStateUpdate(_ update: RemoteSessionStateUpdate) -> Bool {
+        update.requestID == stateRequestID && update.generation == generation
+    }
+
+    private func currentStateUpdate() -> RemoteSessionStateUpdate {
+        RemoteSessionStateUpdate(
+            state: state, requestID: publishedStateRequestID ?? stateRequestID,
+            generation: publishedStateGeneration ?? generation, producedAt: publishedStateProducedAt)
+    }
+
+    private func removeStateUpdateContinuation(_ id: UUID) { stateUpdateContinuations[id] = nil }
+
+    func connect(to addressText: String, requestID: UUID = UUID()) async {
+        await beginConnection(to: addressText, target: nil, requestID: requestID)
+    }
+
+    func connect(to target: TVConnectionTarget, requestID: UUID = UUID()) async {
         guard !Task.isCancelled else { return }
         guard driver.supports(target.brand) else {
+            stateRequestID = requestID
             generation = UUID()
             targetAddressText = nil
             connectionTarget = nil
@@ -241,23 +273,28 @@ actor RemoteSessionController {
             transition(to: .unsupported)
             return
         }
-        await beginConnection(to: target.address.rawValue, target: target)
+        await beginConnection(to: target.address.rawValue, target: target, requestID: requestID)
     }
 
     private func beginConnection(
         to addressText: String,
-        target: TVConnectionTarget?
+        target: TVConnectionTarget?,
+        requestID: UUID
     ) async {
         do {
             try await waitForPairingRemoval()
         } catch is CancellationError {
             return
         } catch {
+            guard !Task.isCancelled else { return }
+            generation = UUID()
+            stateRequestID = requestID
             transition(to: .failed(.timedOut(.forgetPairing)))
             return
         }
         guard !Task.isCancelled else { return }
         generation = UUID()
+        stateRequestID = requestID
         let requestedGeneration = generation
         targetAddressText = addressText
         connectionTarget = target
@@ -1286,11 +1323,20 @@ actor RemoteSessionController {
     }
 
     private func transition(to newState: RemoteSessionState) {
-        guard state != newState else { return }
+        let didChangeState = state != newState
+        guard
+            didChangeState || publishedStateRequestID != stateRequestID
+                || publishedStateGeneration != generation
+        else { return }
         state = newState
-        for continuation in stateContinuations.values {
-            continuation.yield(newState)
+        publishedStateRequestID = stateRequestID
+        publishedStateGeneration = generation
+        publishedStateProducedAt = .now
+        if didChangeState {
+            for continuation in stateContinuations.values { continuation.yield(newState) }
         }
+        let update = currentStateUpdate()
+        for continuation in stateUpdateContinuations.values { continuation.yield(update) }
     }
 
     private func removeStateContinuation(_ id: UUID) {

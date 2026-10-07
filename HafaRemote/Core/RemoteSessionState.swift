@@ -15,6 +15,15 @@ enum RemoteSessionState: Equatable, Sendable {
     case failed(RemoteSessionFailure)
 }
 
+/// Ownership is stamped by the producer before an update can enter a consumer queue.
+/// These process-local values are never logged or exported as diagnostics.
+struct RemoteSessionStateUpdate: Equatable, Sendable {
+    let state: RemoteSessionState
+    let requestID: UUID
+    let generation: UUID
+    let producedAt: ContinuousClock.Instant
+}
+
 enum TVRecoveryAction: Hashable, Sendable {
     case retryConnection
     case findTV

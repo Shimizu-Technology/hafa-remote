@@ -600,11 +600,12 @@ struct HomeView: View {
         let ownershipRevision = selection.revision
         try verifyPowerOwnership(tv, revision: ownershipRevision)
         guard let macAddress = wakeMACAddress(for: tv, savedTV: savedTV) else {
-            session.recordWakeUnavailable(for: tv.stableDeviceKey)
+            session.recordWakeUnavailable(
+                for: tv.stableDeviceKey, collection: session.diagnostics.captureCollection())
             throw TVMACAddressError.invalid
         }
 
-        session.recordWakeRequested(for: tv.stableDeviceKey)
+        let diagnosticCollection = session.recordWakeRequested(for: tv.stableDeviceKey)
         let target = savedTV?.connectionTarget ?? tv.connectionTarget
         let attempt = PendingWakeAttempt(stableDeviceKey: tv.stableDeviceKey)
         pendingWakeAttempt = attempt
@@ -642,7 +643,9 @@ struct HomeView: View {
             if pendingWakeAttempt?.id == attempt.id {
                 pendingWakeAttempt = nil
             }
-            if !(error is CancellationError) { session.recordWakeUnavailable(for: tv.stableDeviceKey) }
+            if !(error is CancellationError) {
+                session.recordWakeUnavailable(for: tv.stableDeviceKey, collection: diagnosticCollection)
+            }
             throw error
         }
     }

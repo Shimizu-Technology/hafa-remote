@@ -87,8 +87,19 @@ struct DiagnosticMetadata: Equatable, Sendable {
     static func current(verifiedTV television: ConnectedTV) -> Self {
         // Sony can fall back to its certificate display name when no model was reported.
         // Omitting a model that equals that name is conservative for every brand.
-        let model = television.modelName == television.displayName ? nil : television.modelName
+        let normalizedModel = Self.normalizedModelField(television.modelName)
+        let normalizedName = television.displayName.map(Self.normalizedModelField)
+        let model = normalizedModel == normalizedName ? nil : normalizedModel
         return current(tvModel: model, tvFirmware: television.firmwareVersion)
+    }
+
+    private static func normalizedModelField(_ value: String) -> String {
+        String(
+            String.UnicodeScalarView(
+                value.unicodeScalars.filter {
+                    !CharacterSet.controlCharacters.contains($0)
+                })
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func safeField(_ value: String?) -> String {
@@ -142,6 +153,11 @@ struct DiagnosticReport: Equatable, Sendable {
     }
 }
 
+/// An opaque, process-local lease. It never enters the report or persistence.
+struct DiagnosticCollectionToken: Equatable, Sendable {
+    fileprivate let epoch: UUID
+}
+
 /// An opt-in, memory-only ring buffer. Disabling collection removes its contents.
 @MainActor
 @Observable
@@ -149,19 +165,37 @@ final class DiagnosticRecorder {
     static let maximumEventCount = 100
     private(set) var isEnabled = false
     private(set) var events: [DiagnosticEvent] = []
+    private var collectionEpoch = UUID()
+    private var epochStartedAt: ContinuousClock.Instant = .now
 
     func setEnabled(_ enabled: Bool) {
+        guard enabled != isEnabled else { return }
         isEnabled = enabled
-        if !enabled { clear() }
+        clear()
     }
 
     func record(_ kind: DiagnosticEventKind, durationSeconds: TimeInterval? = nil) {
-        guard isEnabled else { return }
+        record(kind, durationSeconds: durationSeconds, collection: captureCollection())
+    }
+
+    /// Completion events must carry the lease acquired when their operation began.
+    func record(
+        _ kind: DiagnosticEventKind, durationSeconds: TimeInterval? = nil,
+        collection: DiagnosticCollectionToken?
+    ) {
+        guard isEnabled, let collection, collection.epoch == collectionEpoch else { return }
         if events.count == Self.maximumEventCount { events.removeFirst() }
         events.append(DiagnosticEvent(kind: kind, duration: DiagnosticDuration(seconds: durationSeconds)))
     }
 
+    func captureCollection(producedAt: ContinuousClock.Instant? = nil) -> DiagnosticCollectionToken? {
+        guard isEnabled, producedAt.map({ $0 >= epochStartedAt }) ?? true else { return nil }
+        return DiagnosticCollectionToken(epoch: collectionEpoch)
+    }
+
     func clear() {
+        collectionEpoch = UUID()
+        epochStartedAt = .now
         events.removeAll(keepingCapacity: false)
     }
 

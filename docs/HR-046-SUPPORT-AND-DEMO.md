@@ -44,6 +44,22 @@ a Sony model that equals its protocol display name is omitted because that value
 may be a certificate-name fallback. User-edited TV names and rooms are never
 used as diagnostic metadata.
 
+Diagnostic ownership is stamped when controller state is produced: a process-local
+request identifier, controller generation, and monotonic production time accompany
+each update. The store rejects queued states from an older request or generation;
+initial snapshots retain the ownership of the state that was actually published.
+These values never enter diagnostic reports.
+
+Collection has a separate epoch. Clear, disabling/re-enabling collection, and a TV
+switch invalidate outstanding collection leases. Commands, text, connection
+readiness, discovery, and wake completions retain the enabled lease from their
+start; old activity cannot repopulate an erased buffer. Queued states produced
+before the current collection epoch likewise cannot reappear as new events.
+
+Model/display-name fallback comparisons normalize both inputs using the same
+control-character removal and whitespace trimming before checking equality.
+Padded or sanitized household names therefore remain omitted.
+
 Preview creates an immutable snapshot; the ShareLink exports only that snapshot
 when the user chooses a destination. There is no automatic submission or persisted
 collection preference.
@@ -60,11 +76,14 @@ release fixture checks, and internal release preflight passed. A signed generic
 simulator build-for-testing compiled the app, unit tests, and UI tests. A Release
 simulator build verifies the demo remains available outside DEBUG configuration.
 
-An isolated macOS 14 Swift package ran the unchanged diagnostic/demo models and
-tests: 10 tests in two suites passed, including 13 sensitive-metadata rejection
-cases and the Sony model-name fallback check. The temporary package was removed.
-The added session-scope and UI journeys compiled but still require execution in
-the integrated iPhone gate. These isolated results do not replace that gate or
+An isolated macOS 14 Swift package compiled the unchanged real controller, store,
+and protocol dependencies and ran 19 tests in three suites. All passed, including
+13 sensitive-metadata cases, four normalized-name cases, held candidate A/B state
+projection, producer-owned snapshots during teardown, command/text completion
+after Clear or consent changes, in-flight connection clearing, and A→B→A wake
+lease invalidation. No dependency stubs, TV traffic, or Keychain operations were
+used by the fixtures. The temporary package was removed. The iPhone UI journeys
+compiled and still require execution in the integrated gate. These isolated results do not replace that gate or
 computer-use verification.
 
 Root integration must run the complete gate on the integrated current head and
