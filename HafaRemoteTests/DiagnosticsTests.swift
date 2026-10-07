@@ -5,6 +5,18 @@ import Testing
 
 @MainActor
 struct DiagnosticsTests {
+    @Test("Diagnostic metadata omits a protocol display name used as Sony model fallback")
+    func modelFallbackCannotExportTVName() throws {
+        let television = ConnectedTV(
+            brand: .sony, reportedDeviceID: "synthetic-sony-tv",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.46"),
+            displayName: "Synthetic Room Name", modelName: "Synthetic Room Name", firmwareVersion: nil
+        )
+        let metadata = DiagnosticMetadata.current(verifiedTV: television)
+        #expect(metadata.tvModel == "Not included")
+        #expect(!DiagnosticReport(metadata: metadata, events: []).text.contains("Synthetic Room Name"))
+    }
+
     @Test("Diagnostics are opt-in, bounded, and cleared when disabled")
     func boundedOptInCollection() {
         let recorder = DiagnosticRecorder()

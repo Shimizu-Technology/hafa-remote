@@ -938,6 +938,43 @@ final class HafaRemoteUITests: XCTestCase {
     }
 
     @MainActor
+    func testOfflineDemoIsAvailableBeforePairing() throws {
+        let app = makeApplication()
+        app.launch()
+        app.buttons["homeSupportButton"].tap()
+        let demo = app.buttons["openOfflineDemoButton"]
+        XCTAssertTrue(demo.waitForExistence(timeout: 5))
+        demo.tap()
+        XCTAssertTrue(app.staticTexts["offlineDemoLabel"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["submitSonyPairingCodeButton"].exists)
+        XCTAssertFalse(app.buttons["submitVizioPairingCodeButton"].exists)
+        let volume = app.staticTexts["demoVolumeState"]
+        XCTAssertTrue(volume.label.contains("20"))
+        let louder = app.buttons["demo-volumeUp"]
+        if !louder.isHittable { app.swipeUp() }
+        louder.tap()
+        XCTAssertTrue(volume.label.contains("21"))
+    }
+
+    @MainActor
+    func testDiagnosticsAreOptInAndPreviewableBeforeSharing() throws {
+        let app = makeApplication()
+        app.launch()
+        app.buttons["homeSupportButton"].tap()
+        let diagnostics = app.buttons["openDiagnosticsButton"]
+        XCTAssertTrue(diagnostics.waitForExistence(timeout: 5))
+        diagnostics.tap()
+        let toggle = app.switches["diagnosticsToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertEqual(toggle.value as? String, "0")
+        app.buttons["previewDiagnosticsButton"].tap()
+        let preview = app.staticTexts["diagnosticsReportPreview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 5))
+        XCTAssertTrue(preview.label.contains("No events recorded"))
+        XCTAssertTrue(app.buttons["shareDiagnosticsButton"].exists)
+    }
+
+    @MainActor
     private func launchRemoteHarness() -> XCUIApplication {
         let app = makeApplication()
         app.launchArguments.append("-ui-testing-remote")

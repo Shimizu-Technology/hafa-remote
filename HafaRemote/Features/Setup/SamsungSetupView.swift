@@ -107,6 +107,7 @@ struct TVSetupView: View {
                 HafaRemoteHelpView()
             }
             .task {
+                session.diagnostics.record(.discoveryStarted)
                 discovery.start()
             }
             .onAppear {
@@ -129,6 +130,9 @@ struct TVSetupView: View {
                 }
             }
             .onChange(of: discovery.state) { _, state in
+                if state == .noResults || state == .permissionDenied || state == .failed {
+                    session.diagnostics.record(.discoveryFinished)
+                }
                 if let announcement = discoveryAnnouncement(for: state) {
                     UIAccessibility.post(notification: .announcement, argument: announcement)
                 }
@@ -252,6 +256,7 @@ struct TVSetupView: View {
                     .foregroundStyle(HafaTheme.secondaryText)
 
                     Button("Scan Again", systemImage: "arrow.clockwise") {
+                        session.diagnostics.record(.discoveryStarted)
                         discovery.start()
                     }
                     .buttonStyle(.borderedProminent)
@@ -296,6 +301,7 @@ struct TVSetupView: View {
                     .font(.subheadline)
                     .foregroundStyle(HafaTheme.secondaryText)
                     Button("Try Again", systemImage: "arrow.clockwise") {
+                        session.diagnostics.record(.discoveryStarted)
                         discovery.start()
                     }
                     .accessibilityIdentifier("scanAgainButton")
@@ -585,6 +591,7 @@ struct TVSetupView: View {
                     recoveryTask = Task {
                         await session.disconnect(clearRememberedTV: false)
                         guard !Task.isCancelled else { return }
+                        session.diagnostics.record(.discoveryStarted)
                         discovery.start()
                     }
                 }

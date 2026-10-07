@@ -21,21 +21,32 @@ and the field is cleared after use and dismissal.
 
 ## Integration
 
-- Add the four new app sources and two test sources to the Xcode project source
-  lists. This project uses explicit PBX groups rather than synchronized folders.
-- Keep one DiagnosticRecorder owned by the app/session store, default disabled.
-- Add a Help NavigationLink to DiagnosticsView(recorder: recorder,
-  metadata: .current(tvModel: verifiedModel, tvFirmware: verifiedFirmware)).
-- Record reviewed events at session/discovery boundaries. Map known typed state
-  and failures to DiagnosticEventKind; never interpolate an Error or raw protocol
-  response. Provide measured monotonic operation duration only when available.
-- Add NavigationLink("Try the Remote", destination: DemoRemoteView()) to first
-  launch and Help. Opening it must not call real setup/discovery or alter saved
-  TV selection. A modal entry should wrap the demo in NavigationStack with Done.
-- Both screens use HafaTheme; the new shared native palette applies automatically.
-- Clear the recorder when changing selected TVs if report metadata identifies the
-  current model. Otherwise events from more than one TV can be grouped under the
-  current model, which would mislead support.
+The explicit Xcode source lists now compile five support app sources and three
+focused test sources in their correct app/test targets. The control extension
+contains none of these modules.
+
+Home exposes Help before pairing. Its support menu offers the offline demo,
+diagnostics, and the existing TV Help screen. The demo destination receives no
+session, driver, repository, or credential object. It remains compiled in Release.
+Both screens use HafaTheme and inherit the native palette.
+
+RemoteSessionStore owns one default-disabled DiagnosticRecorder. Typed state,
+command/text delivery, lifecycle, discovery, and wake boundaries feed fixed events.
+Measured operation durations come from ContinuousClock and are reduced to coarse
+buckets. Raw errors, protocol responses, commands, entered text, names, rooms,
+addresses, identities, and credentials never enter the event buffer.
+
+Requesting a different saved TV or a new candidate clears previous events before
+collection continues. Completed deliveries from an old diagnostic scope are
+ignored. Explicitly forgetting/discarding the remembered TV clears its buffer.
+Reports attach only the current connected TV's aligned model/firmware metadata;
+a Sony model that equals its protocol display name is omitted because that value
+may be a certificate-name fallback. User-edited TV names and rooms are never
+used as diagnostic metadata.
+
+Preview creates an immutable snapshot; the ShareLink exports only that snapshot
+when the user chooses a destination. There is no automatic submission or persisted
+collection preference.
 
 ## Acceptance and evidence
 
@@ -44,12 +55,17 @@ coarse timings including invalid numbers, rejected sensitive-shaped metadata,
 snapshot immutability, demo isolation, offline power restrictions, navigation and
 volume limits, and absence of retained text in the demo status.
 
-Isolated verification passed: all four app modules and their existing core/theme
-dependencies typechecked against the iOS simulator SDK in Swift 6 mode. A
-temporary macOS 14 Swift package compiled the unchanged core/model sources and
-ran nine tests in two suites, including 13 metadata rejection cases; all passed.
-The temporary package was removed. This checks the same models and tests without
-booting a simulator; it does not replace the integrated gate or UI checks.
+Strict formatting, project plist and source-target checks, credential scans,
+release fixture checks, and internal release preflight passed. A signed generic
+simulator build-for-testing compiled the app, unit tests, and UI tests. A Release
+simulator build verifies the demo remains available outside DEBUG configuration.
+
+An isolated macOS 14 Swift package ran the unchanged diagnostic/demo models and
+tests: 10 tests in two suites passed, including 13 sensitive-metadata rejection
+cases and the Sony model-name fallback check. The temporary package was removed.
+The added session-scope and UI journeys compiled but still require execution in
+the integrated iPhone gate. These isolated results do not replace that gate or
+computer-use verification.
 
 Root integration must run the complete gate on the integrated current head and
 exercise these flows with computer use: first launch → demo → navigate/volume/

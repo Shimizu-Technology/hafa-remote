@@ -84,6 +84,13 @@ struct DiagnosticMetadata: Equatable, Sendable {
         )
     }
 
+    static func current(verifiedTV television: ConnectedTV) -> Self {
+        // Sony can fall back to its certificate display name when no model was reported.
+        // Omitting a model that equals that name is conservative for every brand.
+        let model = television.modelName == television.displayName ? nil : television.modelName
+        return current(tvModel: model, tvFirmware: television.firmwareVersion)
+    }
+
     private static func safeField(_ value: String?) -> String {
         guard let value else { return "Not included" }
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)

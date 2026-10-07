@@ -11,7 +11,7 @@ struct HomeView: View {
     @State private var networkMonitor = LocalNetworkMonitor()
     @State private var isShowingSetup = false
     @State private var isShowingMyTVs = false
-    @State private var isShowingHelp = false
+    @State private var isShowingSupport = false
     @State private var scenePhaseEvents = ScenePhaseEvents()
     @State private var restoration = SavedTVRestorationCoordinator()
     @State private var selection = SavedTVSelectionCoordinator()
@@ -97,8 +97,8 @@ struct HomeView: View {
             }
         }
         .tint(HafaTheme.accent)
-        .sheet(isPresented: $isShowingHelp) {
-            HafaRemoteHelpView()
+        .sheet(isPresented: $isShowingSupport) {
+            HafaSupportView(session: session)
         }
         .sheet(isPresented: $isShowingSetup) {
             TVSetupView(
@@ -217,7 +217,7 @@ struct HomeView: View {
 
     private var helpButton: some View {
         Button("Help", systemImage: "questionmark.circle") {
-            isShowingHelp = true
+            isShowingSupport = true
         }
         .frame(minWidth: 44, minHeight: 44)
         .accessibilityIdentifier("homeHelpButton")
@@ -600,9 +600,11 @@ struct HomeView: View {
         let ownershipRevision = selection.revision
         try verifyPowerOwnership(tv, revision: ownershipRevision)
         guard let macAddress = wakeMACAddress(for: tv, savedTV: savedTV) else {
+            session.recordWakeUnavailable(for: tv.stableDeviceKey)
             throw TVMACAddressError.invalid
         }
 
+        session.recordWakeRequested(for: tv.stableDeviceKey)
         let target = savedTV?.connectionTarget ?? tv.connectionTarget
         let attempt = PendingWakeAttempt(stableDeviceKey: tv.stableDeviceKey)
         pendingWakeAttempt = attempt
@@ -640,6 +642,7 @@ struct HomeView: View {
             if pendingWakeAttempt?.id == attempt.id {
                 pendingWakeAttempt = nil
             }
+            if !(error is CancellationError) { session.recordWakeUnavailable(for: tv.stableDeviceKey) }
             throw error
         }
     }
@@ -755,7 +758,7 @@ private struct MyTVsView: View {
     @State private var editRequest: SavedTVEditRequest?
     @State private var activeAlert: MyTVsAlert?
     @State private var forgettingDeviceKey: String?
-    @State private var isShowingHelp = false
+    @State private var isShowingSupport = false
 
     /// Builds a local, account-free library for every previously paired TV.
     var body: some View {
@@ -779,7 +782,7 @@ private struct MyTVsView: View {
 
                     Section("Quick Access") {
                         Button {
-                            isShowingHelp = true
+                            isShowingSupport = true
                         } label: {
                             Label {
                                 VStack(alignment: .leading, spacing: 3) {
@@ -802,7 +805,7 @@ private struct MyTVsView: View {
 
                     Section("Help & Privacy") {
                         Button("About Hafa Remote", systemImage: "info.circle") {
-                            isShowingHelp = true
+                            isShowingSupport = true
                         }
                         .frame(minHeight: 44)
                         .accessibilityIdentifier("aboutHafaRemoteButton")
@@ -846,7 +849,7 @@ private struct MyTVsView: View {
                 )
             }
         }
-        .sheet(isPresented: $isShowingHelp) {
+        .sheet(isPresented: $isShowingSupport) {
             HafaRemoteHelpView(startsWithControlCenter: true)
         }
         .alert(item: $activeAlert) { alert in
