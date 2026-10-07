@@ -679,11 +679,19 @@ final class HafaRemoteUITests: XCTestCase {
     /// Replaces a text field's full value through the same edit menu available to users.
     @MainActor
     private func replaceText(in field: XCUIElement, with value: String) {
+        let app = XCUIApplication()
         field.tap()
         field.press(forDuration: 1)
-        let selectAll = XCUIApplication().menuItems["Select All"]
+        let selectAll = app.menuItems["Select All"]
         XCTAssertTrue(selectAll.waitForExistence(timeout: 2))
         selectAll.tap()
-        field.typeText(value)
+        // Typing through the field can refocus it and collapse the selection on
+        // newer iOS runtimes. Send keys to the already-focused application.
+        app.typeText(value)
+        let replaced = expectation(
+            for: NSPredicate(format: "value == %@", value),
+            evaluatedWith: field
+        )
+        wait(for: [replaced], timeout: 5)
     }
 }
