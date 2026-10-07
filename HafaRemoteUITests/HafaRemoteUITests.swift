@@ -220,7 +220,11 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertEqual(completedConnections.label, "1")
 
         XCUIDevice.shared.press(.home)
-        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
+        XCTAssertTrue(
+            app.wait(for: .runningBackground, timeout: 2)
+                || app.wait(for: .runningBackgroundSuspended, timeout: 3),
+            "Home must background the app, whether iOS has suspended it yet or not"
+        )
         app.activate()
 
         let recovery = app.descendants(matching: .any)["automaticReconnectStatus"]
