@@ -71,6 +71,7 @@ xcodebuild \
   -derivedDataPath "$derived_data" \
   -resultBundlePath "$result_bundle" \
   -parallel-testing-enabled NO \
+  -collect-test-diagnostics never \
   -skip-testing:HafaRemoteUITests/HafaRemoteUITests/testHardwareDiscoveryFindsSamsungTV \
   -quiet \
   test \

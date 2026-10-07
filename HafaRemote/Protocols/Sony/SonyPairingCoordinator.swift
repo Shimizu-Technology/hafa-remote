@@ -21,6 +21,8 @@ extension SonyPairingCoordinating {
 }
 
 actor SonyPairingCoordinator: SonyPairingCoordinating {
+    nonisolated func cancellationInvalidatesConnection() async -> Bool { true }
+
     private static let pairingPort: UInt16 = 6467
     private static let controlPort: UInt16 = 6466
     private static let pairingExchangeTimeout: Duration = .seconds(90)

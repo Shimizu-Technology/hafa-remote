@@ -140,6 +140,15 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
         }
     }
 
+    func cancellationInvalidatesConnection() async -> Bool {
+        switch activeBrand {
+        case .samsung: await samsung.cancellationInvalidatesConnection()
+        case .sony: await sony.cancellationInvalidatesConnection()
+        case .vizio: await vizio.cancellationInvalidatesConnection()
+        case .none: false
+        }
+    }
+
     func send(_ command: RemoteCommand) async throws {
         switch activeBrand {
         case .samsung:

@@ -409,6 +409,9 @@ typealias PairedSamsungTV = ConnectedTV
 
 /// The command boundary between product features and a television-specific protocol.
 protocol TVDriver: Sendable {
+    /// Whether cancelling an in-flight write can close this driver's active transport.
+    func cancellationInvalidatesConnection() async -> Bool
+
     /// Verifies that the active control session is still usable without changing TV state.
     func checkConnection() async throws
 
@@ -429,6 +432,8 @@ protocol TVDriver: Sendable {
 }
 
 extension TVDriver {
+    func cancellationInvalidatesConnection() async -> Bool { false }
+
     func convenience(_ request: TVConvenienceRequest) async throws -> TVConvenienceResponse {
         throw TVConvenienceError.unavailable
     }

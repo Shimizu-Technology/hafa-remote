@@ -5,6 +5,24 @@ discrete swipe navigation, and negotiated Sony keyboard input. Each feature uses
 the existing local session and serialized command stream. No app catalog or icon
 is downloaded, no developer mode or ADB is used, and no runtime dependency is added.
 
+The first integrated gate passed 367 of 373 tests. It exposed cancellation recovery
+being applied to cooperative drivers, old Sony capability fixtures, and two native
+gesture/recovery test issues. A semantic driver contract now reports whether a
+cancelled write can close its transport. The controller captures that contract
+within the command generation and only reconnects for such drivers; Sony reports
+the effect, and the multi-brand router forwards the active driver's contract.
+Cooperative cancellation retains the connected session. The persistence fixture
+now states its observed key-only capabilities explicitly, and preferences are
+forgotten from memory only after the bounded encoded update is persisted.
+
+All 145 controller, convenience, and saved-TV tests passed after these repairs,
+with no failures or skips. The initial function-filtered verification selected
+zero Swift Testing cases and is not passing evidence; the complete suites are the
+verified result. The canonical gate now disables verbose sysdiagnose collection
+using Xcode's supported option. It retains assertions, test results, screenshots,
+and the same tested scope. Native and protocol review repairs, the final full gate,
+current-head CodeRabbit coverage, and hosted CI are still required before merge.
+
 ## Implemented paths
 
 | Feature | Samsung | Sony Remote Service v2 | Vizio SmartCast |

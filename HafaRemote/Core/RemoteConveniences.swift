@@ -189,8 +189,10 @@ final class TVConveniencePreferences {
         try save(entry, for: stableDeviceKey)
     }
     func forget(stableDeviceKey: String) {
-        entries[stableDeviceKey] = nil
-        persist()
+        var updated = entries
+        updated[stableDeviceKey] = nil
+        guard persist(updated) else { return }
+        entries = updated
     }
     private func brand(for key: String) -> TVBrand? {
         guard key.utf8.count <= 1024, let separator = key.firstIndex(of: ":"),
@@ -201,17 +203,16 @@ final class TVConveniencePreferences {
     private func save(_ entry: Entry, for key: String) throws {
         var updated = entries
         updated[key] = entry
-        guard updated.count <= 100, let data = try? JSONEncoder().encode(updated), data.count <= 262_144
-        else {
+        guard persist(updated) else {
             throw TVConvenienceError.unavailable
         }
-        defaults.set(data, forKey: storageKey)
         entries = updated
     }
-    private func persist() {
-        guard entries.count <= 100, let data = try? JSONEncoder().encode(entries), data.count <= 262_144
-        else { return }
+    private func persist(_ updated: [String: Entry]) -> Bool {
+        guard updated.count <= 100, let data = try? JSONEncoder().encode(updated), data.count <= 262_144
+        else { return false }
         defaults.set(data, forKey: storageKey)
+        return true
     }
 }
 

@@ -855,6 +855,7 @@ private actor ConvenienceSonyChannel: SonyTLSChanneling {
 
 private actor ConvenienceSonySessionDriver: RemoteSessionDriving {
     nonisolated let brand = TVBrand.sony
+    nonisolated func cancellationInvalidatesConnection() async -> Bool { true }
     let channel = ConvenienceSonyChannel()
     private var coordinator: SonyPairingCoordinator?
     private(set) var disconnectCount = 0

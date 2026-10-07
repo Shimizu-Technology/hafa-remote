@@ -397,6 +397,12 @@ actor RemoteSessionController {
         pendingCommandCount += 1
         defer { finishPendingCommand() }
         await pauseHealthChecksForCommand()
+        let cancellationClosesTransport: Bool
+        if recoverCancelledWrite {
+            cancellationClosesTransport = await driver.cancellationInvalidatesConnection()
+        } else {
+            cancellationClosesTransport = false
+        }
         try Task.checkCancellation()
         guard generation == commandGeneration, case .connected = state else {
             throw RemoteSessionControllerError.notConnected
@@ -449,11 +455,11 @@ actor RemoteSessionController {
                 // A local capability rejection says nothing about transport health.
                 throw error
             }
-            if wasCancelled, recoverCancelledWrite, execution.hasBegun, generation == commandGeneration,
+            if wasCancelled, cancellationClosesTransport, execution.hasBegun, generation == commandGeneration,
                 isForeground
             {
-                // Sony cancels its TLS connection when a write is cancelled. A sent-or-not
-                // outcome is uncertain, so preserve no connected claim for this generation.
+                // This driver can close its connection when a write is cancelled.
+                // Preserve no connected claim for that generation's uncertain transport.
                 transition(to: .offline)
                 transitionToPendingReconnectIfAvailable(generation: commandGeneration)
                 await disconnectDriverWithinLimit()
