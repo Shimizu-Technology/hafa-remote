@@ -734,6 +734,89 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(keyboard.isEnabled)
     }
 
+    /// Large-text volume actions form an aligned column and keep their semantic dispatch.
+    @MainActor
+    func testLargestDynamicTypeVolumeActionsRemainAlignedAndReachable() throws {
+        let app = makeApplication()
+        app.launchArguments += [
+            "-ui-testing-remote",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL",
+        ]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["currentDynamicTypeSize"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["currentDynamicTypeSize"].label, "accessibility5")
+        var columnX: CGFloat?
+        for command in ["volumeDown", "mute", "volumeUp"] {
+            let button = app.buttons["remote-\(command)"]
+            XCTAssertTrue(button.waitForExistence(timeout: 2))
+            for _ in 0..<12 {
+                let top = app.navigationBars.firstMatch.frame.maxY + 8
+                let bottom = app.frame.maxY - 8
+                if button.isHittable && button.frame.minY >= top && button.frame.maxY <= bottom {
+                    break
+                }
+                // Short bidirectional pans avoid skipping a tall accessibility row.
+                let desiredCenter = (top + bottom) / 2
+                let movement = min(180, max(-180, button.frame.midY - desiredCenter))
+                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.6))
+                let end = app.coordinate(
+                    withNormalizedOffset: CGVector(
+                        dx: 0.1, dy: 0.6 - movement / app.frame.height
+                    ))
+                start.press(
+                    forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.25)
+            }
+            if !button.isHittable {
+                let blocked = XCTAttachment(screenshot: app.screenshot())
+                blocked.name = "Unreachable large-type \(command)"
+                blocked.lifetime = .keepAlways
+                add(blocked)
+            }
+            XCTAssertTrue(button.isHittable)
+            XCTAssertGreaterThanOrEqual(button.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+            XCTAssertGreaterThanOrEqual(button.frame.minX, app.frame.minX)
+            XCTAssertLessThanOrEqual(button.frame.maxX, app.frame.maxX)
+            if let columnX {
+                XCTAssertEqual(button.frame.midX, columnX, accuracy: 1)
+            } else {
+                columnX = button.frame.midX
+            }
+            button.tap()
+            let dispatched = expectation(
+                for: NSPredicate(format: "label == %@", command),
+                evaluatedWith: app.staticTexts["lastRemoteCommand"]
+            )
+            wait(for: [dispatched], timeout: 2)
+        }
+        // Place the complete group below the native bar for inspectable visual evidence.
+        let down = app.buttons["remote-volumeDown"]
+        let up = app.buttons["remote-volumeUp"]
+        // An offscreen heading can have a clipped frame; anchor on the actual action target.
+        let desiredDownY = app.navigationBars.firstMatch.frame.maxY + down.frame.height + 24
+        let delta = desiredDownY - down.frame.minY
+        if abs(delta) > 1 {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
+            let endY = min(0.9, max(0.1, 0.5 + delta / app.frame.height))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: endY))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.25)
+        }
+        for _ in 0..<4 where down.frame.minY < app.navigationBars.firstMatch.frame.maxY + 8 {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.45))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.52))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.25)
+        }
+        XCTAssertTrue(down.isHittable)
+        XCTAssertTrue(up.isHittable)
+        XCTAssertGreaterThanOrEqual(down.frame.minY, app.navigationBars.firstMatch.frame.maxY)
+        XCTAssertLessThanOrEqual(up.frame.maxY, app.frame.maxY)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Largest Dynamic Type aligned volume rows"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     /// Text entry uses the native keyboard and never claims the TV inserted the text.
     @MainActor
     func testKeyboardSendsValidatedTextWithHonestResult() throws {

@@ -480,7 +480,7 @@ struct RemoteControlView: View {
             RemoteControlButton(
                 command: command, systemImage: image,
                 accessibilityLabel: accessibilityLabel, accessibilityHint: hint,
-                isEnabled: canControlTV, repeatsWhileHeld: repeats, action: action
+                isEnabled: canControlTV, size: 96, repeatsWhileHeld: repeats, action: action
             )
         }
         .frame(maxWidth: .infinity)

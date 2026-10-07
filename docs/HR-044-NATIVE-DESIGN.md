@@ -40,7 +40,9 @@ The initial focused run was interrupted during stalled verbose diagnostic collec
 
 The owned simulator was shut down, and build/test process ownership was released. Borrowed simulators and shared services were left running.
 
-An additional compact-screen check during convenience QA found that the largest accessibility size split the volume captions across letters and misaligned the controls. Accessibility sizes now use full-width volume rows with preserved font scaling and button labels; ordinary sizes retain the compact horizontal group. This follow-up requires signed build and native large-text verification before merge.
+An additional compact-screen check during convenience QA found that the largest accessibility size split the volume captions across letters and misaligned the controls. Accessibility sizes now use full-width volume rows with preserved font scaling and button labels; ordinary sizes retain the compact horizontal group. Consistent 96-point accessibility action targets also prevent wider scaled SF Symbols from shifting the action column. The largest-text regression checks alignment, viewport containment, minimum target size, touch-scroll reachability, and all three semantic volume/mute actions. Native screenshot evidence shows intact Down, Mute, and Up captions with aligned action surfaces.
+
+The follow-up signed simulator build and deep/strict codesign verification passed. Eight focused native UI tests passed with zero failures or skips, covering aligned large-text volume, largest-text keyboard reachability, regular remote dispatch/targets, separate playback, keyboard delivery, offline recovery, reconnect/wake, and standby power on. CUA inspected the actual compact dark/largest-text remote, but its drag/wheel/keyboard scroll attempts still did not pan the viewport. The updated largest-text capture therefore comes from actual XCTest touch gestures and was inspected as a native app screenshot. No screenshot is substituted for physical-TV acceptance.
 
 ## Visual evidence
 
@@ -48,4 +50,4 @@ These app-only captures show synthetic UI test data, not hardware acceptance or 
 
 - [Compact light remote](evidence/HR-044/compact-light.png)
 - [Compact dark with Increased Contrast](evidence/HR-044/compact-dark-increased-contrast.png)
-- [Largest accessibility text in dark appearance](evidence/HR-044/largest-type-dark.png)
+- [Largest accessibility text with aligned volume rows](evidence/HR-044/largest-type-dark.png)
