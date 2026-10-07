@@ -78,6 +78,8 @@
 		D57D940EF729B0A1C243DC71 /* VizioConveniences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D36D71D15E54645A3DFE3BA /* VizioConveniences.swift */; };
 		EBD27CAB3BCC722D5A882E9F /* RemoteConveniencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1253042500FBB8B3CB73176 /* RemoteConveniencesView.swift */; };
 		A695047227F2D303EC979F9D /* RemoteConvenienceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 750A7CF0E33618AD46DF5A22 /* RemoteConvenienceTests.swift */; };
+		FB5C5C1D306B1699622CB34F /* RemoteConvenienceUITestHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 967E3B3BB9D829FEEC07E343 /* RemoteConvenienceUITestHarness.swift */; };
+		A29EFDEA721D13EFE3E949F8 /* HafaRemoteConvenienceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D40983FEA4B5F16427D191 /* HafaRemoteConvenienceUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -193,6 +195,8 @@
 		7D36D71D15E54645A3DFE3BA /* VizioConveniences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HafaRemote/Protocols/Vizio/VizioConveniences.swift"; sourceTree = SOURCE_ROOT; };
 		D1253042500FBB8B3CB73176 /* RemoteConveniencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HafaRemote/Features/Remote/RemoteConveniencesView.swift"; sourceTree = SOURCE_ROOT; };
 		750A7CF0E33618AD46DF5A22 /* RemoteConvenienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HafaRemoteTests/RemoteConvenienceTests.swift"; sourceTree = SOURCE_ROOT; };
+		967E3B3BB9D829FEEC07E343 /* RemoteConvenienceUITestHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HafaRemote/Features/Remote/RemoteConvenienceUITestHarness.swift"; sourceTree = SOURCE_ROOT; };
+		B0D40983FEA4B5F16427D191 /* HafaRemoteConvenienceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HafaRemoteUITests/HafaRemoteConvenienceUITests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -320,6 +324,7 @@
 		2CF6AD0EE094B893960FF0D4 /* HafaRemoteUITests */ = {
 			isa = PBXGroup;
 			children = (
+				B0D40983FEA4B5F16427D191 /* HafaRemoteConvenienceUITests.swift */,
 				BF2140DF03D411A6556C98D5 /* HafaRemoteUITests.swift */,
 			);
 			name = HafaRemoteUITests;
@@ -469,6 +474,7 @@
 		F2624935A3BB8084521F5294 /* HafaRemote */ = {
 			isa = PBXGroup;
 			children = (
+				967E3B3BB9D829FEEC07E343 /* RemoteConvenienceUITestHarness.swift */,
 				7D36D71D15E54645A3DFE3BA /* VizioConveniences.swift */,
 				470877E10FCC13D601C6028E /* SonyConveniences.swift */,
 				D1253042500FBB8B3CB73176 /* RemoteConveniencesView.swift */,
@@ -690,6 +696,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A29EFDEA721D13EFE3E949F8 /* HafaRemoteConvenienceUITests.swift in Sources */,
 				506ABD859CC36FF3F83677FC /* HafaRemoteUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -698,6 +705,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FB5C5C1D306B1699622CB34F /* RemoteConvenienceUITestHarness.swift in Sources */,
 				EBD27CAB3BCC722D5A882E9F /* RemoteConveniencesView.swift in Sources */,
 				D57D940EF729B0A1C243DC71 /* VizioConveniences.swift in Sources */,
 				6B1CBECF8DC202D4B6852515 /* SonyConveniences.swift in Sources */,

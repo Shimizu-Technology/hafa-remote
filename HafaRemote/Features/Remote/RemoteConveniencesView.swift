@@ -3,6 +3,7 @@ import SwiftUI
 struct RemoteConvenienceContext {
     let stableDeviceKey: String
     let brand: TVBrand
+    var preferences: TVConveniencePreferences? = nil
     let request: @MainActor @Sendable (TVConvenienceRequest) async throws -> TVConvenienceResponse
 }
 
@@ -13,7 +14,7 @@ struct RemoteConveniencesView: View {
     let capabilities: Set<TVCapability>
     let isConnected: Bool
     let send: @MainActor @Sendable (RemoteCommand) async -> Void
-    @State private var preferences = TVConveniencePreferences.shared
+    @State private var preferences: TVConveniencePreferences
     @State private var apps: [TVAppShortcut] = []
     @State private var inputs: [TVInputSource] = []
     @State private var job: Task<Void, Never>?
@@ -22,6 +23,17 @@ struct RemoteConveniencesView: View {
     @State private var currentApp: TVAppShortcut?
     @State private var appName = ""
     @State private var isNamingApp = false
+
+    init(
+        context: RemoteConvenienceContext, capabilities: Set<TVCapability>, isConnected: Bool,
+        send: @escaping @MainActor @Sendable (RemoteCommand) async -> Void
+    ) {
+        self.context = context
+        self.capabilities = capabilities
+        self.isConnected = isConnected
+        self.send = send
+        _preferences = State(initialValue: context.preferences ?? .shared)
+    }
 
     var body: some View {
         Form {
@@ -35,6 +47,7 @@ struct RemoteConveniencesView: View {
                         ForEach(inputs) { input in
                             Button(input.name) { perform(.selectInput(input)) }
                                 .frame(minHeight: 44)
+                                .accessibilityIdentifier("convenienceInput-\(input.value)")
                         }
                         Button("Refresh Inputs", systemImage: "arrow.clockwise") { perform(.inputs) }
                             .frame(minHeight: 44)
@@ -52,10 +65,16 @@ struct RemoteConveniencesView: View {
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3)) {
                             ForEach(RemoteCommand.allCases.filter { $0.digit != nil }, id: \.self) {
                                 command in
-                                Button(String(command.digit ?? 0)) { sendCommand(command) }
-                                    .frame(maxWidth: .infinity, minHeight: 48)
-                                    .buttonStyle(.bordered)
-                                    .accessibilityLabel("TV digit \(command.digit ?? 0)")
+                                Button {
+                                    sendCommand(command)
+                                } label: {
+                                    Text(String(command.digit ?? 0))
+                                        .frame(maxWidth: .infinity, minHeight: 48)
+                                        .contentShape(.rect)
+                                }
+                                .buttonStyle(.bordered)
+                                .accessibilityLabel("TV digit \(command.digit ?? 0)")
+                                .accessibilityIdentifier("convenience-\(command.rawValue)")
                             }
                         }
                     }
@@ -64,7 +83,7 @@ struct RemoteConveniencesView: View {
             if capabilities.contains(.favoriteApps) || context.brand == .samsung || context.brand == .vizio {
                 Section {
                     ForEach(preferences.favorites(for: context.stableDeviceKey)) { app in
-                        appRow(app, favorited: true)
+                        appRow(app, favorited: true, inFavorites: true)
                     }
                     if preferences.favorites(for: context.stableDeviceKey).isEmpty {
                         Text("Choose a favorite below for this TV.").foregroundStyle(.secondary)
@@ -113,7 +132,9 @@ struct RemoteConveniencesView: View {
                         isOn: Binding(
                             get: { preferences.keyboardEnabled(for: context.stableDeviceKey) },
                             set: { perform(.setKeyboardEnabled($0)) }
-                        ))
+                        )
+                    )
+                    .accessibilityIdentifier("remoteKeyboardPreference")
                 } footer: {
                     Text(
                         "Turn off if the TV's onscreen keyboard becomes unavailable. Text requires a newly focused TV field and current protocol counters."
@@ -121,7 +142,11 @@ struct RemoteConveniencesView: View {
                 }
             }
             if job != nil { Section { ProgressView("Requesting from TV…") } }
-            if let message { Section { Text(message).foregroundStyle(.secondary) } }
+            if let message {
+                Section {
+                    Text(message).foregroundStyle(.secondary).accessibilityIdentifier("convenienceResult")
+                }
+            }
         }
         .disabled(!isConnected || job != nil)
         .navigationTitle("More Controls")
@@ -166,16 +191,24 @@ struct RemoteConveniencesView: View {
     private func commandButton(_ command: RemoteCommand, name: String, symbol: String) -> some View {
         Button(name, systemImage: symbol) { sendCommand(command) }
             .frame(minHeight: 44)
+            .accessibilityIdentifier("convenience-\(command.rawValue)")
     }
 
-    private func appRow(_ app: TVAppShortcut, favorited: Bool) -> some View {
+    private func appRow(_ app: TVAppShortcut, favorited: Bool, inFavorites: Bool = false) -> some View {
         HStack {
-            Button(app.name) { perform(.launch(app)) }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .accessibilityHint("Requests this app on the selected TV.")
-                .disabled(
-                    !capabilities.contains(.favoriteApps)
-                        && !apps.contains(where: { $0.target == app.target }))
+            Button {
+                perform(.launch(app))
+            } label: {
+                Text(app.name)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityHint("Requests this app on the selected TV.")
+            .accessibilityIdentifier("\(inFavorites ? "favorite" : "available")App-\(app.name)")
+            .disabled(
+                !capabilities.contains(.favoriteApps)
+                    && !apps.contains(where: { $0.target == app.target }))
             Button {
                 do { try preferences.toggleFavorite(app, for: context.stableDeviceKey) } catch {
                     message = "This favorite could not be saved. Keep up to 12 favorites per TV."
@@ -186,6 +219,7 @@ struct RemoteConveniencesView: View {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("\(favorited ? "Remove" : "Save") \(app.name) favorite")
+            .accessibilityIdentifier("toggleFavorite-\(inFavorites ? "favorite" : "available")-\(app.name)")
         }
     }
 
