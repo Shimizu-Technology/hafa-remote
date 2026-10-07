@@ -80,6 +80,7 @@
 		A695047227F2D303EC979F9D /* RemoteConvenienceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 750A7CF0E33618AD46DF5A22 /* RemoteConvenienceTests.swift */; };
 		FB5C5C1D306B1699622CB34F /* RemoteConvenienceUITestHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 967E3B3BB9D829FEEC07E343 /* RemoteConvenienceUITestHarness.swift */; };
 		A29EFDEA721D13EFE3E949F8 /* HafaRemoteConvenienceUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D40983FEA4B5F16427D191 /* HafaRemoteConvenienceUITests.swift */; };
+		FB29AFF7B1B245C184921B90 /* SonyPairingOwnershipTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC1B7140811741D5954732CE /* SonyPairingOwnershipTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -197,6 +198,7 @@
 		750A7CF0E33618AD46DF5A22 /* RemoteConvenienceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HafaRemoteTests/RemoteConvenienceTests.swift"; sourceTree = SOURCE_ROOT; };
 		967E3B3BB9D829FEEC07E343 /* RemoteConvenienceUITestHarness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HafaRemote/Features/Remote/RemoteConvenienceUITestHarness.swift"; sourceTree = SOURCE_ROOT; };
 		B0D40983FEA4B5F16427D191 /* HafaRemoteConvenienceUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HafaRemoteUITests/HafaRemoteConvenienceUITests.swift"; sourceTree = SOURCE_ROOT; };
+		DC1B7140811741D5954732CE /* SonyPairingOwnershipTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HafaRemoteTests/SonyPairingOwnershipTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -384,6 +386,7 @@
 		788EB1518D6036019F1270CC /* HafaRemoteTests */ = {
 			isa = PBXGroup;
 			children = (
+				DC1B7140811741D5954732CE /* SonyPairingOwnershipTests.swift */,
 				750A7CF0E33618AD46DF5A22 /* RemoteConvenienceTests.swift */,
 				470B5BF9F811323D35B6050E /* HafaRemoteTests.swift */,
 				7A7000120000000000000002 /* SamsungDiscoveryTests.swift */,
@@ -671,6 +674,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FB29AFF7B1B245C184921B90 /* SonyPairingOwnershipTests.swift in Sources */,
 				A695047227F2D303EC979F9D /* RemoteConvenienceTests.swift in Sources */,
 				D4C49D71FFB313E977E0A762 /* HafaRemoteTests.swift in Sources */,
 				7A7000020000000000000002 /* SamsungDiscoveryTests.swift in Sources */,

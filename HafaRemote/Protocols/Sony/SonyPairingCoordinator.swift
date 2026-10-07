@@ -27,7 +27,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     private static let remoteHandshakeTimeout: Duration = .seconds(10)
     private static let maximumRemoteHandshakeMessages = 128
 
-    private let identityStore: SonyClientIdentityStore
+    private let identityProvider: @Sendable () throws -> SonyClientIdentityReference
     private let credentialStore: any SonyPairingCredentialStoring
     private let pairingChannel: any SonyTLSChanneling
     private let controlChannel: any SonyTLSChanneling
@@ -46,10 +46,12 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     }
     private var readTask: Task<Void, Never>?
     private var sessionGeneration = UUID()
+    private var channelOwnership = SonyTLSChannelOwnership()
     private var isRemoteSessionAlive = false
 
     init(
         identityStore: SonyClientIdentityStore = SonyClientIdentityStore(),
+        identityProvider: (@Sendable () throws -> SonyClientIdentityReference)? = nil,
         credentialStore: any SonyPairingCredentialStoring = KeychainSonyPairingCredentialStore(),
         pairingChannel: any SonyTLSChanneling = SonyTLSChannel(),
         controlChannel: any SonyTLSChanneling = SonyTLSChannel(),
@@ -57,7 +59,10 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             TVConveniencePreferences.shared.keyboardEnabled(for: $0)
         }
     ) {
-        self.identityStore = identityStore
+        self.identityProvider =
+            identityProvider ?? {
+                SonyClientIdentityReference(try identityStore.identity())
+            }
         self.credentialStore = credentialStore
         self.pairingChannel = pairingChannel
         self.controlChannel = controlChannel
@@ -110,7 +115,8 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     ) async throws -> ConnectedTV {
         try Task.checkCancellation()
         guard sessionGeneration == generation else { throw CancellationError() }
-        let identity = SonyClientIdentityReference(try identityStore.identity())
+        let ownership = channelOwnership
+        let identity = try identityProvider()
         let credential: SonyPairingCredential
         let saved = try await savedCredential(for: target)
         try Task.checkCancellation()
@@ -122,11 +128,14 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
                 throw SonyPairingCoordinatorError.pairingRejected
             }
             credential = try await pair(
-                address: target.address, identity: identity, requestPairingCode: requestPairingCode)
+                address: target.address, identity: identity, generation: generation, ownership: ownership,
+                requestPairingCode: requestPairingCode)
         }
         try Task.checkCancellation()
         guard sessionGeneration == generation else { throw CancellationError() }
-        return try await openRemote(address: target.address, identity: identity, credential: credential)
+        return try await openRemote(
+            address: target.address, identity: identity, credential: credential, generation: generation,
+            ownership: ownership)
     }
 
     func send(_ command: RemoteCommand) async throws {
@@ -134,13 +143,30 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         guard activeTV?.capabilities.contains(command.requiredCapability) == true else {
             throw TVDriverError.unsupportedCommand
         }
-        if command.requiredCapability == .navigation || command == .powerOff || command == .inputSource {
-            imeFocus.clear()
+        let generation = sessionGeneration
+        try await writeSerializer.perform { [weak self] in
+            guard let self else { throw CancellationError() }
+            try await self.writeCommand(command, generation: generation)
         }
+    }
+
+    private func writeCommand(_ command: RemoteCommand, generation: UUID) async throws {
+        try requireAttempt(generation)
+        guard isRemoteSessionAlive else { throw SonyTLSChannelError.connectionClosed }
+        guard activeTV?.capabilities.contains(command.requiredCapability) == true else {
+            throw TVDriverError.unsupportedCommand
+        }
+        let invalidatesFocus =
+            [.navigation, .powerOff, .powerOn, .sourceMenu, .channels, .guide, .numberPad].contains(
+                command.requiredCapability)
+        if invalidatesFocus { imeFocus.clear() }
+        defer {
+            if invalidatesFocus, sessionGeneration == generation { imeFocus.clear() }
+        }
+        let ownership = channelOwnership
         let message = try SonyRemoteProtocolCodec.command(command)
-        try await writeSerializer.perform { [controlChannel] in
-            try await controlChannel.send(message)
-        }
+        try await controlChannel.send(message, ownership: ownership)
+        try requireAttempt(generation)
     }
 
     func sendText(_ input: RemoteTextInput) async throws {
@@ -162,7 +188,9 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         let message = try SonyConvenienceCodec.text(
             input, imeCounter: counters.ime, fieldCounter: counters.field)
         imeFocus.clear()
-        try await controlChannel.send(message)
+        let ownership = channelOwnership
+        try await controlChannel.send(message, ownership: ownership)
+        try requireAttempt(generation)
     }
 
     func convenience(_ request: TVConvenienceRequest) async throws -> TVConvenienceResponse {
@@ -177,7 +205,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             let generation = sessionGeneration
             try await writeSerializer.perform { [weak self] in
                 guard let self else { throw CancellationError() }
-                try await self.writeConvenience(message, generation: generation)
+                try await self.writeConvenience(message, generation: generation, invalidatesFocus: true)
             }
             return .sent
         case .setKeyboardEnabled(let enabled):
@@ -213,11 +241,18 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         guard sessionGeneration == generation else { throw CancellationError() }
     }
 
-    private func writeConvenience(_ message: Data, generation: UUID) async throws {
+    private func writeConvenience(
+        _ message: Data, generation: UUID, invalidatesFocus: Bool = false
+    ) async throws {
         try Task.checkCancellation()
         guard sessionGeneration == generation, isRemoteSessionAlive else { throw CancellationError() }
+        let ownership = channelOwnership
+        if invalidatesFocus { imeFocus.clear() }
+        defer {
+            if invalidatesFocus, sessionGeneration == generation { imeFocus.clear() }
+        }
         do {
-            try await controlChannel.send(message)
+            try await controlChannel.send(message, ownership: ownership)
             try Task.checkCancellation()
             guard sessionGeneration == generation else { throw CancellationError() }
         } catch {
@@ -269,9 +304,9 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             activeTV = television
             isRemoteSessionAlive = true
         }
-        func focusSyntheticFieldForTesting() {
+        func focusSyntheticFieldForTesting(imeCounter: UInt64? = 1) {
             imeFocus.focus(fieldCounter: 1)
-            imeFocus.counters(ime: 1, field: 1)
+            if let imeCounter { imeFocus.counters(ime: imeCounter, field: 1) }
         }
         func syntheticKeyboardStateForTesting() -> (enabled: Bool, features: UInt64, hasFocus: Bool) {
             (keyboardEnabled, negotiatedFeatures, (try? imeFocus.snapshot()) != nil)
@@ -282,7 +317,10 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         guard isRemoteSessionAlive else {
             throw SonyTLSChannelError.connectionClosed
         }
-        try await controlChannel.checkConnection()
+        let generation = sessionGeneration
+        let ownership = channelOwnership
+        try await controlChannel.checkConnection(ownership: ownership)
+        try requireAttempt(generation)
     }
 
     func forget(reportedDeviceID: String) async throws {
@@ -310,6 +348,9 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     }
 
     private func closeSession(generation: UUID) async {
+        let previousOwnership = channelOwnership
+        previousOwnership.invalidate()
+        channelOwnership = SonyTLSChannelOwnership()
         sessionGeneration = generation
         isRemoteSessionAlive = false
         readTask?.cancel()
@@ -322,7 +363,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         let teardown = Task { [weak self, teardownSerializer] in
             guard let self else { return }
             try? await teardownSerializer.perform {
-                await self.closeChannels(generation: generation)
+                await self.closeChannels(generation: generation, ownership: previousOwnership)
             }
         }
         // Cleanup must finish even when its connection work was cancelled. A new
@@ -330,13 +371,19 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         await teardown.value
     }
 
-    private func closeChannels(generation: UUID) async {
+    private func closeChannels(generation: UUID, ownership: SonyTLSChannelOwnership) async {
         guard sessionGeneration == generation else { return }
         await observationBroadcaster.reset()
         guard sessionGeneration == generation else { return }
-        await pairingChannel.disconnect()
+        await pairingChannel.disconnect(ownership: ownership)
         guard sessionGeneration == generation else { return }
-        await controlChannel.disconnect()
+        await controlChannel.disconnect(ownership: ownership)
+    }
+
+    private func requireAttempt(_ generation: UUID) throws {
+        try Task.checkCancellation()
+        guard sessionGeneration == generation else { throw CancellationError() }
+        try channelOwnership.requireCurrent()
     }
 
     private func savedCredential(for target: TVConnectionTarget) async throws -> SonyPairingCredential? {
@@ -346,23 +393,41 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     private func pair(
         address: PrivateIPv4Address,
         identity: SonyClientIdentityReference,
+        generation: UUID,
+        ownership: SonyTLSChannelOwnership,
         requestPairingCode: @escaping SonyPairingCodeProvider
     ) async throws -> SonyPairingCredential {
+        try requireAttempt(generation)
         let peer = try await pairingChannel.connect(
             address: address,
             port: Self.pairingPort,
             identity: identity,
-            trustMode: .selectedPairingCandidate
+            trustMode: .selectedPairingCandidate,
+            ownership: ownership
         )
+        try requireAttempt(generation)
 
-        if let saved = try await SonyRecoverableCredentialLookup.credential(
+        let saved = try await SonyRecoverableCredentialLookup.credential(
             in: credentialStore,
             fingerprint: peer.certificateSHA256
-        ) {
-            await pairingChannel.disconnect()
+        )
+        try requireAttempt(generation)
+        if let saved {
+            await pairingChannel.disconnect(ownership: ownership)
+            try requireAttempt(generation)
             return saved
         }
 
+        let validateAttempt: @Sendable () async throws -> Void = { [weak self] in
+            guard let self else { throw CancellationError() }
+            try await self.requireAttempt(generation)
+        }
+        let ownedPairingCode: SonyPairingCodeProvider = {
+            try ownership.requireCurrent()
+            let code = try await requestPairingCode()
+            try ownership.requireCurrent()
+            return code
+        }
         let credential = try await SonyPairingExchangeDeadline.run(
             timeout: Self.pairingExchangeTimeout
         ) { [pairingChannel] in
@@ -370,11 +435,16 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
                 on: pairingChannel,
                 identity: identity,
                 peer: peer,
-                requestPairingCode: requestPairingCode
+                ownership: ownership,
+                validateAttempt: validateAttempt,
+                requestPairingCode: ownedPairingCode
             )
         }
+        try requireAttempt(generation)
         try await credentialStore.save(credential)
-        await pairingChannel.disconnect()
+        try requireAttempt(generation)
+        await pairingChannel.disconnect(ownership: ownership)
+        try requireAttempt(generation)
         return credential
     }
 
@@ -382,23 +452,43 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         on pairingChannel: any SonyTLSChanneling,
         identity: SonyClientIdentityReference,
         peer: SonyTLSPeer,
+        ownership: SonyTLSChannelOwnership,
+        validateAttempt: @escaping @Sendable () async throws -> Void,
         requestPairingCode: @escaping SonyPairingCodeProvider
     ) async throws -> SonyPairingCredential {
-        try await pairingChannel.send(SonyPairingProtocolCodec.request(clientName: "Hafa Remote"))
-        guard try await pairingMessage(on: pairingChannel) == .requestAcknowledged else {
+        try await validateAttempt()
+        try await pairingChannel.send(
+            SonyPairingProtocolCodec.request(clientName: "Hafa Remote"), ownership: ownership)
+        try await validateAttempt()
+        guard
+            try await pairingMessage(
+                on: pairingChannel, ownership: ownership, validateAttempt: validateAttempt)
+                == .requestAcknowledged
+        else {
             throw SonyPairingCoordinatorError.invalidPairingResponse
         }
-        try await pairingChannel.send(SonyPairingProtocolCodec.options())
-        guard try await pairingMessage(on: pairingChannel) == .options else {
+        try await pairingChannel.send(SonyPairingProtocolCodec.options(), ownership: ownership)
+        try await validateAttempt()
+        guard
+            try await pairingMessage(
+                on: pairingChannel, ownership: ownership, validateAttempt: validateAttempt)
+                == .options
+        else {
             throw SonyPairingCoordinatorError.invalidPairingResponse
         }
-        try await pairingChannel.send(SonyPairingProtocolCodec.configuration())
-        guard try await pairingMessage(on: pairingChannel) == .configurationAcknowledged else {
+        try await pairingChannel.send(SonyPairingProtocolCodec.configuration(), ownership: ownership)
+        try await validateAttempt()
+        guard
+            try await pairingMessage(
+                on: pairingChannel, ownership: ownership, validateAttempt: validateAttempt)
+                == .configurationAcknowledged
+        else {
             throw SonyPairingCoordinatorError.invalidPairingResponse
         }
 
         let code = try await requestPairingCode()
-        let clientCertificate = try certificate(from: identity.value)
+        try await validateAttempt()
+        let clientCertificate = try identity.certificate()
         guard let serverCertificate = SecCertificateCreateWithData(nil, peer.certificateDER as CFData)
         else {
             throw SonyPairingCoordinatorError.invalidPairingResponse
@@ -416,8 +506,14 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             throw SonyPairingCoordinatorError.invalidPairingCode
         }
 
-        try await pairingChannel.send(try SonyPairingProtocolCodec.secret(secret))
-        guard try await pairingMessage(on: pairingChannel) == .secretAcknowledged else {
+        try await validateAttempt()
+        try await pairingChannel.send(try SonyPairingProtocolCodec.secret(secret), ownership: ownership)
+        try await validateAttempt()
+        guard
+            try await pairingMessage(
+                on: pairingChannel, ownership: ownership, validateAttempt: validateAttempt)
+                == .secretAcknowledged
+        else {
             throw SonyPairingCoordinatorError.pairingRejected
         }
 
@@ -426,11 +522,17 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         )
     }
 
-    private static func pairingMessage(on pairingChannel: any SonyTLSChanneling) async throws
+    private static func pairingMessage(
+        on pairingChannel: any SonyTLSChanneling, ownership: SonyTLSChannelOwnership,
+        validateAttempt: @Sendable () async throws -> Void
+    ) async throws
         -> SonyPairingMessage
     {
         do {
-            return try SonyPairingProtocolCodec.parse(await pairingChannel.receive())
+            try await validateAttempt()
+            let message = try await pairingChannel.receive(ownership: ownership)
+            try await validateAttempt()
+            return try SonyPairingProtocolCodec.parse(message)
         } catch let error as SonyProtocolCodecError {
             if case .pairingRejected = error {
                 throw SonyPairingCoordinatorError.pairingRejected
@@ -442,15 +544,19 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     private func openRemote(
         address: PrivateIPv4Address,
         identity: SonyClientIdentityReference,
-        credential: SonyPairingCredential
+        credential: SonyPairingCredential,
+        generation connectionGeneration: UUID,
+        ownership: SonyTLSChannelOwnership
     ) async throws -> ConnectedTV {
-        let connectionGeneration = sessionGeneration
+        try requireAttempt(connectionGeneration)
         let peer = try await controlChannel.connect(
             address: address,
             port: Self.controlPort,
             identity: identity,
-            trustMode: .reconnect(expectedCertificateSHA256: credential.certificateSHA256)
+            trustMode: .reconnect(expectedCertificateSHA256: credential.certificateSHA256),
+            ownership: ownership
         )
+        try requireAttempt(connectionGeneration)
         guard peer.certificateSHA256 == credential.certificateSHA256 else {
             throw SonyPairingCoordinatorError.certificateChanged
         }
@@ -463,7 +569,8 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             fallbackModelName: "Sony Google TV",
             timeout: Self.remoteHandshakeTimeout,
             maximumMessages: Self.maximumRemoteHandshakeMessages,
-            requestedFeatures: Self.requestedFeatures(keyboardEnabled: preferredKeyboard)
+            requestedFeatures: Self.requestedFeatures(keyboardEnabled: preferredKeyboard),
+            ownership: ownership
         )
 
         try Task.checkCancellation()
@@ -497,16 +604,16 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         let generation = connectionGeneration
         isRemoteSessionAlive = true
         readTask = Task { [weak self] in
-            await self?.readRemoteEvents(generation: generation)
+            await self?.readRemoteEvents(generation: generation, ownership: ownership)
         }
         return television
     }
 
-    private func readRemoteEvents(generation: UUID) async {
+    private func readRemoteEvents(generation: UUID, ownership: SonyTLSChannelOwnership) async {
         do {
             var consecutiveProtocolFailures = 0
             while sessionGeneration == generation, !Task.isCancelled {
-                let message = try await controlChannel.receive()
+                let message = try await controlChannel.receive(ownership: ownership)
                 guard sessionGeneration == generation, !Task.isCancelled else { return }
                 let event: SonyRemoteEvent
                 do {
@@ -520,13 +627,15 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
                 switch event {
                 case .ping(let value):
                     try await writeSerializer.perform { [controlChannel] in
-                        try await controlChannel.send(SonyRemoteProtocolCodec.pingResponse(value))
+                        try await controlChannel.send(
+                            SonyRemoteProtocolCodec.pingResponse(value), ownership: ownership)
                     }
                 case .setActive:
                     let features = negotiatedFeatures
                     try await writeSerializer.perform { [controlChannel] in
                         try await controlChannel.send(
-                            SonyRemoteProtocolCodec.activeResponse(negotiatedFeatures: features))
+                            SonyRemoteProtocolCodec.activeResponse(negotiatedFeatures: features),
+                            ownership: ownership)
                     }
                 case .configured(let vendor, _, _, let reportedFeatures):
                     guard vendor.localizedCaseInsensitiveContains("sony"), reportedFeatures & 2 == 2 else {
@@ -538,7 +647,8 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
                     let features = negotiatedFeatures
                     try await writeSerializer.perform { [controlChannel] in
                         try await controlChannel.send(
-                            SonyRemoteProtocolCodec.configurationResponse(negotiatedFeatures: features))
+                            SonyRemoteProtocolCodec.configurationResponse(negotiatedFeatures: features),
+                            ownership: ownership)
                     }
                     await publishObservation(
                         powerState: activeTV?.powerState ?? .unknown, generation: generation)
@@ -571,15 +681,6 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         await observationBroadcaster.publish(observation)
     }
 
-    private static func certificate(from identity: SecIdentity) throws -> SecCertificate {
-        var certificate: SecCertificate?
-        guard SecIdentityCopyCertificate(identity, &certificate) == errSecSuccess,
-            let certificate
-        else {
-            throw SonyPairingCoordinatorError.invalidPairingResponse
-        }
-        return certificate
-    }
 }
 
 enum SonySavedTargetCredentialLookup {
@@ -646,7 +747,8 @@ enum SonyRemoteHandshake {
         fallbackModelName: String,
         timeout: Duration,
         maximumMessages: Int,
-        requestedFeatures: UInt64 = SonyRemoteProtocolCodec.requestedFeatures
+        requestedFeatures: UInt64 = SonyRemoteProtocolCodec.requestedFeatures,
+        ownership: SonyTLSChannelOwnership? = nil
     ) async throws -> SonyRemoteDevice {
         do {
             return try await SonyTLSConnectionDeadline.run(timeout: timeout) {
@@ -654,7 +756,8 @@ enum SonyRemoteHandshake {
                     on: controlChannel,
                     fallbackModelName: fallbackModelName,
                     maximumMessages: maximumMessages,
-                    requestedFeatures: requestedFeatures
+                    requestedFeatures: requestedFeatures,
+                    ownership: ownership
                 )
             }
         } catch SonyTLSChannelError.timedOut {
@@ -666,11 +769,22 @@ enum SonyRemoteHandshake {
         on controlChannel: any SonyTLSChanneling,
         fallbackModelName: String,
         maximumMessages: Int,
-        requestedFeatures: UInt64
+        requestedFeatures: UInt64,
+        ownership: SonyTLSChannelOwnership?
     ) async throws -> SonyRemoteDevice {
         var device: SonyRemoteDevice?
         for _ in 0..<maximumMessages {
-            switch try SonyRemoteProtocolCodec.parse(await controlChannel.receive()) {
+            try Task.checkCancellation()
+            try ownership?.requireCurrent()
+            let message: Data
+            if let ownership {
+                message = try await controlChannel.receive(ownership: ownership)
+            } else {
+                message = try await controlChannel.receive()
+            }
+            try Task.checkCancellation()
+            try ownership?.requireCurrent()
+            switch try SonyRemoteProtocolCodec.parse(message) {
             case .configured(let vendor, let model, let softwareVersion, let supportedFeatures):
                 guard vendor.localizedCaseInsensitiveContains("sony"),
                     supportedFeatures & keyFeature == keyFeature
@@ -684,17 +798,18 @@ enum SonyRemoteHandshake {
                     powerState: .unknown,
                     reportedFeatures: supportedFeatures
                 )
-                try await controlChannel.send(
+                try await send(
                     SonyRemoteProtocolCodec.configurationResponse(
                         negotiatedFeatures: supportedFeatures & requestedFeatures
-                    ))
+                    ), on: controlChannel, ownership: ownership)
             case .setActive:
-                try await controlChannel.send(
+                try await send(
                     SonyRemoteProtocolCodec.activeResponse(
                         negotiatedFeatures: device?.negotiatedFeatures ?? 0
-                    ))
+                    ), on: controlChannel, ownership: ownership)
             case .ping(let value):
-                try await controlChannel.send(SonyRemoteProtocolCodec.pingResponse(value))
+                try await send(
+                    SonyRemoteProtocolCodec.pingResponse(value), on: controlChannel, ownership: ownership)
             case .powerState(let isOn):
                 guard let device else {
                     throw SonyPairingCoordinatorError.invalidRemoteResponse
@@ -710,6 +825,19 @@ enum SonyRemoteHandshake {
             }
         }
         throw SonyPairingCoordinatorError.remoteHandshakeTimedOut
+    }
+
+    private static func send(
+        _ message: Data, on channel: any SonyTLSChanneling, ownership: SonyTLSChannelOwnership?
+    ) async throws {
+        try Task.checkCancellation()
+        if let ownership {
+            try await channel.send(message, ownership: ownership)
+        } else {
+            try await channel.send(message)
+        }
+        try Task.checkCancellation()
+        try ownership?.requireCurrent()
     }
 }
 
