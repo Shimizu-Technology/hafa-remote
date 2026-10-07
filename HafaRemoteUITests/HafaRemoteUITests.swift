@@ -215,6 +215,9 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(status.waitForExistence(timeout: 5))
         expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
         waitForExpectations(timeout: 15)
+        let completedConnections = app.staticTexts["savedTVCompletedConnections"]
+        XCTAssertTrue(completedConnections.waitForExistence(timeout: 2))
+        XCTAssertEqual(completedConnections.label, "1")
 
         XCUIDevice.shared.press(.home)
         XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
@@ -225,6 +228,11 @@ final class HafaRemoteUITests: XCTestCase {
         // Verify recovery completes and control returns, rather than requiring
         // a transient banner to remain visible after activation.
         XCTAssertTrue(recovery.waitForNonExistence(timeout: 10))
+        expectation(
+            for: NSPredicate(format: "label == '2'"),
+            evaluatedWith: completedConnections
+        )
+        waitForExpectations(timeout: 10)
         expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
         waitForExpectations(timeout: 5)
         let select = app.buttons["remote-select"]

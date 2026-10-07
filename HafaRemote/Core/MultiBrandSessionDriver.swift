@@ -457,9 +457,15 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
         nonisolated var brand: TVBrand { .samsung }
         private let delaysRepeatedConnections: Bool
         private var connectedTargets: Set<String> = []
+        private var completedConnectionCount = 0
+        private let onConnectionCompleted: @MainActor @Sendable (Int) async -> Void
 
-        init(delaysRepeatedConnections: Bool = false) {
+        init(
+            delaysRepeatedConnections: Bool = false,
+            onConnectionCompleted: @escaping @MainActor @Sendable (Int) async -> Void = { _ in }
+        ) {
             self.delaysRepeatedConnections = delaysRepeatedConnections
+            self.onConnectionCompleted = onConnectionCompleted
         }
 
         nonisolated func supports(_ brand: TVBrand) -> Bool {
@@ -472,6 +478,7 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
         ) async throws -> ConnectedTV {
             let address = try PrivateIPv4Address(addressText)
             await delayRepeatedConnectionIfNeeded(key: "samsung:\(address.rawValue)")
+            try await recordCompletedConnection()
             return ConnectedTV(
                 reportedDeviceID: "fixture-samsung",
                 address: address,
@@ -490,6 +497,7 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
             if target.brand == .sony {
                 try await Task.sleep(for: .seconds(3))
             }
+            try await recordCompletedConnection()
             return ConnectedTV(
                 brand: target.brand,
                 reportedDeviceID: target.reportedDeviceID,
@@ -511,6 +519,12 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
             brand: TVBrand
         ) async throws {}
         func disconnect() async {}
+
+        private func recordCompletedConnection() async throws {
+            try Task.checkCancellation()
+            completedConnectionCount += 1
+            await onConnectionCompleted(completedConnectionCount)
+        }
 
         /// Holds only a repeated fixture connection long enough for UI tests to observe recovery.
         private func delayRepeatedConnectionIfNeeded(key: String) async {

@@ -1,3 +1,4 @@
+import Observation
 import SwiftData
 import SwiftUI
 
@@ -143,15 +144,21 @@ struct HafaRemoteApp: App {
         @State private var didSeed = false
         @State private var session: RemoteSessionStore
         @State private var networkMonitor: LocalNetworkMonitor
+        @State private var connectionProbe: SavedTVConnectionUITestProbe
 
         init() {
+            let probe = SavedTVConnectionUITestProbe()
+            _connectionProbe = State(initialValue: probe)
             _session = State(
                 initialValue: RemoteSessionStore(
                     controller: RemoteSessionController(
                         driver: SavedTVSwitchingUIFixtureDriver(
                             delaysRepeatedConnections: ProcessInfo.processInfo.arguments.contains(
                                 "-ui-testing-saved-tv-lifecycle"
-                            )
+                            ),
+                            onConnectionCompleted: { count in
+                                probe.completedConnections = count
+                            }
                         )
                     )
                 )
@@ -166,6 +173,12 @@ struct HafaRemoteApp: App {
                 } else {
                     ProgressView("Preparing TVs…")
                 }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                Text(String(connectionProbe.completedConnections))
+                    .font(.caption2)
+                    .opacity(0.01)
+                    .accessibilityIdentifier("savedTVCompletedConnections")
             }
             .task {
                 guard !didSeed else { return }
@@ -215,6 +228,12 @@ struct HafaRemoteApp: App {
                 didSeed = true
             }
         }
+    }
+
+    @MainActor
+    @Observable
+    private final class SavedTVConnectionUITestProbe {
+        var completedConnections = 0
     }
 
     private struct MalformedSavedTVUITestHarness: View {
