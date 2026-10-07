@@ -215,14 +215,28 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(status.waitForExistence(timeout: 5))
         expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
         waitForExpectations(timeout: 15)
+        let completedConnections = app.staticTexts["savedTVCompletedConnections"]
+        XCTAssertTrue(completedConnections.waitForExistence(timeout: 2))
+        XCTAssertEqual(completedConnections.label, "1")
 
         XCUIDevice.shared.press(.home)
-        XCTAssertTrue(app.wait(for: .runningBackground, timeout: 5))
+        XCTAssertTrue(
+            app.wait(for: .runningBackground, timeout: 2)
+                || app.wait(for: .runningBackgroundSuspended, timeout: 3),
+            "Home must background the app, whether iOS has suspended it yet or not"
+        )
         app.activate()
 
         let recovery = app.descendants(matching: .any)["automaticReconnectStatus"]
-        XCTAssertTrue(recovery.waitForExistence(timeout: 2))
+        // activate() can wait for UI idleness until a quick reconnect finishes.
+        // Verify recovery completes and control returns, rather than requiring
+        // a transient banner to remain visible after activation.
         XCTAssertTrue(recovery.waitForNonExistence(timeout: 10))
+        expectation(
+            for: NSPredicate(format: "label == '2'"),
+            evaluatedWith: completedConnections
+        )
+        waitForExpectations(timeout: 10)
         expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
         waitForExpectations(timeout: 5)
         let select = app.buttons["remote-select"]
@@ -679,11 +693,19 @@ final class HafaRemoteUITests: XCTestCase {
     /// Replaces a text field's full value through the same edit menu available to users.
     @MainActor
     private func replaceText(in field: XCUIElement, with value: String) {
+        let app = XCUIApplication()
         field.tap()
         field.press(forDuration: 1)
-        let selectAll = XCUIApplication().menuItems["Select All"]
+        let selectAll = app.menuItems["Select All"]
         XCTAssertTrue(selectAll.waitForExistence(timeout: 2))
         selectAll.tap()
-        field.typeText(value)
+        // Typing through the field can refocus it and collapse the selection on
+        // newer iOS runtimes. Send keys to the already-focused application.
+        app.typeText(value)
+        let replaced = expectation(
+            for: NSPredicate(format: "value == %@", value),
+            evaluatedWith: field
+        )
+        wait(for: [replaced], timeout: 5)
     }
 }

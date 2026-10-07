@@ -1,8 +1,8 @@
 # Hafa Remote
 ## Product Requirements Document
 
-**Version:** 0.3
-**Date:** September 13, 2026
+**Version:** 0.4
+**Date:** October 7, 2026
 **Owner:** Shimizu Technology
 **Status:** Three-brand internal TestFlight candidate; household hardware validation pending
 
@@ -51,8 +51,14 @@ The core job is: **Open Hafa Remote, select the intended television if necessary
 - Keyboard/text entry when the active TV screen accepts text
 - Button-repeat behavior for directional and volume controls
 - Haptic feedback for taps and connection-state changes
+- Input/source chooser access through a supported local protocol path
+- Device-scoped favorite app shortcuts from a returned app list, explicit configured link, or saved current-app configuration; never imply a universal installed-app inventory
+- Optional discrete swipe navigation with accessible D-pad fallback
+- Channel up/down, guide and numeric input only where a reviewed tuner command path is available
 
 Commands use a reviewed allowlist. Factory, service-menu, hospitality, reset, and other potentially destructive keys are never included.
+
+The October implementation and internal TestFlight acceptance criteria are recorded in [the readiness plan](docs/APP-STORE-READINESS-PLAN.md). Implemented protocol support, negotiated/session-observed capabilities and physical hardware validation are distinct. Internal testing may expose supported experimental paths with honest limitations; public compatibility remains behind the hardware and distribution gates below.
 
 ### Compatibility policy
 
