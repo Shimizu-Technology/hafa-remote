@@ -1051,12 +1051,15 @@ struct HafaRemoteHelpView: View {
             Section("Pairing by brand") {
                 LabeledContent("Samsung") {
                     Text("Choose Allow when the TV asks to approve Hafa Remote.")
+                        .foregroundStyle(HafaTheme.secondaryText)
                 }
                 LabeledContent("Sony") {
                     Text("Enter the six-character code shown on the TV.")
+                        .foregroundStyle(HafaTheme.secondaryText)
                 }
                 LabeledContent("Vizio") {
                     Text("Enter the four-digit PIN shown on the TV.")
+                        .foregroundStyle(HafaTheme.secondaryText)
                 }
                 Text("Local pairing varies by model. A brand name alone does not guarantee compatibility.")
                     .font(.footnote)

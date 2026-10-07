@@ -46,6 +46,8 @@ The follow-up signed simulator build and deep/strict codesign verification passe
 
 ## Visual evidence
 
+The integrated code at `04593ce` passed 337 tests on iOS 26.5 with zero failures or skips, and CodeRabbit CLI reviewed all ten changed files with zero findings. Subsequent computer use exercised first launch and pre-pairing Help on the same native build. Pixel inspection found that `LabeledContent` rendered brand instructions in iOS's default secondary gray (`#8A8A8E`, 3.44:1 on white). These three values now explicitly use the semantic secondary text color (`#59665E`, 6.02:1 on white), including its dark and Increased Contrast variants. The final PR records the repeated gate, native check, review, and CI after this accessibility repair.
+
 These app-only captures show synthetic UI test data, not hardware acceptance or App Store marketing claims:
 
 - [Compact light remote](evidence/HR-044/compact-light.png)
