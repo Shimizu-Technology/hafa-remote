@@ -102,11 +102,26 @@
                 }
             }
             .overlay(alignment: .bottomTrailing) {
-                Text(probe.lastEvent).font(.caption2)
-                    .opacity(
-                        ProcessInfo.processInfo.arguments.contains("-convenience-visible-trace") ? 1 : 0.01
-                    )
-                    .accessibilityIdentifier("convenienceFixtureTrace")
+                if !ProcessInfo.processInfo.arguments.contains("-convenience-visible-trace") {
+                    Text(probe.lastEvent).font(.caption2).opacity(0.01)
+                        .accessibilityIdentifier("convenienceFixtureTrace")
+                        .allowsHitTesting(false)
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if ProcessInfo.processInfo.arguments.contains("-convenience-visible-trace") {
+                    // An opaque, bounded DEBUG witness stays in the AX tree without covering controls.
+                    Text(probe.lastEvent)
+                        .font(.caption2.monospaced())
+                        .dynamicTypeSize(.large)
+                        .foregroundStyle(HafaTheme.primaryText)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(HafaTheme.canvas)
+                        .accessibilityIdentifier("convenienceFixtureTrace")
+                        .allowsHitTesting(false)
+                }
             }
             .preferredColorScheme(
                 ProcessInfo.processInfo.arguments.contains("-convenience-dark") ? .dark : .light)

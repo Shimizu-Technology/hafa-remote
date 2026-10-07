@@ -152,13 +152,22 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
     @MainActor
     func testButtonsSwipeFallbackAndLargeTextDarkControls() {
         let app = launch(
-            contentSizeCategory: "UICTContentSizeCategoryAccessibilityXXXL", extra: ["-convenience-dark"])
+            contentSizeCategory: "UICTContentSizeCategoryAccessibilityXXXL",
+            extra: ["-convenience-dark", "-convenience-visible-trace"])
         let picker = app.segmentedControls["navigationModePicker"]
         reveal(picker, in: app)
         picker.buttons["Swipe"].tap()
         let swipe = app.otherElements["remoteSwipeControl"]
         revealGestureSurface(swipe, in: app)
         XCTAssertTrue(swipe.isHittable)
+        let trace = app.staticTexts["convenienceFixtureTrace"]
+        XCTAssertTrue(trace.waitForExistence(timeout: 2), "A live dispatch observer is required before input")
+        XCTAssertNotEqual(trace.label, "command:right", "The gesture must create a new dispatch result")
+        let baseline = XCTAttachment(
+            string: "Before drag: trace=\(trace.label), frame=\(trace.frame), pad=\(swipe.frame)")
+        baseline.name = "Live trace and gesture frames before input"
+        baseline.lifetime = .keepAlways
+        add(baseline)
         attach(app, name: "Dark-largest-text-swipe-surface")
         let from = swipe.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5))
         let to = swipe.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
@@ -181,7 +190,7 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
     @MainActor private func revealGestureSurface(_ element: XCUIElement, in app: XCUIApplication) {
         let top = app.navigationBars.firstMatch.frame.maxY + 16
         // Keep the whole control above the home indicator without reserving unused Form footer space.
-        let bottom = app.frame.maxY - 44
+        let bottom = app.frame.maxY - 64
         for _ in 0..<12 {
             // Form rows below the viewport may not have an accessibility element yet.
             guard element.exists else {
@@ -240,8 +249,18 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
     }
     @MainActor private func assertTrace(_ value: String, in app: XCUIApplication) {
         let predicate = NSPredicate(format: "label == %@", value)
-        let condition = expectation(for: predicate, evaluatedWith: app.staticTexts["convenienceFixtureTrace"])
-        wait(for: [condition], timeout: 3)
+        let trace = app.staticTexts["convenienceFixtureTrace"]
+        let condition = expectation(for: predicate, evaluatedWith: trace)
+        let result = XCTWaiter.wait(for: [condition], timeout: 3)
+        if result != .completed {
+            let state = trace.exists ? "label=\(trace.label), frame=\(trace.frame)" : "observer missing"
+            let diagnostic = XCTAttachment(string: "Expected \(value); \(state)\n\(app.debugDescription)")
+            diagnostic.name = "Dispatch observer failure and application hierarchy"
+            diagnostic.lifetime = .keepAlways
+            add(diagnostic)
+            attach(app, name: "Dispatch observer failure screenshot")
+        }
+        XCTAssertEqual(result, .completed, "Expected actual dispatch \(value)")
     }
     @MainActor private func attach(_ app: XCUIApplication, name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())

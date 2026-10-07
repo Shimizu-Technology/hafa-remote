@@ -83,3 +83,29 @@ certificate, Wi-Fi name, or entered text is visible.
 
 - [More Controls and TV-reported synthetic apps](evidence/HR-045/more-controls-synthetic.png), retained from the native convenience run described above.
 - [Largest accessibility text in dark Swipe mode](evidence/HR-045/largest-text-swipe-synthetic.png), retained from the integrated native repair's actual touch/CUA QA. Its wrapped instruction and Buttons fallback were exercised; native XCTest additionally proved complete gesture geometry and scrolling.
+
+## Dispatch witness reliability
+
+Hosted CI on `f0b30c7` failed the largest-text swipe test's three-second
+`command:right` expectation. The retained screenshot and event show a fully
+visible pad and a horizontal drag; the failed accessibility query contained no
+matching trace element. The unchanged compiled baseline reproduced a missing
+trace after Select in one of three executions; the other two passed. This
+evidence identifies an unreliable diagnostic witness, without establishing a
+production gesture failure.
+
+That test now enables the existing DEBUG visible-trace flag. The trace occupies
+an opaque bottom safe-area inset, uses a bounded diagnostic font, and cannot
+receive touches. The test requires its presence before input and records its
+baseline and geometry. Failures retain the live observer state, application
+hierarchy, and screenshot. Real Right drag, Select tap, and Buttons-Up assertions
+retain their exact semantic values and three-second bounds. Production gestures,
+drivers, and command dispatch are unchanged.
+
+On the owned iPhone 17 Pro / iOS 26.5 simulator, the instrumented largest-text
+case passed six executions with zero failures or skips. Two identical
+three-repetition test actions produced that count. The complete seven-case
+convenience class then passed with zero failures or skips. Result bundles are
+`/tmp/hafa-hr045-swipe-witness/visible.xcresult` and
+`/tmp/hafa-hr045-swipe-witness/all-convenience.xcresult`; the complete current-head
+gate and hosted CI remain separate integration requirements.
