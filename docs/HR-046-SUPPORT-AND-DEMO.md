@@ -70,7 +70,9 @@ automatic reconnects, health probes, lifecycle handling, network grace, commands
 and removal outcomes therefore cannot acquire a new collection lease merely by
 completing after Clear or renewed consent. A genuinely new health check or retry
 started afterward can still record, rather than inheriting an erased lifetime
-connection lease.
+connection lease. Pending retry status and deferred teardown recovery retain the
+failure or waiting attempt's origin; merely scheduling a timer is not a new
+activity. The executed attempt obtains a fresh origin when that timer fires.
 
 Model/display-name fallback comparisons normalize both inputs using the same
 control-character removal and whitespace trimming before checking equality.
@@ -93,19 +95,24 @@ simulator build-for-testing compiled the app, unit tests, and UI tests. A Releas
 simulator build verifies the demo remains available outside DEBUG configuration.
 
 An isolated macOS 14 Swift package compiled the unchanged real controller, store,
-and protocol dependencies and ran 28 tests in six suites. All passed, including
+and protocol dependencies and ran 30 repository tests in seven suites. All passed, including
 13 sensitive-metadata cases, four normalized-name cases, held candidate A/B state
 projection, producer-owned snapshots during teardown, command/text completion
 after Clear or consent changes, in-flight connection clearing, and A→B→A wake
 lease invalidation. No dependency stubs, TV traffic, or Keychain operations were
 used by the fixtures. The independently supplied provisional-cancellation and
-terminal-failure probes first reproduced three assertions on unchanged4de1dde;
+terminal-failure probes first reproduced three assertions on unchanged `4de1dde`;
 all passed after repair. New coverage includes newer-request wins, canceled and
 same-TV/raw-address waiters, old versus fresh health activity, lifecycle and
-network-grace completions, and automatic failure after Clear/reconsent. The
-temporary package was removed. The iPhone UI journeys
-compiled and still require execution in the integrated gate. These isolated results do not replace that gate or
-computer-use verification.
+network-grace completions, and automatic failure after Clear/reconsent. A subsequent
+independent review reproduced four pending-retry assertions on unchanged
+`efed315`. Expanded tests reproduced eight assertions across connection, health,
+command, and deferred teardown after Clear/reconsent. All passed after the causal
+scheduling repair, with a new timer-fired retry still recording connection
+readiness. Including the unchanged independent retry probes, the final harness
+passed 32 tests in eight suites. The temporary packages were removed. The iPhone
+UI journeys compiled and still require execution in the integrated gate. These
+isolated results do not replace that gate or computer-use verification.
 
 Root integration must run the complete gate on the integrated current head and
 exercise these flows with computer use: first launch → demo → navigate/volume/

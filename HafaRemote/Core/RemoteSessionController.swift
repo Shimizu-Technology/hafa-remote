@@ -186,7 +186,7 @@ actor RemoteSessionController {
     private var connectionTask: Task<ConnectedTV, Error>?
     private var driverTeardownID: UUID?
     private var driverTeardownTask: Task<Void, Never>?
-    private var recoveryAfterDriverTeardownGeneration: UUID?
+    private var recoveryAfterDriverTeardown: (generation: UUID, activityStartedAt: ContinuousClock.Instant)?
     private var pairingRemovalID: UUID?
     private var pairingRemovalWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var reconnectTask: Task<Void, Never>?
@@ -545,10 +545,11 @@ actor RemoteSessionController {
                     shouldReconnect = false
                 }
                 if shouldReconnect {
-                    transitionToPendingReconnectIfAvailable(generation: commandGeneration)
+                    transitionToPendingReconnectIfAvailable(
+                        generation: commandGeneration, activityStartedAt: activityStartedAt)
                     await disconnectDriverWithinLimit()
                     guard generation == commandGeneration else { throw error }
-                    scheduleReconnect(generation: commandGeneration)
+                    scheduleReconnect(generation: commandGeneration, activityStartedAt: activityStartedAt)
                 }
             }
             if wasCancelled {
@@ -843,14 +844,14 @@ actor RemoteSessionController {
         guard await waitForDriverTeardownWithinLimit() else {
             if generation == requestedGeneration {
                 if isReconnect, isForeground, targetAddressText != nil {
-                    recoveryAfterDriverTeardownGeneration = requestedGeneration
+                    recoveryAfterDriverTeardown = (requestedGeneration, activityStartedAt)
                 }
                 transition(to: .failed(.timedOut(.disconnect)), activityStartedAt: activityStartedAt)
-                if recoveryAfterDriverTeardownGeneration == requestedGeneration,
+                if recoveryAfterDriverTeardown?.generation == requestedGeneration,
                     driverTeardownTask == nil
                 {
-                    recoveryAfterDriverTeardownGeneration = nil
-                    scheduleReconnect(generation: requestedGeneration)
+                    recoveryAfterDriverTeardown = nil
+                    scheduleReconnect(generation: requestedGeneration, activityStartedAt: activityStartedAt)
                 }
             }
             return
@@ -945,15 +946,15 @@ actor RemoteSessionController {
     ) {
         if let timeoutError = error as? RemoteSessionControllerError {
             transition(to: .failed(.timedOut(timeoutError.operation)), activityStartedAt: activityStartedAt)
-            scheduleReconnect(generation: requestedGeneration)
+            scheduleReconnect(generation: requestedGeneration, activityStartedAt: activityStartedAt)
         } else if error as? SamsungConnectionError == .pairingTimedOut {
             transition(to: .failed(.timedOut(.connect)), activityStartedAt: activityStartedAt)
-            scheduleReconnect(generation: requestedGeneration)
+            scheduleReconnect(generation: requestedGeneration, activityStartedAt: activityStartedAt)
         } else if error as? SonyPairingCoordinatorError == .pairingTimedOut
             || error as? SonyPairingCoordinatorError == .remoteHandshakeTimedOut
         {
             transition(to: .failed(.timedOut(.connect)), activityStartedAt: activityStartedAt)
-            scheduleReconnect(generation: requestedGeneration)
+            scheduleReconnect(generation: requestedGeneration, activityStartedAt: activityStartedAt)
         } else if error as? TVDriverError == .savedDeviceIdentityMismatch {
             transition(to: .failed(.savedDeviceIdentityMismatch), activityStartedAt: activityStartedAt)
         } else if error as? SamsungConnectionError == .denied {
@@ -991,14 +992,17 @@ actor RemoteSessionController {
             transition(to: .unsupported, activityStartedAt: activityStartedAt)
         } else if Self.isOfflineError(error) {
             transition(to: .offline, activityStartedAt: activityStartedAt)
-            scheduleReconnect(generation: requestedGeneration)
+            scheduleReconnect(generation: requestedGeneration, activityStartedAt: activityStartedAt)
         } else {
             transition(to: .failed(.unexpected), activityStartedAt: activityStartedAt)
         }
     }
 
-    /// Keeps automatic retry visible while waiting for the next foreground connection attempt.
-    private func scheduleReconnect(generation requestedGeneration: UUID) {
+    /// Scheduling is an outcome of the original failure, not a newly executed attempt.
+    /// Keep that cause through pending status; the timer starts fresh activity when it fires.
+    private func scheduleReconnect(
+        generation requestedGeneration: UUID, activityStartedAt: ContinuousClock.Instant
+    ) {
         guard let delay = reconnectDelay else { return }
         guard isForeground,
             reconnectTask == nil,
@@ -1015,7 +1019,8 @@ actor RemoteSessionController {
                 await self?.clearReconnectTask(generation: requestedGeneration)
             }
         }
-        transition(to: .reconnecting(attempt: max(1, reconnectAttempt + 1)))
+        transition(
+            to: .reconnecting(attempt: max(1, reconnectAttempt + 1)), activityStartedAt: activityStartedAt)
     }
 
     private var reconnectDelay: Duration? {
@@ -1029,14 +1034,17 @@ actor RemoteSessionController {
     }
 
     /// Projects automatic recovery before a potentially slow transport teardown begins.
-    private func transitionToPendingReconnectIfAvailable(generation requestedGeneration: UUID) {
+    private func transitionToPendingReconnectIfAvailable(
+        generation requestedGeneration: UUID, activityStartedAt: ContinuousClock.Instant
+    ) {
         guard generation == requestedGeneration,
             reconnectDelay != nil,
             isForeground,
             reconnectTask == nil,
             lastNetworkReachability != false
         else { return }
-        transition(to: .reconnecting(attempt: max(1, reconnectAttempt + 1)))
+        transition(
+            to: .reconnecting(attempt: max(1, reconnectAttempt + 1)), activityStartedAt: activityStartedAt)
     }
 
     private func runScheduledReconnect(generation requestedGeneration: UUID) async {
@@ -1227,10 +1235,11 @@ actor RemoteSessionController {
             healthProbeID = nil
         }
         transition(to: .offline, activityStartedAt: activityStartedAt)
-        transitionToPendingReconnectIfAvailable(generation: requestedGeneration)
+        transitionToPendingReconnectIfAvailable(
+            generation: requestedGeneration, activityStartedAt: activityStartedAt)
         await disconnectDriverWithinLimit()
         guard generation == requestedGeneration, isForeground else { return }
-        scheduleReconnect(generation: requestedGeneration)
+        scheduleReconnect(generation: requestedGeneration, activityStartedAt: activityStartedAt)
     }
 
     private func pauseHealthChecksForCommand() async {
@@ -1362,13 +1371,13 @@ actor RemoteSessionController {
         guard driverTeardownID == id else { return }
         driverTeardownID = nil
         driverTeardownTask = nil
-        let recoveryGeneration = recoveryAfterDriverTeardownGeneration
-        recoveryAfterDriverTeardownGeneration = nil
-        guard recoveryGeneration == generation,
+        let recovery = recoveryAfterDriverTeardown
+        recoveryAfterDriverTeardown = nil
+        guard let recovery, recovery.generation == generation,
             isForeground,
             targetAddressText != nil
         else { return }
-        scheduleReconnect(generation: generation)
+        scheduleReconnect(generation: generation, activityStartedAt: recovery.activityStartedAt)
     }
 
     private func transition(

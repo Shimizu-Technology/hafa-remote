@@ -799,3 +799,175 @@ private actor DiagnosticActivityFixture: RemoteSessionDriving {
         if teardowns == 2 { await secondTeardown?.wait() }
     }
 }
+
+@MainActor
+private struct DiagnosticPendingRetryTests {
+    @Test(
+        "An old failure cannot re-consent a pending retry, but an executed retry can record",
+        arguments: DiagnosticRetryBoundary.allCases, [false, true])
+    func pendingRetryRetainsCause(boundary: DiagnosticRetryBoundary, togglesConsent: Bool) async throws {
+        let clock = DiagnosticActivityClock()
+        let gate = DiagnosticOwnershipGate()
+        let driver = DiagnosticRetryDriver(boundary: boundary, gate: gate)
+        let recorder = DiagnosticRecorder()
+        recorder.setEnabled(true)
+        let store = RemoteSessionStore(
+            controller: RemoteSessionController(
+                driver: driver, clock: clock, configuration: configuration()), diagnostics: recorder)
+        let connect = Task { await store.connect(to: try target()) }
+        if boundary != .connection {
+            try await connect.value
+            await settle { store.connectedTV != nil }
+        }
+        let command: Task<Void, Error>?
+        if boundary == .health {
+            await advance(clock, .seconds(17))
+            command = nil
+        } else if boundary == .command {
+            command = Task { try await store.send(.home) }
+        } else {
+            command = nil
+        }
+        await gate.waitUntilStarted()
+        reset(recorder, togglesConsent)
+        await gate.release()
+        try await connect.value
+        if let command {
+            await #expect(throws: SamsungConnectionError.notConnected) { try await command.value }
+        }
+        await settle {
+            if case .reconnecting = store.state { return true }
+            return false
+        }
+        #expect(recorder.events.isEmpty, "Old failure scheduled a retry into a new collection")
+        #expect(await driver.connectionCount == 1, "A pending timer has not executed a retry")
+
+        await advance(clock, .seconds(23))
+        await settle { store.connectedTV != nil && recorder.events.contains { $0.kind == .connectionReady } }
+        #expect(await driver.connectionCount == 2)
+        #expect(
+            recorder.events.contains { $0.kind == .connectionReady }, "The genuinely new retry can record")
+        #expect(
+            !recorder.events.contains {
+                $0.kind == .commandDeliveryFailed || $0.kind == .connectionUnavailable
+            })
+        await store.disconnect()
+    }
+
+    @Test("Deferred teardown recovery retains the waiting attempt's cause", arguments: [false, true])
+    func deferredRecoveryRetainsCause(togglesConsent: Bool) async throws {
+        let clock = DiagnosticActivityClock()
+        let teardown = DiagnosticOwnershipGate()
+        let driver = DiagnosticActivityFixture(secondTeardown: teardown)
+        let recorder = DiagnosticRecorder()
+        recorder.setEnabled(true)
+        let store = RemoteSessionStore(
+            controller: RemoteSessionController(
+                driver: driver, clock: clock, configuration: configuration()), diagnostics: recorder)
+        await store.connect(to: try target())
+        await settle { store.connectedTV != nil }
+        let background = Task { await store.applicationDidEnterBackground() }
+        await teardown.waitUntilStarted()
+        await background.value
+        let foreground = Task { await store.applicationWillEnterForeground() }
+        await settle {
+            if case .reconnecting = store.state { return true }
+            return false
+        }
+        reset(recorder, togglesConsent)
+        await advance(clock, .seconds(5))
+        await foreground.value
+        await settle { store.state == .failed(.timedOut(.disconnect)) }
+        #expect(recorder.events.isEmpty)
+        await teardown.release()
+        await settle {
+            if case .reconnecting = store.state { return true }
+            return false
+        }
+        #expect(recorder.events.isEmpty, "Deferred scheduling retained the old recovery origin")
+        await advance(clock, .seconds(23))
+        await settle { store.connectedTV != nil && recorder.events.contains { $0.kind == .connectionReady } }
+        #expect(await driver.connectionCount == 2)
+        await store.disconnect()
+    }
+
+    private func target() throws -> TVConnectionTarget {
+        TVConnectionTarget(
+            brand: .samsung, reportedDeviceID: "synthetic-retry",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.46"),
+            controlPort: 8002, expectedSavedDeviceID: "synthetic-retry")
+    }
+    private func configuration() -> RemoteSessionConfiguration {
+        RemoteSessionConfiguration(
+            connectionTimeout: .seconds(5), pairingTimeout: .seconds(5),
+            commandTimeout: .seconds(5), disconnectTimeout: .seconds(5), pairingRemovalTimeout: .seconds(5),
+            reconnectDelays: [.seconds(23)], repeatsLastReconnectDelay: false,
+            healthCheckInterval: .seconds(17), healthCheckTimeout: .seconds(5),
+            healthCheckRetryDelay: .seconds(18), healthFailureThreshold: 1,
+            networkLossGracePeriod: .seconds(19))
+    }
+    private func reset(_ recorder: DiagnosticRecorder, _ toggle: Bool) {
+        if toggle {
+            recorder.setEnabled(false)
+            recorder.setEnabled(true)
+        } else {
+            recorder.clear()
+        }
+    }
+    private func settle(_ predicate: @MainActor () -> Bool) async {
+        for _ in 0..<5000 {
+            if predicate() { return }
+            await Task.yield()
+        }
+        Issue.record("Retry projection did not settle")
+    }
+    private func advance(_ clock: DiagnosticActivityClock, _ duration: Duration) async {
+        for _ in 0..<5000 {
+            if await clock.fire(duration) { return }
+            await Task.yield()
+        }
+        Issue.record("Retry clock waiter was not installed")
+    }
+}
+
+private enum DiagnosticRetryBoundary: CaseIterable, Sendable { case connection, health, command }
+
+private actor DiagnosticRetryDriver: RemoteSessionDriving {
+    let boundary: DiagnosticRetryBoundary
+    let gate: DiagnosticOwnershipGate
+    private(set) var connectionCount = 0
+    init(boundary: DiagnosticRetryBoundary, gate: DiagnosticOwnershipGate) {
+        self.boundary = boundary
+        self.gate = gate
+    }
+    func connect(
+        to target: TVConnectionTarget,
+        onWaitingForApproval: @escaping @MainActor @Sendable () async -> Void
+    ) async throws -> ConnectedTV {
+        connectionCount += 1
+        if boundary == .connection, connectionCount == 1 {
+            await gate.wait()
+            throw SamsungConnectionError.notConnected
+        }
+        return ConnectedTV(
+            reportedDeviceID: target.reportedDeviceID, address: target.address,
+            modelName: "SYNTHETIC_MODEL", firmwareVersion: "1.0")
+    }
+    func connect(addressText: String, onWaitingForApproval: @escaping @MainActor @Sendable () async -> Void)
+        throws -> ConnectedTV
+    { throw SamsungConnectionError.notConnected }
+    func checkConnection() async throws {
+        if boundary == .health {
+            await gate.wait()
+            throw SamsungConnectionError.notConnected
+        }
+    }
+    func send(_ command: RemoteCommand) async throws {
+        if boundary == .command {
+            await gate.wait()
+            throw SamsungConnectionError.notConnected
+        }
+    }
+    func forget(addressText: String) {}
+    func disconnect() {}
+}
