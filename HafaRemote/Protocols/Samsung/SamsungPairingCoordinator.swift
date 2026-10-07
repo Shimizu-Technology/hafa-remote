@@ -1,6 +1,6 @@
 import Foundation
 
-protocol SamsungPairingCoordinating: Sendable {
+protocol SamsungPairingCoordinating: TVDriver {
     func pair(
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
@@ -62,6 +62,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
     private let deviceInfoProvider: any SamsungDeviceInfoProviding
     private let credentialStore: any SamsungPairingCredentialStoring
     private let transport: any SamsungTransporting
+    private var activeTV: ConnectedTV?
     private var activeAttemptID: SamsungConnectionAttemptID?
     private var mostRecentIdentityByAddress: [PrivateIPv4Address: SamsungPairingCredentialIdentity] = [:]
 
@@ -106,6 +107,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
         guard activeAttemptID == nil else {
             throw SamsungPairingCoordinatorError.pairingInProgress
         }
+        activeTV = nil
         let attemptID = SamsungConnectionAttemptID()
         activeAttemptID = attemptID
         defer {
@@ -167,15 +169,18 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                 try await credentialStore.save(credential, for: identity)
                 try Task.checkCancellation()
 
-                return ConnectedTV(
+                let television = ConnectedTV(
                     brand: .samsung,
                     reportedDeviceID: deviceInfo.reportedDeviceID,
                     address: address,
                     modelName: deviceInfo.modelName,
                     firmwareVersion: deviceInfo.firmwareVersion,
                     networkConnection: deviceInfo.networkConnection,
-                    macAddress: deviceInfo.macAddress
+                    macAddress: deviceInfo.macAddress,
+                    powerState: deviceInfo.powerState
                 )
+                activeTV = television
+                return television
             } catch {
                 guard Task.isCancelled || error is CancellationError else {
                     await transport.disconnect(attemptID: attemptID)
@@ -249,7 +254,17 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
         }
     }
 
+    func sessionObservation() async throws -> TVSessionObservation? {
+        guard let activeTV else { return nil }
+        let info = try await deviceInfoProvider.fetchDeviceInfo(at: activeTV.address)
+        guard info.reportedDeviceID == activeTV.reportedDeviceID else {
+            throw TVDriverError.savedDeviceIdentityMismatch
+        }
+        return TVSessionObservation(stableDeviceKey: activeTV.stableDeviceKey, powerState: info.powerState)
+    }
+
     func disconnect() async {
+        activeTV = nil
         await transport.disconnect()
     }
 }

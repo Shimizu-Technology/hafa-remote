@@ -4,6 +4,7 @@ import Foundation
 actor MultiBrandSessionDriver: RemoteSessionDriving {
     nonisolated var brand: TVBrand { .samsung }
 
+    private let distributionPolicy: TVDistributionPolicy
     private let samsung: any SamsungPairingCoordinating
     private let sony: any SonyPairingCoordinating
     private let vizio: any VizioPairingCoordinating
@@ -15,21 +16,24 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
     init(
         samsung: any SamsungPairingCoordinating,
         sony: any SonyPairingCoordinating,
-        vizio: any VizioPairingCoordinating
+        vizio: any VizioPairingCoordinating,
+        distributionPolicy: TVDistributionPolicy = .current
     ) {
+        self.distributionPolicy = distributionPolicy
         self.samsung = samsung
         self.sony = sony
         self.vizio = vizio
     }
 
     nonisolated func supports(_ brand: TVBrand) -> Bool {
-        brand == .samsung || brand == .sony || brand == .vizio
+        distributionPolicy.permits(brand)
     }
 
     func connect(
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> ConnectedTV {
+        guard supports(.samsung) else { throw MultiBrandSessionDriverError.unsupportedBrand }
         await sonyPairingCodeBroker.cancel()
         await vizioPairingCodeBroker.cancel()
         lastAttemptedBrand = .samsung
@@ -121,6 +125,24 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
             try await vizio.sendText(input)
         case .none:
             throw MultiBrandSessionDriverError.notConnected
+        }
+    }
+
+    func sessionObservation() async throws -> TVSessionObservation? {
+        switch activeBrand {
+        case .samsung: try await samsung.sessionObservation()
+        case .sony: try await sony.sessionObservation()
+        case .vizio: try await vizio.sessionObservation()
+        case .none: nil
+        }
+    }
+
+    func observations() async -> AsyncStream<TVSessionObservation> {
+        switch activeBrand {
+        case .samsung: await samsung.observations()
+        case .sony: await sony.observations()
+        case .vizio: await vizio.observations()
+        case .none: AsyncStream { $0.finish() }
         }
     }
 

@@ -36,6 +36,82 @@ struct RemoteSessionControllerTests {
         await controller.disconnect()
     }
 
+    @Test("Observed power updates preserve identity and reset across foreground sessions")
+    func observationCannotCrossSessionOrIdentityBoundary() async throws {
+        let television = ConnectedTV(
+            reportedDeviceID: "synthetic-observed-tv",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.43"),
+            modelName: "Synthetic Model", firmwareVersion: nil
+        )
+        let driver = ObservedPowerFixture(television: television)
+        let session = RemoteSessionController(
+            driver: driver, configuration: testConfiguration(reconnectDelays: []))
+        await session.connect(to: television.connectionTarget)
+        await driver.publish(power: .standby, identity: television.stableDeviceKey)
+        await waitUntil {
+            await session.state
+                == .connected(
+                    television.applying(
+                        TVSessionObservation(
+                            stableDeviceKey: television.stableDeviceKey, powerState: .standby)))
+        }
+        await driver.publish(power: .on, identity: "samsung:synthetic-other-tv")
+        for _ in 0..<5 { await Task.yield() }
+        #expect(
+            await session.state
+                == .connected(
+                    television.applying(
+                        TVSessionObservation(
+                            stableDeviceKey: television.stableDeviceKey, powerState: .standby))))
+        await session.applicationDidEnterBackground()
+        await driver.publish(power: .on, identity: television.stableDeviceKey)
+        #expect(await session.state == .offline)
+        await session.applicationWillEnterForeground()
+        #expect(await session.state == .connected(television))
+        await session.disconnect()
+    }
+
+    @MainActor
+    @Test("The UI projection drops stale power when its transport disconnects")
+    func storeResetsRememberedPower() async throws {
+        let television = ConnectedTV(
+            reportedDeviceID: "synthetic-observed-tv",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.44"),
+            modelName: "Synthetic Model", firmwareVersion: nil
+        )
+        let driver = ObservedPowerFixture(television: television)
+        let store = RemoteSessionStore(controller: RemoteSessionController(driver: driver))
+        await store.connect(to: television.connectionTarget)
+        await driver.publish(power: .on, identity: television.stableDeviceKey)
+        await waitUntil { @MainActor in store.observedPowerState == .on }
+        await store.disconnect(clearRememberedTV: false)
+        await waitUntil { @MainActor in store.state == .idle }
+        #expect(store.observedPowerState == .unknown)
+        #expect(store.lastConnectedTV?.powerState == .unknown)
+    }
+
+    @Test("Production recovery stops after bounded automatic attempts and preserves manual retry")
+    func boundedReconnectLeavesRecoveryAvailable() async throws {
+        let clock = ManualRemoteSessionClock()
+        let driver = MockRemoteSessionDriver(outcomes: Array(repeating: .failure(.offline), count: 7))
+        let session = RemoteSessionController(driver: driver, clock: clock, configuration: .production)
+        let target = TVConnectionTarget(
+            brand: .samsung, reportedDeviceID: "synthetic-saved-tv",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.44"),
+            controlPort: 8002, expectedSavedDeviceID: "synthetic-saved-tv"
+        )
+        await session.connect(to: target)
+        for delay in RemoteSessionConfiguration.production.reconnectDelays {
+            await resume(clock: clock, duration: delay)
+        }
+        await waitUntil { await session.state == .offline }
+        #expect(await driver.connectCallCount == 6)
+        #expect(await clock.pendingSleeps.isEmpty)
+        await session.connect(to: target)
+        #expect(await driver.connectCallCount == 7)
+        await session.disconnect()
+    }
+
     @Test("Automatic reconnect promotes first-pair discovery into a saved authenticated target")
     func reconnectPinsFirstPairedIdentity() async throws {
         let address = try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.43")
@@ -2946,4 +3022,24 @@ private actor RejectingSonyPairingContextFixture: RemoteSessionDriving {
     func send(_ command: RemoteCommand) {}
     func forget(addressText: String) {}
     func disconnect() {}
+}
+
+private actor ObservedPowerFixture: RemoteSessionDriving {
+    private let television: ConnectedTV
+    private let broadcaster = TVSessionObservationBroadcaster()
+    init(television: ConnectedTV) { self.television = television }
+    func connect(addressText: String, onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void)
+        async throws -> ConnectedTV
+    {
+        await broadcaster.reset()
+        return television
+    }
+    func observations() async -> AsyncStream<TVSessionObservation> { await broadcaster.stream() }
+    func sessionObservation() async throws -> TVSessionObservation? { await broadcaster.snapshot() }
+    func publish(power: TVPowerState, identity: String) async {
+        await broadcaster.publish(TVSessionObservation(stableDeviceKey: identity, powerState: power))
+    }
+    func send(_ command: RemoteCommand) {}
+    func forget(addressText: String) {}
+    func disconnect() async { await broadcaster.reset() }
 }

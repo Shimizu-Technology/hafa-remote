@@ -238,9 +238,9 @@ enum SonyRemoteEvent: Equatable, Sendable {
 }
 
 enum SonyRemoteProtocolCodec {
-    private static let activeFeatures: UInt64 = 1 | 2 | 32 | 64
+    static let requestedFeatures: UInt64 = 1 | 2 | 32 | 64
 
-    static func configurationResponse() -> Data {
+    static func configurationResponse(negotiatedFeatures: UInt64 = requestedFeatures) -> Data {
         let deviceInfo =
             SonyProtobuf.stringField(1, "Hafa Remote")
             + SonyProtobuf.stringField(2, "Shimizu Technology")
@@ -249,13 +249,13 @@ enum SonyRemoteProtocolCodec {
             + SonyProtobuf.stringField(5, "com.shimizutechnology.hafaremote")
             + SonyProtobuf.stringField(6, "1.0")
         let configuration =
-            SonyProtobuf.varintField(1, activeFeatures)
+            SonyProtobuf.varintField(1, negotiatedFeatures & requestedFeatures)
             + SonyProtobuf.bytesField(2, deviceInfo)
         return SonyProtobuf.bytesField(1, configuration)
     }
 
-    static func activeResponse() -> Data {
-        SonyProtobuf.bytesField(2, SonyProtobuf.varintField(1, activeFeatures))
+    static func activeResponse(negotiatedFeatures: UInt64 = requestedFeatures) -> Data {
+        SonyProtobuf.bytesField(2, SonyProtobuf.varintField(1, negotiatedFeatures & requestedFeatures))
     }
 
     static func pingResponse(_ value: Int64) -> Data {
@@ -314,6 +314,7 @@ enum SonyRemoteProtocolCodec {
         }
         if let start = fields.first(where: { $0.number == 40 })?.bytes {
             let value = try SonyProtobuf.fields(in: start).first(where: { $0.number == 1 })?.varint
+            guard let value, value == 0 || value == 1 else { return .other }
             return .powerState(value == 1)
         }
         return .other

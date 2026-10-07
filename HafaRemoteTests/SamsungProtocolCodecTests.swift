@@ -4,6 +4,24 @@ import Testing
 @testable import HafaRemote
 
 struct SamsungProtocolCodecTests {
+    @Test("Samsung PowerState is explicit and unknown when missing or unrecognized")
+    func readsReportedSamsungPowerState() throws {
+        for (value, expected) in [
+            ("on", TVPowerState.on), ("standby", .standby), ("off", .standby), ("unknown", .unknown),
+        ] {
+            let object: [String: Any] = [
+                "device": ["id": "synthetic-tv", "modelName": "SYNTHETIC_MODEL", "PowerState": value]
+            ]
+            let info = try SamsungDeviceInfoParser.parse(JSONSerialization.data(withJSONObject: object))
+            #expect(info.powerState == expected)
+        }
+        let absent = Data(#"{"device":{"id":"synthetic-tv","modelName":"SYNTHETIC_MODEL"}}"#.utf8)
+        #expect(try SamsungDeviceInfoParser.parse(absent).powerState == .unknown)
+        let malformed = Data(
+            #"{"device":{"id":"synthetic-tv","modelName":"SYNTHETIC_MODEL","PowerState":1}}"#.utf8)
+        #expect(try SamsungDeviceInfoParser.parse(malformed).powerState == .unknown)
+    }
+
     @Test("Text input validates length and redacts its description")
     func validatesAndRedactsTextInput() throws {
         let secret = "synthetic private search"

@@ -332,6 +332,36 @@ struct VizioDeviceInfoCodecTests {
 
 @Suite(.serialized)
 struct VizioHTTPSClientRequestTests {
+    @Test("Power observation uses the authenticated power_mode endpoint and clears after disconnect")
+    func readsAuthenticatedPowerObservation() async throws {
+        let recorder = VizioRequestRecorder()
+        VizioURLProtocolStub.install { request in
+            recorder.record(request)
+            let json =
+                request.url?.path == "/state/device/power_mode"
+                ? #"{"STATUS":{"RESULT":"SUCCESS"},"ITEMS":[{"VALUE":0}]}"#
+                : #"{"STATUS":{"RESULT":"SUCCESS"},"ITEMS":[{"VALUE":{"CAST_NAME":"Synthetic TV","MODEL_NAME":"SYNTHETIC_MODEL","SYSTEM_INFO":{"SERIAL_NUMBER":"synthetic-power-tv"}}}]}"#
+            return (200, Data(json.utf8))
+        }
+        defer { VizioURLProtocolStub.reset() }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [VizioURLProtocolStub.self]
+        let client = try VizioHTTPSClient(
+            address: PrivateIPv4Address(documentationAddressForTesting: "203.0.113.43"),
+            port: 7345, trustMode: .reconnect(expectedFingerprint: Data(repeating: 43, count: 32)),
+            authToken: "synthetic-power-token", configuration: configuration
+        )
+        #expect(try await client.sessionObservation() == nil)
+        _ = try await client.deviceInfo(authToken: "synthetic-power-token")
+        let observation = try #require(try await client.sessionObservation())
+        #expect(observation.powerState == .standby)
+        #expect(observation.stableDeviceKey == "vizio:synthetic-power-tv")
+        #expect(recorder.requests.map(\.urlPath) == ["/state/device/deviceinfo", "/state/device/power_mode"])
+        #expect(recorder.requests.allSatisfy { $0.authHeader == "synthetic-power-token" })
+        await client.disconnect()
+        #expect(try await client.sessionObservation() == nil)
+    }
+
     @Test("The HTTPS client uses reviewed paths and sends AUTH only after pairing")
     func sendsAuthenticatedSmartCastRequests() async throws {
         let recorder = VizioRequestRecorder()

@@ -45,6 +45,16 @@ struct HafaRemoteApp: App {
                         isAwaitingApproval: false,
                         powerOffFails: true
                     )
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-remote-standby") {
+                    RemoteControlTestHarness(
+                        isConnected: true, isAwaitingApproval: false, powerOffFails: false,
+                        powerState: .standby
+                    )
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-remote-reconnecting") {
+                    RemoteControlTestHarness(
+                        isConnected: false, isAwaitingApproval: false, powerOffFails: false,
+                        isAutomaticallyReconnecting: true
+                    )
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-remote") {
                     RemoteControlTestHarness(
                         isConnected: true,

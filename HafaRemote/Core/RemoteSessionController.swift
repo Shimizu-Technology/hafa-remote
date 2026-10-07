@@ -134,7 +134,7 @@ struct RemoteSessionConfiguration: Equatable, Sendable {
         disconnectTimeout: .seconds(2),
         pairingRemovalTimeout: .seconds(3),
         reconnectDelays: [.milliseconds(250), .seconds(1), .seconds(2), .seconds(5), .seconds(10)],
-        repeatsLastReconnectDelay: true,
+        repeatsLastReconnectDelay: false,
         healthCheckInterval: .seconds(15),
         healthCheckTimeout: .seconds(16),
         healthCheckRetryDelay: .seconds(3),
@@ -192,7 +192,8 @@ actor RemoteSessionController {
     private var reconnectTask: Task<Void, Never>?
     private var healthScheduleTask: Task<Void, Never>?
     private var healthProbeID: UUID?
-    private var healthProbeTask: Task<Void, Error>?
+    private var healthProbeTask: Task<TVSessionObservation?, Error>?
+    private var observationTask: Task<Void, Never>?
     private var consecutiveHealthFailures = 0
     private var networkLossTask: Task<Void, Never>?
     private var pendingCommandCount = 0
@@ -270,6 +271,11 @@ actor RemoteSessionController {
     }
 
     func send(_ command: RemoteCommand) async throws {
+        if case .connected(let television) = state,
+            !television.capabilities.contains(command.requiredCapability)
+        {
+            throw TVDriverError.unsupportedCommand
+        }
         let driver = driver
         try await performSend {
             try await driver.send(command)
@@ -280,6 +286,27 @@ actor RemoteSessionController {
         let driver = driver
         try await performSend {
             try await driver.sendText(input)
+        }
+    }
+
+    /// Refreshes optional power evidence after an explicit action without claiming success.
+    func refreshObservation() async {
+        guard case .connected(let television) = state else { return }
+        let requestedGeneration = generation
+        let driver = driver
+        let clock = clock
+        do {
+            let observation = try await RemoteSessionTimeout.run(
+                operation: .healthCheck, timeout: .seconds(3), clock: clock
+            ) { try await driver.sessionObservation() }
+            guard !Task.isCancelled else { return }
+            if let observation { applyObservation(observation, generation: requestedGeneration) }
+        } catch {
+            guard !Task.isCancelled else { return }
+            applyObservation(
+                TVSessionObservation(stableDeviceKey: television.stableDeviceKey, powerState: .unknown),
+                generation: requestedGeneration
+            )
         }
     }
 
@@ -694,6 +721,7 @@ actor RemoteSessionController {
             // authenticated identity before any automatic reconnect can occur.
             self.connectionTarget = tv.connectionTarget
             transition(to: .connected(tv))
+            startObservations(generation: requestedGeneration)
             startHealthChecks(generation: requestedGeneration)
         } catch {
             guard generation == requestedGeneration, connectionID == id else { return }
@@ -822,6 +850,8 @@ actor RemoteSessionController {
     }
 
     private func cancelInFlightWork() async {
+        observationTask?.cancel()
+        observationTask = nil
         let healthScheduleTask = healthScheduleTask
         self.healthScheduleTask = nil
         healthScheduleTask?.cancel()
@@ -894,6 +924,27 @@ actor RemoteSessionController {
         }
     }
 
+    private func startObservations(generation requestedGeneration: UUID) {
+        observationTask?.cancel()
+        let driver = driver
+        observationTask = Task { [weak self] in
+            let observations = await driver.observations()
+            for await observation in observations {
+                guard !Task.isCancelled else { return }
+                await self?.applyObservation(observation, generation: requestedGeneration)
+            }
+        }
+    }
+
+    private func applyObservation(_ observation: TVSessionObservation, generation requestedGeneration: UUID) {
+        guard generation == requestedGeneration, isForeground,
+            case .connected(let television) = state,
+            television.stableDeviceKey == observation.stableDeviceKey
+        else { return }
+        let updated = television.applying(observation)
+        if updated != television { transition(to: .connected(updated)) }
+    }
+
     private func beginHealthCheck(generation requestedGeneration: UUID) async {
         guard generation == requestedGeneration, isForeground, case .connected = state else {
             return
@@ -911,6 +962,7 @@ actor RemoteSessionController {
                 clock: clock
             ) {
                 try await driver.checkConnection()
+                return try await driver.sessionObservation()
             }
         }
         healthProbeID = probeID
@@ -929,8 +981,9 @@ actor RemoteSessionController {
         healthProbeTask = nil
 
         switch result {
-        case .success:
+        case .success(let observation):
             consecutiveHealthFailures = 0
+            if let observation { applyObservation(observation, generation: requestedGeneration) }
             startHealthChecks(generation: requestedGeneration)
         case .failure(let error):
             if Task.isCancelled || error is CancellationError {
@@ -1047,6 +1100,8 @@ actor RemoteSessionController {
 
     /// Starts transport teardown without making a queued foreground event wait for it.
     private func beginDriverTeardownIfNeeded() {
+        observationTask?.cancel()
+        observationTask = nil
         guard driverTeardownTask == nil else { return }
 
         let driver = driver

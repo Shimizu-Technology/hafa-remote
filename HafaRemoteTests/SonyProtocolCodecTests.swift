@@ -4,6 +4,30 @@ import Testing
 @testable import HafaRemote
 
 struct SonyProtocolCodecTests {
+    @Test("An absent or invalid Sony power field never means standby")
+    func missingSonyPowerStaysUnknown() throws {
+        #expect(try SonyRemoteProtocolCodec.parse(SonyProtobuf.bytesField(40, Data())) == .other)
+        #expect(
+            try SonyRemoteProtocolCodec.parse(SonyProtobuf.bytesField(40, SonyProtobuf.varintField(1, 2)))
+                == .other)
+        #expect(
+            try SonyRemoteProtocolCodec.parse(SonyProtobuf.bytesField(40, SonyProtobuf.varintField(1, 0)))
+                == .powerState(false))
+    }
+
+    @Test("Sony response feature masks exclude unreported and unimplemented features")
+    func sonyNegotiationUsesIntersection() throws {
+        let response = SonyRemoteProtocolCodec.configurationResponse(negotiatedFeatures: 2 | 128)
+        let envelope = try SonyProtobuf.fields(in: response)
+        let configure = try #require(envelope.first?.bytes)
+        #expect(try SonyProtobuf.fields(in: configure).first?.varint == 2)
+        let active = SonyRemoteProtocolCodec.activeResponse(negotiatedFeatures: 2 | 128)
+        let activeBody = try #require(try SonyProtobuf.fields(in: active).first?.bytes)
+        #expect(try SonyProtobuf.fields(in: activeBody).first?.varint == 2)
+        #expect(SonyRemoteDevice.capabilities(for: 2) == [.navigation, .playback])
+        #expect(!SonyRemoteDevice.capabilities(for: 2).contains(.powerOn))
+    }
+
     @Test("Length-delimited decoding handles split and coalesced network reads")
     func decodesFragmentedAndCoalescedFrames() throws {
         let first = SonyProtobuf.stringField(1, "first")

@@ -56,6 +56,16 @@ for required in "$project/project.pbxproj" "$info_plist" "$privacy_manifest" "$e
   fi
 done
 
+distribution_audience="${HAFA_DISTRIBUTION_AUDIENCE:-internal}"
+if [[ "$distribution_audience" != "internal" ]]; then
+  echo "Public distribution is closed: brand hardware and protocol-rights decisions remain incomplete." >&2
+  exit 1
+fi
+if [[ "$(plutil -extract HafaDistributionAudience raw "$info_plist" 2>/dev/null || true)" != "internal" ]]; then
+  echo "The release must explicitly identify its internal distribution audience." >&2
+  exit 1
+fi
+
 xcode_version="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
 xcode_major="${xcode_version%%.*}"
 sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
@@ -240,6 +250,7 @@ if [[ -n "$archive_path" ]]; then
   application_path="$(plutil -extract ApplicationProperties.ApplicationPath raw "$archive_path/Info.plist")"
   archived_app="$archive_path/Products/$application_path"
   archived_info="$archived_app/Info.plist"
+  [[ "$(plutil -extract HafaDistributionAudience raw "$archived_info")" == "$distribution_audience" ]] || { echo "Archived distribution audience does not match." >&2; exit 1; }
   [[ -d "$archived_app" ]] || { echo "Archived app not found: $archived_app" >&2; exit 1; }
 
   [[ "$(plutil -extract CFBundleIdentifier raw "$archived_info")" == "$(setting PRODUCT_BUNDLE_IDENTIFIER)" ]] || { echo "Archived bundle ID does not match." >&2; exit 1; }
@@ -287,6 +298,7 @@ if [[ -n "$export_path" ]]; then
   exported_app="$(find "$export_tmp/Payload" -maxdepth 1 -type d -name '*.app' -print -quit)"
   [[ -n "$exported_app" ]] || { echo "Exported app bundle is missing." >&2; exit 1; }
   exported_info="$exported_app/Info.plist"
+  [[ "$(plutil -extract HafaDistributionAudience raw "$exported_info")" == "$distribution_audience" ]] || { echo "Exported distribution audience does not match." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleIdentifier raw "$exported_info")" == "$(setting PRODUCT_BUNDLE_IDENTIFIER)" ]] || { echo "Exported bundle ID does not match." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleShortVersionString raw "$exported_info")" == "$(setting MARKETING_VERSION)" ]] || { echo "Exported marketing version does not match." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleVersion raw "$exported_info")" == "$(setting CURRENT_PROJECT_VERSION)" ]] || { echo "Exported build number does not match." >&2; exit 1; }

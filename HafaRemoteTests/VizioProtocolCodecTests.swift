@@ -4,6 +4,25 @@ import Testing
 @testable import HafaRemote
 
 struct VizioProtocolCodecTests {
+    @Test("Vizio power_mode accepts only successful numeric 0 or 1 observations")
+    func powerModeIsTruthful() {
+        let fixtures: [(String, TVPowerState)] = [
+            (#"{"STATUS":{"RESULT":"SUCCESS"},"ITEMS":[{"VALUE":1}]}"#, .on),
+            (#"{"STATUS":{"RESULT":"SUCCESS"},"ITEMS":[{"VALUE":0}]}"#, .standby),
+            (#"{"STATUS":{"RESULT":"SUCCESS"},"ITEM":{"VALUE":1}}"#, .on),
+            (#"{"STATUS":{"RESULT":"SUCCESS"},"ITEMS":[{"VALUE":2}]}"#, .unknown),
+            (#"{"STATUS":{"RESULT":"SUCCESS"},"ITEMS":[{"VALUE":true}]}"#, .unknown),
+            (#"{"STATUS":{"RESULT":"SUCCESS"},"ITEMS":[{"VALUE":"1"}]}"#, .unknown),
+            (#"{"STATUS":{"RESULT":"SUCCESS"},"ITEMS":[{}]}"#, .unknown),
+            (#"{"STATUS":{"RESULT":"SUCCESS"}}"#, .unknown),
+            (#"{"STATUS":{"RESULT":"FAILURE"},"ITEMS":[{"VALUE":1}]}"#, .unknown),
+            ("invalid-json", .unknown),
+        ]
+        for (json, expected) in fixtures {
+            #expect(VizioProtocolCodec.powerState(from: Data(json.utf8)) == expected)
+        }
+    }
+
     @Test("Every remote action maps to one reviewed Vizio keypress")
     func encodesRemoteCommands() throws {
         let expected: [RemoteCommand: (Int, Int)] = [

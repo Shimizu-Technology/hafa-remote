@@ -46,6 +46,115 @@ enum TVCapability: String, Codable, CaseIterable, Hashable, Sendable {
     }
 }
 
+/// Screen power is observed separately from transport connectivity.
+enum TVPowerState: String, Codable, Equatable, Sendable {
+    case unknown
+    case on
+    case standby
+}
+
+struct TVCapabilityEvidence: Equatable, Sendable {
+    let implemented: Set<TVCapability>
+    let protocolReported: Set<TVCapability>?
+    let hardwareVerified: Set<TVCapability>
+
+    init(
+        implemented: Set<TVCapability>,
+        protocolReported: Set<TVCapability>? = nil,
+        hardwareVerified: Set<TVCapability> = []
+    ) {
+        self.implemented = implemented
+        self.protocolReported = protocolReported.map { $0.intersection(implemented) }
+        self.hardwareVerified = hardwareVerified.intersection(implemented)
+    }
+
+    var internalAvailable: Set<TVCapability> {
+        protocolReported.map { implemented.intersection($0) } ?? implemented
+    }
+
+    var publiclyAvailable: Set<TVCapability> {
+        internalAvailable.intersection(hardwareVerified)
+    }
+}
+
+/// Public distribution starts closed until model/firmware hardware and protocol rights are approved.
+enum TVDistributionPolicy: Equatable, Sendable {
+    case internalCandidate
+    case publicRelease
+
+    static var current: TVDistributionPolicy {
+        Bundle.main.object(forInfoDictionaryKey: "HafaDistributionAudience") as? String == "internal"
+            ? .internalCandidate : .publicRelease
+    }
+
+    func permits(_ brand: TVBrand) -> Bool {
+        // No brand currently has a completed public distribution decision.
+        self == .internalCandidate
+    }
+}
+
+struct TVSessionObservation: Equatable, Sendable {
+    let stableDeviceKey: String
+    let powerState: TVPowerState
+    let protocolReportedCapabilities: Set<TVCapability>?
+
+    init(
+        stableDeviceKey: String,
+        powerState: TVPowerState,
+        protocolReportedCapabilities: Set<TVCapability>? = nil
+    ) {
+        self.stableDeviceKey = stableDeviceKey
+        self.powerState = powerState
+        self.protocolReportedCapabilities = protocolReportedCapabilities
+    }
+}
+
+/// One actor owns protocol observations; slow consumers receive only the newest value.
+actor TVSessionObservationBroadcaster {
+    private var current: TVSessionObservation?
+    private var subscribers: [UUID: AsyncStream<TVSessionObservation>.Continuation] = [:]
+
+    func stream() -> AsyncStream<TVSessionObservation> {
+        let id = UUID()
+        let (stream, continuation) = AsyncStream<TVSessionObservation>.makeStream(
+            bufferingPolicy: .bufferingNewest(1))
+        subscribers[id] = continuation
+        if let current { continuation.yield(current) }
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.removeSubscriber(id) }
+        }
+        return stream
+    }
+
+    func snapshot() -> TVSessionObservation? { current }
+
+    func publish(_ observation: TVSessionObservation) {
+        current = observation
+        for continuation in subscribers.values { continuation.yield(observation) }
+    }
+
+    func reset() {
+        current = nil
+        for continuation in subscribers.values { continuation.finish() }
+        subscribers.removeAll()
+    }
+
+    private func removeSubscriber(_ id: UUID) { subscribers[id] = nil }
+}
+
+extension RemoteCommand {
+    var requiredCapability: TVCapability {
+        switch self {
+        case .powerOn: .powerOn
+        case .powerOff: .powerOff
+        case .up, .down, .left, .right, .select, .home, .back: .navigation
+        case .volumeUp, .volumeDown: .volume
+        case .mute: .mute
+        case .play, .pause, .rewind, .fastForward: .playback
+        }
+    }
+}
+
 enum TVNetworkConnection: Equatable, Sendable {
     case unavailable
     case wireless
@@ -170,6 +279,8 @@ struct ConnectedTV: Equatable, Sendable {
     let macAddress: TVMACAddress?
     let capabilities: Set<TVCapability>
     let discoveryIdentifier: String?
+    let powerState: TVPowerState
+    let capabilityEvidence: TVCapabilityEvidence
 
     init(
         brand: TVBrand = .samsung,
@@ -182,7 +293,9 @@ struct ConnectedTV: Equatable, Sendable {
         networkConnection: TVNetworkConnection = .unavailable,
         macAddress: TVMACAddress? = nil,
         capabilities: Set<TVCapability>? = nil,
-        discoveryIdentifier: String? = nil
+        discoveryIdentifier: String? = nil,
+        powerState: TVPowerState = .unknown,
+        capabilityEvidence: TVCapabilityEvidence? = nil
     ) {
         self.brand = brand
         self.reportedDeviceID = reportedDeviceID
@@ -198,7 +311,10 @@ struct ConnectedTV: Equatable, Sendable {
         if capabilities == nil, brand == .samsung, networkConnection == .wireless, macAddress != nil {
             resolvedCapabilities.insert(.powerOn)
         }
-        self.capabilities = resolvedCapabilities
+        let evidence = capabilityEvidence ?? TVCapabilityEvidence(implemented: resolvedCapabilities)
+        self.capabilityEvidence = evidence
+        self.capabilities = evidence.internalAvailable
+        self.powerState = powerState
     }
 
     var stableDeviceKey: String {
@@ -230,8 +346,31 @@ struct ConnectedTV: Equatable, Sendable {
             networkConnection: networkConnection,
             macAddress: macAddress,
             capabilities: capabilities,
-            discoveryIdentifier: target.discoveryIdentifier ?? discoveryIdentifier
+            discoveryIdentifier: target.discoveryIdentifier ?? discoveryIdentifier,
+            powerState: powerState,
+            capabilityEvidence: capabilityEvidence
         )
+    }
+
+    func applying(_ observation: TVSessionObservation) -> ConnectedTV {
+        guard observation.stableDeviceKey == stableDeviceKey else { return self }
+        return ConnectedTV(
+            brand: brand, reportedDeviceID: reportedDeviceID, address: address,
+            controlPort: controlPort, displayName: displayName, modelName: modelName,
+            firmwareVersion: firmwareVersion, networkConnection: networkConnection,
+            macAddress: macAddress, capabilities: capabilities, discoveryIdentifier: discoveryIdentifier,
+            powerState: observation.powerState,
+            capabilityEvidence: TVCapabilityEvidence(
+                implemented: capabilityEvidence.implemented,
+                protocolReported: observation.protocolReportedCapabilities
+                    ?? capabilityEvidence.protocolReported,
+                hardwareVerified: capabilityEvidence.hardwareVerified
+            )
+        )
+    }
+
+    var forgettingPowerObservation: ConnectedTV {
+        applying(TVSessionObservation(stableDeviceKey: stableDeviceKey, powerState: .unknown))
     }
 
     var isEligibleForSamsungWake: Bool {
@@ -260,6 +399,10 @@ protocol TVDriver: Sendable {
     /// Verifies that the active control session is still usable without changing TV state.
     func checkConnection() async throws
 
+    /// Reads protocol evidence without inferring screen state from socket liveness.
+    func sessionObservation() async throws -> TVSessionObservation?
+    func observations() async -> AsyncStream<TVSessionObservation>
+
     /// Sends one semantic remote action to the active television connection.
     func send(_ command: RemoteCommand) async throws
 
@@ -271,6 +414,11 @@ protocol TVDriver: Sendable {
 }
 
 extension TVDriver {
+    func sessionObservation() async throws -> TVSessionObservation? { nil }
+    func observations() async -> AsyncStream<TVSessionObservation> {
+        AsyncStream { $0.finish() }
+    }
+
     func checkConnection() async throws {}
 
     func sendText(_ input: RemoteTextInput) async throws {
@@ -309,10 +457,13 @@ enum RemoteTextInputError: LocalizedError, Equatable, Sendable {
 
 enum TVDriverError: LocalizedError, Equatable, Sendable {
     case unsupportedTextInput
+    case unsupportedCommand
     case savedDeviceIdentityMismatch
 
     var errorDescription: String? {
         switch self {
+        case .unsupportedCommand:
+            "This TV has not made that control available."
         case .unsupportedTextInput:
             "This TV connection does not support remote text input."
         case .savedDeviceIdentityMismatch:

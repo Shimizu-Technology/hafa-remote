@@ -21,6 +21,8 @@ final class SavedTV: CustomStringConvertible {
     /// Comma-separated raw values keep the additive SwiftData migration inspectable.
     /// An empty string means the field predates capabilities; `none` is an explicit empty set.
     var capabilitiesRawValue: String = ""
+    var protocolCapabilitiesRawValue: String?
+    var hardwareCapabilitiesRawValue: String = "none"
     var lastSeenAt: Date
     var lastUsedAt: Date
 
@@ -39,6 +41,7 @@ final class SavedTV: CustomStringConvertible {
         wakeWasVerified: Bool = false,
         pendingCredentialRemoval: Bool = false,
         capabilities: Set<TVCapability>? = nil,
+        capabilityEvidence: TVCapabilityEvidence? = nil,
         lastSeenAt: Date = .now,
         lastUsedAt: Date = .now
     ) {
@@ -59,6 +62,8 @@ final class SavedTV: CustomStringConvertible {
         capabilitiesRawValue = Self.encodeCapabilities(
             capabilities ?? Self.defaultCapabilities(for: brand, macAddress: macAddress)
         )
+        protocolCapabilitiesRawValue = capabilityEvidence?.protocolReported.map(Self.encodeCapabilities)
+        hardwareCapabilitiesRawValue = Self.encodeCapabilities(capabilityEvidence?.hardwareVerified ?? [])
         self.lastSeenAt = lastSeenAt
         self.lastUsedAt = lastUsedAt
     }
@@ -123,8 +128,17 @@ final class SavedTV: CustomStringConvertible {
             networkConnection: savedMACAddress == nil ? .unavailable : .wireless,
             macAddress: savedMACAddress,
             capabilities: capabilities,
-            discoveryIdentifier: discoveryIdentifier
+            discoveryIdentifier: discoveryIdentifier,
+            capabilityEvidence: TVCapabilityEvidence(
+                implemented: capabilities,
+                protocolReported: protocolCapabilitiesRawValue.map(Self.decodeCapabilities),
+                hardwareVerified: Self.decodeCapabilities(hardwareCapabilitiesRawValue)
+            )
         )
+    }
+
+    var hardwareVerifiedCapabilities: Set<TVCapability> {
+        Self.decodeCapabilities(hardwareCapabilitiesRawValue)
     }
 
     var validatedMACAddress: TVMACAddress? {
@@ -149,6 +163,10 @@ final class SavedTV: CustomStringConvertible {
         at date: Date = .now,
         wakeWasJustVerified: Bool = false
     ) {
+        let priorVerification = hardwareVerifiedCapabilities
+        let retainsVerification =
+            brand == tv.brand && reportedDeviceID == tv.reportedDeviceID
+            && modelName == tv.modelName && firmwareVersion == tv.firmwareVersion
         brandRawValue = tv.brand.rawValue
         stableDeviceID = tv.stableDeviceKey
         reportedDeviceID = tv.reportedDeviceID
@@ -158,6 +176,10 @@ final class SavedTV: CustomStringConvertible {
         lastKnownAddress = tv.address.rawValue
         controlPort = tv.controlPort.map(Int.init)
         capabilitiesRawValue = Self.encodeCapabilities(tv.capabilities)
+        protocolCapabilitiesRawValue = tv.capabilityEvidence.protocolReported.map(Self.encodeCapabilities)
+        hardwareCapabilitiesRawValue = Self.encodeCapabilities(
+            tv.capabilityEvidence.hardwareVerified.union(retainsVerification ? priorVerification : [])
+        )
         let previousMACAddress = macAddress
         switch tv.networkConnection {
         case .wired:
@@ -184,6 +206,10 @@ final class SavedTV: CustomStringConvertible {
         }
         lastSeenAt = date
         lastUsedAt = date
+    }
+
+    private static func decodeCapabilities(_ value: String) -> Set<TVCapability> {
+        Set(value.split(separator: ",").compactMap { TVCapability(rawValue: String($0)) })
     }
 
     private static func encodeCapabilities(_ capabilities: Set<TVCapability>) -> String {

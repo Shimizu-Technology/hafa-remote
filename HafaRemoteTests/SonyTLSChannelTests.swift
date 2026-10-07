@@ -4,6 +4,26 @@ import Testing
 @testable import HafaRemote
 
 struct SonyTLSChannelTests {
+    @Test(
+        "Sony handshake preserves standby and negotiates only supported requested features",
+        arguments: [false, true])
+    func handshakePreservesPowerAndCapabilities(isOn: Bool) async throws {
+        let deviceInfo = SonyProtobuf.stringField(1, "Synthetic BRAVIA") + SonyProtobuf.stringField(2, "Sony")
+        let configure = SonyProtobuf.bytesField(
+            1, SonyProtobuf.varintField(1, 2 | 32 | 128) + SonyProtobuf.bytesField(2, deviceInfo))
+        let power = SonyProtobuf.bytesField(40, SonyProtobuf.varintField(1, isOn ? 1 : 0))
+        let channel = SonyHandshakeFixtureChannel(messages: [configure, power])
+        let device = try await SonyRemoteHandshake.run(
+            on: channel, fallbackModelName: "Synthetic Sony", timeout: .seconds(1), maximumMessages: 8
+        )
+        #expect(device.powerState == (isOn ? .on : .standby))
+        #expect(device.negotiatedFeatures == 2 | 32)
+        #expect(device.capabilities == [.navigation, .playback, .powerOff, .powerOn])
+        let response = try #require(await channel.sentMessages.first)
+        let configureBody = try #require(try SonyProtobuf.fields(in: response).first?.bytes)
+        #expect(try SonyProtobuf.fields(in: configureBody).first?.varint == 2 | 32)
+    }
+
     @Test("Certificate subjects expose the TV name without its network identifier")
     func sanitizesCertificateDisplayName() {
         let subject = "atvremote/bravia/bravia/Living Room Sony/AA:BB:CC:DD:EE:FF"
@@ -204,4 +224,22 @@ private actor StalledSonyTLSChannel: SonyTLSChanneling {
     }
 
     func disconnect() async {}
+}
+
+private actor SonyHandshakeFixtureChannel: SonyTLSChanneling {
+    private var messages: [Data]
+    private(set) var sentMessages: [Data] = []
+    init(messages: [Data]) { self.messages = messages }
+    func connect(
+        address: PrivateIPv4Address, port: UInt16, identity: SonyClientIdentityReference,
+        trustMode: SonyTLSTrustMode
+    ) throws -> SonyTLSPeer {
+        throw SonyTLSChannelError.unavailable
+    }
+    func send(_ message: Data) { sentMessages.append(message) }
+    func receive() throws -> Data {
+        guard !messages.isEmpty else { throw SonyTLSChannelError.connectionClosed }
+        return messages.removeFirst()
+    }
+    func disconnect() {}
 }
