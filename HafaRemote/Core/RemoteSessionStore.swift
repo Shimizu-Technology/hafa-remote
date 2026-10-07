@@ -40,6 +40,8 @@ final class RemoteSessionStore {
                     self.state = state
                     if case .connected(let tv) = state, self.acceptsConnectedTVUpdates {
                         self.lastConnectedTV = tv
+                    } else if self.connectedTV == nil {
+                        self.lastConnectedTV = self.lastConnectedTV?.forgettingPowerObservation
                     }
                 }
             }
@@ -66,6 +68,8 @@ final class RemoteSessionStore {
         guard case .connected(let tv) = state else { return nil }
         return tv
     }
+
+    var observedPowerState: TVPowerState { connectedTV?.powerState ?? .unknown }
 
     var canSendCommands: Bool {
         connectedTV != nil
@@ -131,7 +135,8 @@ final class RemoteSessionStore {
     ) async throws -> ConnectedTV {
         let states = await controller.states()
         let connectionWaitClock = connectionWaitClock
-        let expectedDeviceKey = "\(target.brand.rawValue):\(target.reportedDeviceID)"
+        let expectedDeviceKey =
+            "\(target.brand.rawValue):\(target.expectedSavedDeviceID ?? target.reportedDeviceID)"
 
         return try await withThrowingTaskGroup(of: ConnectedTV?.self) { group in
             group.addTask {
@@ -171,6 +176,8 @@ final class RemoteSessionStore {
     func sendText(_ input: RemoteTextInput) async throws {
         try await controller.sendText(input)
     }
+
+    func refreshObservation() async { await controller.refreshObservation() }
 
     func submitPairingCode(_ code: String) async throws {
         try await controller.submitPairingCode(code)

@@ -42,11 +42,13 @@ struct HomeView: View {
                     modelName: tv.modelName,
                     statusLabel: statusLabel,
                     isConnected: isPresentedTVConnected,
+                    powerState: session.observedPowerState,
                     isReconnecting: isAutomaticallyRecovering,
                     isAwaitingApproval: isAwaitingApproval,
+                    recoveryActions: session.state.recoveryActions,
                     capabilities: tv.capabilities,
                     canPowerOnTV: canPowerOn(tv, savedTV: savedTV),
-                    powerOnWasVerified: savedTV?.wakeWasVerified ?? false,
+                    powerOnWasVerified: savedTV?.hardwareVerifiedCapabilities.contains(.powerOn) == true,
                     powerOnHelpText: powerOnHelpText(for: tv.brand),
                     powerOnFailureText: powerOnFailureText(for: tv.brand),
                     powerOffFailureText: powerOffFailureText(for: tv.brand)
@@ -505,7 +507,7 @@ struct HomeView: View {
         case .samsung:
             wakeMACAddress(for: tv, savedTV: savedTV) != nil
         case .sony, .vizio:
-            savedTV?.connectionTarget != nil
+            savedTV?.connectionTarget != nil && tv.capabilities.contains(.powerOn)
         }
     }
 
@@ -548,8 +550,11 @@ struct HomeView: View {
             guard let target = savedTV?.connectionTarget else {
                 throw TVSelectionError.notConnected
             }
-            _ = try await session.connectAndWait(to: target, timeout: .seconds(30))
+            if !isPresentedTVConnected {
+                _ = try await session.connectAndWait(to: target, timeout: .seconds(30))
+            }
             try await session.send(.powerOn)
+            await session.refreshObservation()
         }
     }
 
@@ -558,6 +563,7 @@ struct HomeView: View {
             throw TVMACAddressError.invalid
         }
 
+        let target = savedTV?.connectionTarget ?? tv.connectionTarget
         let attempt = PendingWakeAttempt(stableDeviceKey: tv.stableDeviceKey)
         pendingWakeAttempt = attempt
         Task { @MainActor in
@@ -572,7 +578,7 @@ struct HomeView: View {
                     try await wakeService.wake(macAddress, at: tv.address)
                     try await Task.sleep(for: .seconds(2))
                     _ = try await session.connectAndWait(
-                        to: tv.address.rawValue,
+                        to: target,
                         timeout: .seconds(30)
                     )
                 }
@@ -595,7 +601,9 @@ struct HomeView: View {
     private func saveConnectedTV(_ tv: ConnectedTV) {
         selection.markConnected(tv.stableDeviceKey)
         let now = Date.now
-        let wakeWasJustVerified = pendingWakeAttempt?.matches(tv) == true
+        // Reconnecting proves transport reachability, not a successful hardware wake.
+        // Hardware verification is recorded only from the separate acceptance matrix.
+        let wakeWasJustVerified = false
         if let saved = savedTVs.first(where: { $0.stableDeviceKey == tv.stableDeviceKey }) {
             saved.recordConnection(
                 to: tv,
@@ -617,13 +625,14 @@ struct HomeView: View {
                     macAddress: canPersistWakeMetadata ? tv.macAddress?.persistedValue : nil,
                     wakeWasVerified: canPersistWakeMetadata && wakeWasJustVerified,
                     capabilities: tv.capabilities,
+                    capabilityEvidence: tv.capabilityEvidence,
                     lastSeenAt: now,
                     lastUsedAt: now
                 )
             )
         }
 
-        if wakeWasJustVerified {
+        if pendingWakeAttempt?.matches(tv) == true, tv.powerState == .on {
             pendingWakeAttempt = nil
         }
 

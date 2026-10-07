@@ -9,6 +9,7 @@ struct SamsungDeviceInfo: Equatable, Sendable {
     let supportsTokenAuthentication: Bool
     let networkConnection: SamsungNetworkConnection
     let macAddress: SamsungMACAddress?
+    let powerState: TVPowerState
 
     init(
         reportedDeviceID: String,
@@ -16,7 +17,8 @@ struct SamsungDeviceInfo: Equatable, Sendable {
         firmwareVersion: String?,
         supportsTokenAuthentication: Bool,
         networkConnection: SamsungNetworkConnection = .unavailable,
-        macAddress: SamsungMACAddress? = nil
+        macAddress: SamsungMACAddress? = nil,
+        powerState: TVPowerState = .unknown
     ) {
         self.reportedDeviceID = reportedDeviceID
         self.modelName = modelName
@@ -24,6 +26,7 @@ struct SamsungDeviceInfo: Equatable, Sendable {
         self.supportsTokenAuthentication = supportsTokenAuthentication
         self.networkConnection = networkConnection
         self.macAddress = macAddress
+        self.powerState = powerState
     }
 }
 
@@ -94,6 +97,14 @@ final class SamsungRedirectRejectingDelegate: NSObject, URLSessionTaskDelegate, 
 }
 
 enum SamsungDeviceInfoParser {
+    static func powerState(from value: String?) -> TVPowerState {
+        switch value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "on": .on
+        case "standby", "off": .standby
+        default: .unknown
+        }
+    }
+
     static func parse(_ data: Data) throws -> SamsungDeviceInfo {
         let envelope: SamsungDeviceInfoEnvelope
         do {
@@ -129,7 +140,8 @@ enum SamsungDeviceInfoParser {
             firmwareVersion: envelope.device.firmwareVersion?.nonemptyTrimmed,
             supportsTokenAuthentication: envelope.device.tokenAuthSupport?.lowercased() == "true",
             networkConnection: networkConnection,
-            macAddress: macAddress
+            macAddress: macAddress,
+            powerState: powerState(from: envelope.device.powerState?.value)
         )
     }
 }
@@ -145,6 +157,7 @@ private struct SamsungDeviceInfoEnvelope: Decodable {
         let tokenAuthSupport: String?
         let networkType: String?
         let wifiMac: String?
+        let powerState: SamsungReportedPowerState?
 
         enum CodingKeys: String, CodingKey {
             case id
@@ -154,6 +167,7 @@ private struct SamsungDeviceInfoEnvelope: Decodable {
             case tokenAuthSupport = "TokenAuthSupport"
             case networkType
             case wifiMac
+            case powerState = "PowerState"
         }
     }
 }
@@ -179,5 +193,12 @@ enum SamsungDeviceInfoError: LocalizedError, Equatable, Sendable {
         case .invalidResponse:
             "A device responded, but it did not identify itself as a supported Samsung TV."
         }
+    }
+}
+
+private struct SamsungReportedPowerState: Decodable {
+    let value: String?
+    init(from decoder: Decoder) throws {
+        value = try? decoder.singleValueContainer().decode(String.self)
     }
 }

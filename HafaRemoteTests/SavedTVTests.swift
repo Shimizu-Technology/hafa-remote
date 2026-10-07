@@ -106,6 +106,48 @@ struct SavedTVTests {
         }
     }
 
+    @MainActor
+    @Test("New saved records retain negotiated evidence without granting hardware proof")
+    func firstSaveRetainsEvidence() throws {
+        let evidence = TVCapabilityEvidence(
+            implemented: TVCapability.implemented(for: .sony),
+            protocolReported: [.navigation, .playback]
+        )
+        let saved = SavedTV(
+            brand: .sony, reportedDeviceID: "synthetic-evidence-tv", displayName: "Synthetic TV",
+            modelName: "Synthetic Model", firmwareVersion: "1", lastKnownAddress: "203.0.113.45",
+            capabilities: evidence.internalAvailable, capabilityEvidence: evidence
+        )
+        #expect(saved.capabilities == [.navigation, .playback])
+        #expect(saved.protocolCapabilitiesRawValue == "navigation,playback")
+        #expect(saved.hardwareVerifiedCapabilities.isEmpty)
+    }
+    @MainActor
+    @Test("Old automatic wake flags cannot become hardware capability evidence")
+    func legacyWakeFlagDoesNotVerifyHardware() throws {
+        let saved = SavedTV(
+            brand: .sony, reportedDeviceID: "synthetic-observed-tv", displayName: "Synthetic TV",
+            modelName: "Synthetic Model", firmwareVersion: "1", lastKnownAddress: "192.0.2.45",
+            wakeWasVerified: true
+        )
+        let television = ConnectedTV(
+            brand: .sony, reportedDeviceID: saved.reportedDeviceID,
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.45"),
+            modelName: saved.modelName, firmwareVersion: "1", powerState: .on
+        )
+        saved.recordConnection(to: television)
+        #expect(saved.hardwareVerifiedCapabilities.isEmpty)
+        saved.hardwareCapabilitiesRawValue = "powerOn"
+        saved.recordConnection(to: television)
+        #expect(saved.hardwareVerifiedCapabilities == [.powerOn])
+        saved.recordConnection(
+            to: ConnectedTV(
+                brand: .sony, reportedDeviceID: saved.reportedDeviceID, address: television.address,
+                modelName: saved.modelName, firmwareVersion: "2"
+            ))
+        #expect(saved.hardwareVerifiedCapabilities.isEmpty)
+    }
+
     /// Saved metadata remains available after SwiftData persistence and fetch.
     @MainActor
     @Test("Saved TV metadata survives an in-memory SwiftData round trip")

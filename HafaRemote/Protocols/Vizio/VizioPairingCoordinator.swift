@@ -155,6 +155,7 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
                     connectedClient = provisional
                 }
 
+                let observation = try? await connectedClient.sessionObservation()
                 try Task.checkCancellation()
                 guard connectionAttemptID == attemptID else {
                     throw CancellationError()
@@ -168,7 +169,8 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
                     controlPort: port,
                     displayName: confirmedInfo.displayName,
                     modelName: confirmedInfo.modelName,
-                    firmwareVersion: confirmedInfo.firmwareVersion
+                    firmwareVersion: confirmedInfo.firmwareVersion,
+                    powerState: observation?.powerState ?? .unknown
                 )
             } catch {
                 await cleanup.cancel()
@@ -201,6 +203,10 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
 
     func sendText(_ input: RemoteTextInput) async throws {
         throw TVDriverError.unsupportedTextInput
+    }
+
+    func sessionObservation() async throws -> TVSessionObservation? {
+        try await activeClient?.sessionObservation()
     }
 
     func checkConnection() async throws {

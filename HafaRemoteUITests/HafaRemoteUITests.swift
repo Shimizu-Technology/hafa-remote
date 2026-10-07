@@ -186,7 +186,7 @@ final class HafaRemoteUITests: XCTestCase {
 
         let connectionStatus = app.staticTexts["remoteConnectionStatus"]
         XCTAssertTrue(connectionStatus.waitForExistence(timeout: 5))
-        XCTAssertEqual(connectionStatus.label, "Connected")
+        XCTAssertEqual(connectionStatus.label, "Connected • TV power unknown")
         XCTAssertFalse(app.buttons["remote-keyboard"].exists)
     }
 
@@ -219,7 +219,7 @@ final class HafaRemoteUITests: XCTestCase {
 
         let connectionStatus = app.staticTexts["remoteConnectionStatus"]
         XCTAssertTrue(connectionStatus.waitForExistence(timeout: 5))
-        XCTAssertEqual(connectionStatus.label, "Connected")
+        XCTAssertEqual(connectionStatus.label, "Connected • TV power unknown")
         XCTAssertFalse(app.buttons["remote-keyboard"].exists)
     }
 
@@ -268,7 +268,8 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(tvName.waitForExistence(timeout: 5))
         XCTAssertEqual(tvName.label, "Living Room TV")
         let status = app.staticTexts["remoteConnectionStatus"]
-        expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
+        expectation(
+            for: NSPredicate(format: "label == 'Connected • TV power unknown'"), evaluatedWith: status)
         waitForExpectations(timeout: 15)
 
         let myTVs = app.buttons["myTVsButton"]
@@ -283,7 +284,8 @@ final class HafaRemoteUITests: XCTestCase {
         expectation(for: NSPredicate(format: "label == 'Connecting'"), evaluatedWith: status)
         waitForExpectations(timeout: 2)
         XCTAssertTrue(app.staticTexts["Side Door TV"].waitForExistence(timeout: 5))
-        expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
+        expectation(
+            for: NSPredicate(format: "label == 'Connected • TV power unknown'"), evaluatedWith: status)
         waitForExpectations(timeout: 15)
     }
 
@@ -297,7 +299,8 @@ final class HafaRemoteUITests: XCTestCase {
 
         let status = app.staticTexts["remoteConnectionStatus"]
         XCTAssertTrue(status.waitForExistence(timeout: 5))
-        expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
+        expectation(
+            for: NSPredicate(format: "label == 'Connected • TV power unknown'"), evaluatedWith: status)
         waitForExpectations(timeout: 15)
         let completedConnections = app.staticTexts["savedTVCompletedConnections"]
         XCTAssertTrue(completedConnections.waitForExistence(timeout: 2))
@@ -321,7 +324,8 @@ final class HafaRemoteUITests: XCTestCase {
             evaluatedWith: completedConnections
         )
         waitForExpectations(timeout: 10)
-        expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
+        expectation(
+            for: NSPredicate(format: "label == 'Connected • TV power unknown'"), evaluatedWith: status)
         waitForExpectations(timeout: 5)
         let select = app.buttons["remote-select"]
         XCTAssertTrue(select.waitForExistence(timeout: 2))
@@ -379,7 +383,7 @@ final class HafaRemoteUITests: XCTestCase {
         wait(for: [removed], timeout: 5)
         XCTAssertTrue(app.buttons["myTVRow-samsung:fixture-samsung"].exists)
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.staticTexts["Connected"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Connected • TV power unknown"].waitForExistence(timeout: 2))
     }
 
     /// Forgetting the active TV skips malformed records and connects a usable fallback.
@@ -402,7 +406,8 @@ final class HafaRemoteUITests: XCTestCase {
         app.buttons["Done"].tap()
         XCTAssertTrue(app.staticTexts["Side Door TV"].waitForExistence(timeout: 2))
         let status = app.staticTexts["remoteConnectionStatus"]
-        expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
+        expectation(
+            for: NSPredicate(format: "label == 'Connected • TV power unknown'"), evaluatedWith: status)
         waitForExpectations(timeout: 15)
     }
 
@@ -508,7 +513,8 @@ final class HafaRemoteUITests: XCTestCase {
                     existingConnection.waitForExistence(timeout: 10),
                     "Expected either first-run setup or an already paired Q70AA."
                 )
-                XCTAssertEqual(existingConnection.label, "Connected")
+                XCTAssertTrue(
+                    ["Connected", "Connected • TV power unknown"].contains(existingConnection.label))
                 let changeTV = app.buttons["changeTVButton"]
                 XCTAssertTrue(changeTV.waitForExistence(timeout: 5))
                 changeTV.tap()
@@ -540,7 +546,7 @@ final class HafaRemoteUITests: XCTestCase {
                 connectionStatus.waitForExistence(timeout: 60),
                 "Expected physical approval to open the connected remote."
             )
-            XCTAssertEqual(connectionStatus.label, "Connected")
+            XCTAssertTrue(["Connected", "Connected • TV power unknown"].contains(connectionStatus.label))
 
             let select = app.buttons["remote-select"]
             XCTAssertTrue(select.waitForExistence(timeout: 5))
@@ -556,7 +562,7 @@ final class HafaRemoteUITests: XCTestCase {
                 restoredStatus.waitForExistence(timeout: 20),
                 "Expected the saved pairing to restore after relaunch."
             )
-            XCTAssertEqual(restoredStatus.label, "Connected")
+            XCTAssertTrue(["Connected", "Connected • TV power unknown"].contains(restoredStatus.label))
         #endif
     }
 
@@ -757,6 +763,41 @@ final class HafaRemoteUITests: XCTestCase {
         let select = app.buttons["remote-select"]
         XCTAssertTrue(select.waitForExistence(timeout: 2))
         XCTAssertFalse(select.isEnabled)
+    }
+
+    @MainActor
+    func testConnectedStandbyOffersPowerOn() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-remote-standby")
+        app.launch()
+        let power = app.buttons["remote-powerOn"]
+        XCTAssertTrue(power.waitForExistence(timeout: 5))
+        XCTAssertTrue(power.isEnabled)
+        XCTAssertFalse(app.buttons["remote-powerOff"].exists)
+        XCTAssertFalse(app.buttons["remote-select"].isEnabled)
+        XCTAssertTrue(app.staticTexts["remoteConnectionStatus"].label.contains("standby"))
+        power.tap()
+        let delivered = expectation(
+            for: NSPredicate(format: "label == %@", "powerOn"),
+            evaluatedWith: app.staticTexts["lastRemoteCommand"])
+        wait(for: [delivered], timeout: 2)
+    }
+
+    @MainActor
+    func testAutomaticReconnectKeepsWakeAndManualRecoveryAvailable() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-remote-reconnecting")
+        app.launch()
+        let power = app.buttons["remote-powerOn"]
+        XCTAssertTrue(power.waitForExistence(timeout: 5))
+        XCTAssertTrue(power.isEnabled)
+        XCTAssertTrue(app.buttons["retryConnectionButton"].isEnabled)
+        XCTAssertTrue(app.buttons["remoteTVSetupButton"].isEnabled)
+        power.tap()
+        let delivered = expectation(
+            for: NSPredicate(format: "label == %@", "powerOn"),
+            evaluatedWith: app.staticTexts["lastRemoteCommand"])
+        wait(for: [delivered], timeout: 2)
     }
 
     @MainActor

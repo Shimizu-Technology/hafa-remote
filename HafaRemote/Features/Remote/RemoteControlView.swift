@@ -9,8 +9,10 @@ struct RemoteControlView: View {
     let modelName: String
     let statusLabel: String
     let isConnected: Bool
+    var powerState: TVPowerState = .unknown
     let isReconnecting: Bool
     let isAwaitingApproval: Bool
+    var recoveryActions: Set<TVRecoveryAction> = [.retryConnection, .findTV, .openSettings]
     let capabilities: Set<TVCapability>
     let canPowerOnTV: Bool
     let powerOnWasVerified: Bool
@@ -46,9 +48,8 @@ struct RemoteControlView: View {
                     if !isConnected {
                         if isReconnecting {
                             recoveryStatus
-                        } else {
-                            recoveryControls
                         }
+                        if !isAwaitingApproval { recoveryControls }
                     }
                     if capabilities.contains(.navigation) {
                         navigationControls
@@ -119,7 +120,7 @@ struct RemoteControlView: View {
         .sheet(isPresented: $isShowingKeyboard) {
             SamsungTextInputSheet(
                 tvName: tvName,
-                isConnected: isConnected,
+                isConnected: canControlTV,
                 send: textAction
             )
         }
@@ -156,7 +157,7 @@ struct RemoteControlView: View {
                 Spacer(minLength: 8)
 
                 Button {
-                    if isConnected {
+                    if offersPowerOff {
                         isConfirmingPowerOff = true
                     } else {
                         powerOnTV()
@@ -174,17 +175,25 @@ struct RemoteControlView: View {
                     .frame(width: 46, height: 46)
                 }
                 .buttonStyle(.bordered)
-                .tint(isConnected ? .red : HafaTheme.accent)
+                .tint(offersPowerOff ? .red : HafaTheme.accent)
                 .disabled(
-                    isPoweringOnTV || isPoweringOffTV || isReconnecting
-                        || (isConnected && !capabilities.contains(.powerOff))
-                        || (!isConnected && (!canPowerOnTV || !capabilities.contains(.powerOn)))
+                    isPoweringOnTV || isPoweringOffTV || isAwaitingApproval
+                        || (offersPowerOff && !capabilities.contains(.powerOff))
+                        || (!offersPowerOff && (!canPowerOnTV || !capabilities.contains(.powerOn)))
                 )
                 .accessibilityLabel(
                     powerAccessibilityLabel
                 )
                 .accessibilityHint(powerAccessibilityHint)
-                .accessibilityIdentifier(isConnected ? "remote-powerOff" : "remote-powerOn")
+                .accessibilityIdentifier(offersPowerOff ? "remote-powerOff" : "remote-powerOn")
+            }
+
+            if isConnected, powerState == .unknown, canPowerOnTV, capabilities.contains(.powerOn) {
+                Button("Send Power On", systemImage: "power") { powerOnTV() }
+                    .frame(minHeight: 44)
+                    .disabled(isPoweringOnTV || isPoweringOffTV)
+                    .accessibilityHint("TV power is unknown. Sends an explicit power-on action.")
+                    .accessibilityIdentifier("remote-explicitPowerOn")
             }
 
             Label(
@@ -208,7 +217,7 @@ struct RemoteControlView: View {
                 systemImage: "chevron.up",
                 accessibilityLabel: "Navigate up",
                 accessibilityHint: "Moves focus up. Hold to repeat.",
-                isEnabled: isConnected,
+                isEnabled: canControlTV,
                 repeatsWhileHeld: true,
                 action: action
             )
@@ -219,7 +228,7 @@ struct RemoteControlView: View {
                     systemImage: "chevron.left",
                     accessibilityLabel: "Navigate left",
                     accessibilityHint: "Moves focus left. Hold to repeat.",
-                    isEnabled: isConnected,
+                    isEnabled: canControlTV,
                     repeatsWhileHeld: true,
                     action: action
                 )
@@ -229,7 +238,7 @@ struct RemoteControlView: View {
                     systemImage: "circle.inset.filled",
                     accessibilityLabel: "Select",
                     accessibilityHint: "Activates the focused item.",
-                    isEnabled: isConnected,
+                    isEnabled: canControlTV,
                     size: 76,
                     action: action
                 )
@@ -239,7 +248,7 @@ struct RemoteControlView: View {
                     systemImage: "chevron.right",
                     accessibilityLabel: "Navigate right",
                     accessibilityHint: "Moves focus right. Hold to repeat.",
-                    isEnabled: isConnected,
+                    isEnabled: canControlTV,
                     repeatsWhileHeld: true,
                     action: action
                 )
@@ -250,7 +259,7 @@ struct RemoteControlView: View {
                 systemImage: "chevron.down",
                 accessibilityLabel: "Navigate down",
                 accessibilityHint: "Moves focus down. Hold to repeat.",
-                isEnabled: isConnected,
+                isEnabled: canControlTV,
                 repeatsWhileHeld: true,
                 action: action
             )
@@ -277,37 +286,44 @@ struct RemoteControlView: View {
                 .accessibilityIdentifier("wakeCapabilityMessage")
             }
 
-            Button {
-                Task { @MainActor in
-                    await retry()
+            if recoveryActions.contains(.retryConnection) {
+                Button {
+                    Task { @MainActor in
+                        await retry()
+                    }
+                } label: {
+                    Label("Retry Connection", systemImage: "arrow.clockwise")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 46)
                 }
-            } label: {
-                Label("Retry Connection", systemImage: "arrow.clockwise")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 46)
+                .buttonStyle(.borderedProminent)
+                .tint(HafaTheme.accent)
+                .foregroundStyle(HafaTheme.canvas)
+                .disabled(isPoweringOnTV)
+                .accessibilityIdentifier("retryConnectionButton")
+
             }
-            .buttonStyle(.borderedProminent)
-            .tint(HafaTheme.accent)
-            .foregroundStyle(HafaTheme.canvas)
-            .disabled(isPoweringOnTV)
-            .accessibilityIdentifier("retryConnectionButton")
 
             HStack {
-                Button("TV Setup", systemImage: "tv.badge.wifi") {
-                    showTVSetup()
+                if recoveryActions.contains(.findTV) {
+                    Button("Find TV", systemImage: "tv.badge.wifi") {
+                        showTVSetup()
+                    }
+                    .frame(minHeight: 46)
+                    .accessibilityIdentifier("remoteTVSetupButton")
                 }
-                .frame(minHeight: 46)
-                .accessibilityIdentifier("remoteTVSetupButton")
 
                 Spacer()
 
-                Button("iOS Settings", systemImage: "gear") {
-                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-                    openURL(url)
+                if recoveryActions.contains(.openSettings) {
+                    Button("iOS Settings", systemImage: "gear") {
+                        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                        openURL(url)
+                    }
+                    .frame(minHeight: 46)
+                    .accessibilityIdentifier("openIOSSettingsButton")
                 }
-                .frame(minHeight: 46)
-                .accessibilityIdentifier("openIOSSettingsButton")
             }
             .buttonStyle(.bordered)
         }
@@ -331,7 +347,7 @@ struct RemoteControlView: View {
                 Text(
                     isAwaitingApproval
                         ? "Follow the approval prompt on your TV to finish connecting."
-                        : "Your saved TV will reconnect automatically. No action is needed."
+                        : "Trying to reconnect to your saved TV. You can use the recovery actions below."
                 )
                 .font(.caption)
                 .foregroundStyle(HafaTheme.secondaryText)
@@ -345,7 +361,7 @@ struct RemoteControlView: View {
         .accessibilityLabel(
             isAwaitingApproval
                 ? "Approve Hafa Remote on your TV. Follow the approval prompt to finish connecting."
-                : "Restoring your remote. Your saved TV will reconnect automatically."
+                : "Restoring your remote. Trying to reconnect to your saved TV. Recovery actions are available below."
         )
         .accessibilityIdentifier(
             isAwaitingApproval ? "pairingApprovalStatus" : "automaticReconnectStatus"
@@ -451,7 +467,7 @@ struct RemoteControlView: View {
         .buttonStyle(.bordered)
         .buttonBorderShape(.circle)
         .tint(HafaTheme.accent)
-        .disabled(!isConnected)
+        .disabled(!canControlTV)
         .accessibilityLabel("Keyboard")
         .accessibilityHint("Opens text entry. Focus a text field on the TV first.")
         .accessibilityIdentifier("remote-keyboard")
@@ -494,7 +510,7 @@ struct RemoteControlView: View {
                 systemImage: systemImage,
                 accessibilityLabel: accessibilityLabel ?? label,
                 accessibilityHint: hint,
-                isEnabled: isConnected,
+                isEnabled: canControlTV,
                 repeatsWhileHeld: repeats,
                 action: action
             )
@@ -517,14 +533,14 @@ struct RemoteControlView: View {
             systemImage: image,
             accessibilityLabel: label,
             accessibilityHint: "Sends \(label.lowercased()) to the active TV app.",
-            isEnabled: isConnected,
+            isEnabled: canControlTV,
             size: size,
             action: action
         )
     }
 
     private func send(_ command: RemoteCommand) {
-        guard isConnected else { return }
+        guard canControlTV else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         Task { @MainActor in
             await action(command)
@@ -542,8 +558,8 @@ struct RemoteControlView: View {
     }
 
     private var powerAccessibilityHint: String {
-        if isConnected {
-            "Asks for confirmation before turning off the TV."
+        if offersPowerOff {
+            "Asks for confirmation before sending power off. The connection does not prove the screen is awake."
         } else if canPowerOnTV {
             "Sends the saved TV's local power-on action and reconnects when it responds."
         } else {
@@ -555,19 +571,30 @@ struct RemoteControlView: View {
     private var powerAccessibilityLabel: String {
         if isPoweringOnTV { return "Turning on TV" }
         if isPoweringOffTV { return "Sending power off" }
-        return isConnected ? "Power off TV" : "Turn on TV"
+        return offersPowerOff ? "Power off TV" : "Turn on TV"
     }
 
     /// Presents power progress without replacing the session's durable connection state.
     private var powerStatusLabel: String {
         if isPoweringOnTV { return "Turning on TV…" }
         if isPoweringOffTV { return "Sending power off…" }
+        if isConnected {
+            switch powerState {
+            case .standby: return "TV in standby • Connected"
+            case .unknown: return "Connected • TV power unknown"
+            case .on: return statusLabel
+            }
+        }
         return statusLabel
     }
 
+    private var canControlTV: Bool { isConnected && powerState != .standby }
+
+    private var offersPowerOff: Bool { isConnected && powerState != .standby }
+
     /// Starts one cancellable power-on attempt for a remembered television.
     private func powerOnTV() {
-        guard !isConnected, canPowerOnTV, powerOnTask == nil else { return }
+        guard canPowerOnTV, powerOnTask == nil else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         let powerOnID = UUID()
         activePowerOnID = powerOnID
@@ -651,6 +678,8 @@ private struct PowerFailure: Identifiable {
         let isConnected: Bool
         let isAwaitingApproval: Bool
         let powerOffFails: Bool
+        var powerState: TVPowerState = .unknown
+        var isAutomaticallyReconnecting = false
         @State private var lastCommand = "none"
 
         /// Builds the deterministic remote used by UI tests.
@@ -659,9 +688,14 @@ private struct PowerFailure: Identifiable {
                 RemoteControlView(
                     tvName: "Living Room TV",
                     modelName: "Q70AA",
-                    statusLabel: isConnected ? "Connected" : isAwaitingApproval ? "Pairing…" : "Offline",
+                    statusLabel:
+                        isConnected
+                        ? "Connected"
+                        : isAwaitingApproval
+                            ? "Pairing…" : isAutomaticallyReconnecting ? "Reconnecting…" : "Offline",
                     isConnected: isConnected,
-                    isReconnecting: isAwaitingApproval,
+                    powerState: powerState,
+                    isReconnecting: isAwaitingApproval || isAutomaticallyReconnecting,
                     isAwaitingApproval: isAwaitingApproval,
                     capabilities: TVCapability.implemented(for: .samsung).union([.powerOn]),
                     canPowerOnTV: true,

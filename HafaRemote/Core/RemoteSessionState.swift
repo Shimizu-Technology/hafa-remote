@@ -15,6 +15,24 @@ enum RemoteSessionState: Equatable, Sendable {
     case failed(RemoteSessionFailure)
 }
 
+enum TVRecoveryAction: Hashable, Sendable {
+    case retryConnection
+    case findTV
+    case openSettings
+}
+
+extension RemoteSessionState {
+    var recoveryActions: Set<TVRecoveryAction> {
+        switch self {
+        case .connected, .pairing: []
+        case .certificateChanged, .savedPairingRejected, .denied: [.findTV, .openSettings]
+        case .unsupported: [.findTV]
+        case .idle, .connecting, .reconnecting, .offline, .failed:
+            [.retryConnection, .findTV, .openSettings]
+        }
+    }
+}
+
 enum RemoteSessionOperation: String, Equatable, Sendable {
     case connect
     case send

@@ -23,6 +23,7 @@ actor VizioHTTPSClient: VizioHTTPClienting {
     private let session: URLSession
     private var authToken: String?
     private var isDisconnected = false
+    private var reportedDeviceID: String?
 
     nonisolated static func supports(controlPort: UInt16) -> Bool {
         allowedPorts.contains(controlPort)
@@ -60,7 +61,9 @@ actor VizioHTTPSClient: VizioHTTPClienting {
 
     func deviceInfo(authToken: String?) async throws -> VizioDeviceInfo {
         let data = try await request(path: "/state/device/deviceinfo", method: "GET", authToken: authToken)
-        return try VizioProtocolCodec.deviceInfo(from: data)
+        let info = try VizioProtocolCodec.deviceInfo(from: data)
+        reportedDeviceID = info.reportedDeviceID
+        return info
     }
 
     func beginPairing(clientID: String) async throws -> VizioPairingChallenge {
@@ -123,9 +126,26 @@ actor VizioHTTPSClient: VizioHTTPClienting {
         _ = try await deviceInfo(authToken: authToken)
     }
 
+    func sessionObservation() async throws -> TVSessionObservation? {
+        guard let authToken, let reportedDeviceID, !isDisconnected else { return nil }
+        let powerState: TVPowerState
+        do {
+            let data = try await request(
+                path: "/state/device/power_mode", method: "GET", authToken: authToken)
+            powerState = VizioProtocolCodec.powerState(from: data)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // An optional read failing never proves the screen is asleep or awake.
+            powerState = .unknown
+        }
+        return TVSessionObservation(stableDeviceKey: "vizio:\(reportedDeviceID)", powerState: powerState)
+    }
+
     func disconnect() {
         guard !isDisconnected else { return }
         isDisconnected = true
+        reportedDeviceID = nil
         session.invalidateAndCancel()
     }
 

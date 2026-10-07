@@ -165,6 +165,19 @@ enum VizioProtocolCodec {
         try requireSuccess(decode(VizioStatusOnlyResponse.self, from: data).status)
     }
 
+    static func powerState(from data: Data) -> TVPowerState {
+        guard (try? requireSuccess(from: data)) != nil,
+            let response = try? JSONDecoder().decode(VizioPowerModeResponse.self, from: data)
+        else { return .unknown }
+        let candidates = response.items ?? response.item.map { [$0] } ?? []
+        guard candidates.count == 1, let value = candidates.first?.value else { return .unknown }
+        switch value {
+        case 1: return .on
+        case 0: return .standby
+        default: return .unknown
+        }
+    }
+
     static func deviceInfo(from data: Data) throws -> VizioDeviceInfo {
         let response = try decode(VizioDeviceInfoResponse.self, from: data)
         try requireSuccess(response.status)
@@ -431,5 +444,20 @@ private struct VizioDeviceInfoResponse: Decodable {
         status = try container.decode(VizioStatus.self, forKey: .status)
         item = try container.decodeIfPresent(Item.self, forKey: .item)
         items = try container.decodeIfPresent([Item].self, forKey: .items) ?? []
+    }
+}
+
+private struct VizioPowerModeResponse: Decodable {
+    let item: Item?
+    let items: [Item]?
+
+    struct Item: Decodable {
+        let value: Int?
+        enum CodingKeys: String, CodingKey { case value = "VALUE" }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case item = "ITEM"
+        case items = "ITEMS"
     }
 }

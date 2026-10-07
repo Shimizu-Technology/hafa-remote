@@ -33,6 +33,9 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     private let controlChannel: any SonyTLSChanneling
     private let writeSerializer = SonyWriteSerializer()
 
+    private let observationBroadcaster = TVSessionObservationBroadcaster()
+    private var activeTV: ConnectedTV?
+    private var negotiatedFeatures: UInt64 = 0
     private var readTask: Task<Void, Never>?
     private var sessionGeneration = UUID()
     private var isRemoteSessionAlive = false
@@ -76,6 +79,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
                     requestPairingCode: requestPairingCode
                 )
             }
+            try Task.checkCancellation()
             return try await openRemote(
                 address: target.address,
                 identity: identity,
@@ -91,6 +95,9 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     }
 
     func send(_ command: RemoteCommand) async throws {
+        guard activeTV?.capabilities.contains(command.requiredCapability) == true else {
+            throw TVDriverError.unsupportedCommand
+        }
         let message = try SonyRemoteProtocolCodec.command(command)
         try await writeSerializer.perform { [controlChannel] in
             try await controlChannel.send(message)
@@ -120,11 +127,22 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         try await credentialStore.remove(reportedDeviceID: reportedDeviceID)
     }
 
+    func sessionObservation() async throws -> TVSessionObservation? {
+        await observationBroadcaster.snapshot()
+    }
+
+    func observations() async -> AsyncStream<TVSessionObservation> {
+        await observationBroadcaster.stream()
+    }
+
     func disconnect() async {
         sessionGeneration = UUID()
         isRemoteSessionAlive = false
         readTask?.cancel()
         readTask = nil
+        activeTV = nil
+        negotiatedFeatures = 0
+        await observationBroadcaster.reset()
         await pairingChannel.disconnect()
         await controlChannel.disconnect()
     }
@@ -234,6 +252,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         identity: SonyClientIdentityReference,
         credential: SonyPairingCredential
     ) async throws -> ConnectedTV {
+        let connectionGeneration = sessionGeneration
         let peer = try await controlChannel.connect(
             address: address,
             port: Self.controlPort,
@@ -251,21 +270,38 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             maximumMessages: Self.maximumRemoteHandshakeMessages
         )
 
-        let generation = UUID()
-        sessionGeneration = generation
-        isRemoteSessionAlive = true
-        readTask = Task { [weak self] in
-            await self?.readRemoteEvents(generation: generation)
-        }
-        return ConnectedTV(
+        try Task.checkCancellation()
+        guard sessionGeneration == connectionGeneration else { throw CancellationError() }
+        let television = ConnectedTV(
             brand: .sony,
             reportedDeviceID: credential.reportedDeviceID,
             address: address,
             controlPort: Self.controlPort,
             displayName: peer.displayName,
             modelName: device.model,
-            firmwareVersion: device.softwareVersion.isEmpty ? nil : device.softwareVersion
+            firmwareVersion: device.softwareVersion.isEmpty ? nil : device.softwareVersion,
+            powerState: device.powerState,
+            capabilityEvidence: TVCapabilityEvidence(
+                implemented: TVCapability.implemented(for: .sony),
+                protocolReported: device.capabilities
+            )
         )
+        activeTV = television
+        negotiatedFeatures = device.negotiatedFeatures
+        await observationBroadcaster.publish(
+            TVSessionObservation(
+                stableDeviceKey: television.stableDeviceKey,
+                powerState: device.powerState,
+                protocolReportedCapabilities: device.capabilities
+            ))
+        try Task.checkCancellation()
+        guard sessionGeneration == connectionGeneration else { throw CancellationError() }
+        let generation = connectionGeneration
+        isRemoteSessionAlive = true
+        readTask = Task { [weak self] in
+            await self?.readRemoteEvents(generation: generation)
+        }
+        return television
     }
 
     private func readRemoteEvents(generation: UUID) async {
@@ -273,6 +309,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             var consecutiveProtocolFailures = 0
             while sessionGeneration == generation, !Task.isCancelled {
                 let message = try await controlChannel.receive()
+                guard sessionGeneration == generation, !Task.isCancelled else { return }
                 let event: SonyRemoteEvent
                 do {
                     event = try SonyRemoteProtocolCodec.parse(message)
@@ -288,14 +325,26 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
                         try await controlChannel.send(SonyRemoteProtocolCodec.pingResponse(value))
                     }
                 case .setActive:
+                    let features = negotiatedFeatures
                     try await writeSerializer.perform { [controlChannel] in
-                        try await controlChannel.send(SonyRemoteProtocolCodec.activeResponse())
+                        try await controlChannel.send(
+                            SonyRemoteProtocolCodec.activeResponse(negotiatedFeatures: features))
                     }
-                case .configured:
+                case .configured(let vendor, _, _, let reportedFeatures):
+                    guard vendor.localizedCaseInsensitiveContains("sony"), reportedFeatures & 2 == 2 else {
+                        throw SonyPairingCoordinatorError.unsupportedDevice
+                    }
+                    negotiatedFeatures = reportedFeatures & SonyRemoteProtocolCodec.requestedFeatures
+                    let features = negotiatedFeatures
                     try await writeSerializer.perform { [controlChannel] in
-                        try await controlChannel.send(SonyRemoteProtocolCodec.configurationResponse())
+                        try await controlChannel.send(
+                            SonyRemoteProtocolCodec.configurationResponse(negotiatedFeatures: features))
                     }
-                case .powerState, .other:
+                    await publishObservation(
+                        powerState: activeTV?.powerState ?? .unknown, generation: generation)
+                case .powerState(let isOn):
+                    await publishObservation(powerState: isOn ? .on : .standby, generation: generation)
+                case .other:
                     continue
                 }
             }
@@ -304,6 +353,17 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
                 isRemoteSessionAlive = false
             }
         }
+    }
+
+    private func publishObservation(powerState: TVPowerState, generation: UUID) async {
+        guard sessionGeneration == generation, let television = activeTV else { return }
+        let observation = TVSessionObservation(
+            stableDeviceKey: television.stableDeviceKey,
+            powerState: powerState,
+            protocolReportedCapabilities: SonyRemoteDevice.capabilities(for: negotiatedFeatures)
+        )
+        activeTV = television.applying(observation)
+        await observationBroadcaster.publish(observation)
     }
 
     private static func certificate(from identity: SecIdentity) throws -> SecCertificate {
@@ -338,6 +398,18 @@ enum SonySavedTargetCredentialLookup {
 struct SonyRemoteDevice: Sendable {
     let model: String
     let softwareVersion: String
+    let negotiatedFeatures: UInt64
+    let powerState: TVPowerState
+
+    var capabilities: Set<TVCapability> { Self.capabilities(for: negotiatedFeatures) }
+
+    static func capabilities(for features: UInt64) -> Set<TVCapability> {
+        var capabilities: Set<TVCapability> = []
+        if features & 2 != 0 { capabilities.formUnion([.navigation, .playback]) }
+        if features & 64 != 0 { capabilities.formUnion([.volume, .mute]) }
+        if features & 32 != 0 { capabilities.formUnion([.powerOff, .powerOn]) }
+        return capabilities
+    }
 }
 
 enum SonyPairingExchangeDeadline {
@@ -394,18 +466,30 @@ enum SonyRemoteHandshake {
                 }
                 device = SonyRemoteDevice(
                     model: model.isEmpty ? fallbackModelName : model,
-                    softwareVersion: softwareVersion
+                    softwareVersion: softwareVersion,
+                    negotiatedFeatures: supportedFeatures & SonyRemoteProtocolCodec.requestedFeatures,
+                    powerState: .unknown
                 )
-                try await controlChannel.send(SonyRemoteProtocolCodec.configurationResponse())
+                try await controlChannel.send(
+                    SonyRemoteProtocolCodec.configurationResponse(
+                        negotiatedFeatures: supportedFeatures & SonyRemoteProtocolCodec.requestedFeatures
+                    ))
             case .setActive:
-                try await controlChannel.send(SonyRemoteProtocolCodec.activeResponse())
+                try await controlChannel.send(
+                    SonyRemoteProtocolCodec.activeResponse(
+                        negotiatedFeatures: device?.negotiatedFeatures ?? 0
+                    ))
             case .ping(let value):
                 try await controlChannel.send(SonyRemoteProtocolCodec.pingResponse(value))
-            case .powerState:
+            case .powerState(let isOn):
                 guard let device else {
                     throw SonyPairingCoordinatorError.invalidRemoteResponse
                 }
-                return device
+                return SonyRemoteDevice(
+                    model: device.model, softwareVersion: device.softwareVersion,
+                    negotiatedFeatures: device.negotiatedFeatures,
+                    powerState: isOn ? .on : .standby
+                )
             case .other:
                 continue
             }

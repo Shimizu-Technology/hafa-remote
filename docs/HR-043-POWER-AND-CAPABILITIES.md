@@ -1,0 +1,39 @@
+# HR-043 — Truthful power state and capability evidence
+
+A reachable control service does not prove that its TV screen is awake. Hafa Remote now represents screen power as **unknown**, **on**, or **standby**, independently of connection state.
+
+## Behavior
+
+- Sony preserves the power boolean received during the authenticated handshake and publishes subsequent power changes. Missing or invalid power fields are ignored instead of becoming standby. Configuration and active replies advertise only the intersection of the requested feature bits and the TV's reported bits; key support remains mandatory. Controls not negotiated by Sony are unavailable.
+- Vizio reads `GET /state/device/power_mode` with the saved `AUTH` token. A successful numeric `VALUE` of `1` means on and `0` means standby. Missing, malformed, rejected, or unsupported observations mean unknown. This follows the maintained [pyvizio power-state API](https://github.com/raman325/pyvizio/blob/master/pyvizio/__init__.py); Hafa accepts only the two known numeric states.
+- Samsung reads optional `PowerState` metadata. Absent, unrecognized, or malformed power metadata stays unknown. Its observed identity must still match the connected saved TV.
+- The controller accepts observations only for the active generation and authenticated device identity. Live Sony events update immediately; health checks refresh optional observations for other drivers. Power-on also requests a bounded observation refresh. Disconnect, backgrounding, switching, and cancellation clear observation subscriptions, and the UI stops presenting old screen power.
+- A connected TV reporting standby offers Power On and pauses ordinary controls. When power is unknown, the interface says so and offers an explicit power-on action. Eligible wake remains usable during automatic reconnect; pairing approval still blocks unrelated actions.
+- Automatic reconnect has five delayed attempts after the initial attempt. Retry, Find TV, and settings actions remain available during recovery and afterward. Certificate and expired-pairing states use deliberate Find TV recovery.
+- Samsung wake reconnects to the saved identity rather than an address-only target. A socket reconnect or a power report does not grant hardware wake verification.
+
+## Capability and distribution policy
+
+Capability evidence separates driver implementation, negotiated/reported support, and explicit hardware verification. Sony availability follows negotiation. New saved records retain reported evidence; hardware evidence is never inferred from a connection or legacy automatic wake flags. Previously recorded explicit hardware evidence survives only an unchanged identity, model, and firmware.
+
+The current build explicitly identifies itself as an **internal candidate**. The public runtime policy denies all unresolved brands, and release preflight rejects public distribution until the brand hardware and protocol-rights decisions are approved. Archive and export checks require the same distribution audience as the source. This keeps internal TestFlight testing available without presenting an unvalidated driver as public support.
+
+## Verification and remaining acceptance
+
+Focused regressions cover Sony power and feature negotiation, malformed power fields, authenticated Vizio request paths, Samsung optional power parsing, capability evidence, public-policy rejection, observation identity/generation boundaries, stale-power reset, bounded retry, hardware-evidence provenance, connected-standby controls, and wake during reconnect.
+
+The integrated gate passed strict formatting, credential scans, release fixtures, internal release preflight, signed application/unit/UI builds, test execution, bundle verification, and install/launch checks. Public preflight rejects as intended. Native simulator journeys were exercised; current PR-head review and hosted CI remain merge checks.
+
+Physical power, network standby, DHCP changes, and wake acceptance remain pending for each exact household model and firmware. No hardware capability or successful power action is claimed from simulator evidence. Integration used only claimed simulators and build/test processes; each QA phase cleans its owned resources and preserves borrowed hardware/services.
+
+## Integrated validation
+
+The implemented power/recovery code at `eebf174`, based on merged HR-042 main, passed 333 tests on iOS 18.5, with zero failures or skips. Six older UI assertions were updated to require the truthful unknown-power connection label. Computer use separately confirmed that connected standby disables ordinary controls while exposing Power On, and that wake remains callable during automatic recovery alongside Retry, Find TV, and iOS Settings. Both wake taps reached only the synthetic command sink.
+
+![Synthetic connected standby with ordinary controls paused](evidence/HR-043/standby-connected.png)
+
+Native inspection also prompted a copy correction: automatic recovery now describes attempts and available actions rather than promising a connection. Its DEBUG recovery fixture labels the header Reconnecting. Public preflight with `HAFA_DISTRIBUTION_AUDIENCE=public` rejected as intended because hardware and protocol-rights decisions remain incomplete. Final PR-head review, hosted CI, and cleanup are rechecked before merge; these checks are not physical-TV evidence.
+
+The first complete CodeRabbit CLI pass covered all 30 changed files. Its unsupported-command finding named the Sony coordinator, but the state mutation was in the shared controller. Local unsupported-command and unsupported-text rejections now preserve the connection; a regression also proves a following supported command remains usable. The identity rejection test awaits an explicit refresh of the foreign snapshot instead of depending on scheduler yields. Release preflight checks for the archived app before reading its distribution audience, and the empty capability marker is explicit.
+
+The optional observation refresh keeps its deliberate three-second bound. The longer configured health-check timeout serves a different operation; changing the refresh to that value would delay an explicit wake action. The injected clock already controls this deadline in tests. Current-head full gate and reviewer coverage are recorded in the PR after these fixes.

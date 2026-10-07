@@ -5,6 +5,55 @@ import Testing
 
 /// Foundation tests that hold release metadata to the product's privacy promise.
 struct HafaRemoteTests {
+    @Test("Recovery actions stay available after automatic attempts and preserve trust recovery")
+    func recoveryActionsMatchSessionProblem() {
+        #expect(RemoteSessionState.offline.recoveryActions.contains(.retryConnection))
+        #expect(RemoteSessionState.reconnecting(attempt: 5).recoveryActions.contains(.findTV))
+        #expect(!RemoteSessionState.certificateChanged.recoveryActions.contains(.retryConnection))
+        #expect(RemoteSessionState.certificateChanged.recoveryActions.contains(.findTV))
+        #expect(RemoteSessionState.pairing.recoveryActions.isEmpty)
+    }
+
+    @Test("Implemented, reported and hardware verified capabilities remain distinct")
+    func capabilityEvidenceDoesNotInventVerification() {
+        let evidence = TVCapabilityEvidence(
+            implemented: [.navigation, .volume, .powerOn],
+            protocolReported: [.navigation, .volume, .textInput],
+            hardwareVerified: [.navigation, .textInput]
+        )
+        #expect(evidence.internalAvailable == [.navigation, .volume])
+        #expect(evidence.publiclyAvailable == [.navigation])
+        #expect(!evidence.hardwareVerified.contains(.textInput))
+        #expect(TVCapabilityEvidence(implemented: [.powerOn]).hardwareVerified.isEmpty)
+    }
+
+    @Test(
+        "Every unresolved brand is denied public distribution and available for internal testing",
+        arguments: TVBrand.allCases)
+    func distributionRequiresExplicitInternalAudience(brand: TVBrand) {
+        #expect(TVDistributionPolicy.internalCandidate.permits(brand))
+        #expect(!TVDistributionPolicy.publicRelease.permits(brand))
+    }
+
+    @Test("A connected socket defaults to unknown screen power without hardware verification")
+    func connectionDoesNotProveAwakeOrWake() throws {
+        let tv = ConnectedTV(
+            brand: .sony, reportedDeviceID: "synthetic-tv",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.43"),
+            modelName: "Synthetic Sony", firmwareVersion: nil
+        )
+        #expect(tv.powerState == .unknown)
+        #expect(tv.capabilityEvidence.protocolReported == nil)
+        #expect(tv.capabilityEvidence.hardwareVerified.isEmpty)
+        let standby = tv.applying(
+            TVSessionObservation(stableDeviceKey: tv.stableDeviceKey, powerState: .standby))
+        #expect(standby.powerState == .standby)
+        #expect(standby.forgettingPowerObservation.powerState == .unknown)
+        #expect(
+            tv.applying(TVSessionObservation(stableDeviceKey: "sony:synthetic-other-tv", powerState: .on))
+                == tv)
+    }
+
     @Test("Implemented capabilities stay brand-neutral and truthful")
     func implementedCapabilities() {
         let samsung = TVCapability.implemented(for: .samsung)
