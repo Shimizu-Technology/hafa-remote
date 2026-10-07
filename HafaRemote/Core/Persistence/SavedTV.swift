@@ -209,7 +209,8 @@ final class SavedTV: CustomStringConvertible {
     }
 
     private static func decodeCapabilities(_ value: String) -> Set<TVCapability> {
-        Set(value.split(separator: ",").compactMap { TVCapability(rawValue: String($0)) })
+        guard value != emptyCapabilitiesMarker else { return [] }
+        return Set(value.split(separator: ",").compactMap { TVCapability(rawValue: String($0)) })
     }
 
     private static func encodeCapabilities(_ capabilities: Set<TVCapability>) -> String {

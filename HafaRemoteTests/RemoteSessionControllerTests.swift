@@ -56,7 +56,9 @@ struct RemoteSessionControllerTests {
                             stableDeviceKey: television.stableDeviceKey, powerState: .standby)))
         }
         await driver.publish(power: .on, identity: "samsung:synthetic-other-tv")
-        for _ in 0..<5 { await Task.yield() }
+        // The explicit refresh awaits consumption of the same foreign snapshot,
+        // rather than relying on scheduler yields to drain the observation stream.
+        await session.refreshObservation()
         #expect(
             await session.state
                 == .connected(
@@ -67,6 +69,33 @@ struct RemoteSessionControllerTests {
         await driver.publish(power: .on, identity: television.stableDeviceKey)
         #expect(await session.state == .offline)
         await session.applicationWillEnterForeground()
+        #expect(await session.state == .connected(television))
+        await session.disconnect()
+    }
+
+    @Test(
+        "Local unsupported controls preserve the connected session",
+        arguments: [TVDriverError.unsupportedCommand, .unsupportedTextInput])
+    func unsupportedControlDoesNotFailTransport(rejection: TVDriverError) async throws {
+        let television = ConnectedTV(
+            reportedDeviceID: "synthetic-unsupported-control-tv",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.43"),
+            modelName: "Synthetic Model", firmwareVersion: nil
+        )
+        let driver = ObservedPowerFixture(
+            television: television, sendError: rejection == .unsupportedCommand ? rejection : nil)
+        let session = RemoteSessionController(
+            driver: driver, configuration: testConfiguration(reconnectDelays: []))
+        await session.connect(to: television.connectionTarget)
+        await #expect(throws: rejection) {
+            if rejection == .unsupportedCommand {
+                try await session.send(.select)
+            } else {
+                try await session.sendText(RemoteTextInput("synthetic input"))
+            }
+        }
+        #expect(await session.state == .connected(television))
+        try await session.send(.select)
         #expect(await session.state == .connected(television))
         await session.disconnect()
     }
@@ -3027,7 +3056,11 @@ private actor RejectingSonyPairingContextFixture: RemoteSessionDriving {
 private actor ObservedPowerFixture: RemoteSessionDriving {
     private let television: ConnectedTV
     private let broadcaster = TVSessionObservationBroadcaster()
-    init(television: ConnectedTV) { self.television = television }
+    private var sendError: TVDriverError?
+    init(television: ConnectedTV, sendError: TVDriverError? = nil) {
+        self.television = television
+        self.sendError = sendError
+    }
     func connect(addressText: String, onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void)
         async throws -> ConnectedTV
     {
@@ -3039,7 +3072,12 @@ private actor ObservedPowerFixture: RemoteSessionDriving {
     func publish(power: TVPowerState, identity: String) async {
         await broadcaster.publish(TVSessionObservation(stableDeviceKey: identity, powerState: power))
     }
-    func send(_ command: RemoteCommand) {}
+    func send(_ command: RemoteCommand) throws {
+        if let sendError {
+            self.sendError = nil
+            throw sendError
+        }
+    }
     func forget(addressText: String) {}
     func disconnect() async { await broadcaster.reset() }
 }

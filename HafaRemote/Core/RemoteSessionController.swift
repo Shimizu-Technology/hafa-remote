@@ -362,6 +362,13 @@ actor RemoteSessionController {
         } catch {
             commandTasks[commandID] = nil
             let wasCancelled = Task.isCancelled || error is CancellationError
+            if !wasCancelled,
+                error as? TVDriverError == .unsupportedCommand
+                    || error as? TVDriverError == .unsupportedTextInput
+            {
+                // A local capability rejection says nothing about transport health.
+                throw error
+            }
             if generation == commandGeneration, !wasCancelled {
                 let queuedCommands = Array(commandTasks.values)
                 commandTasks.removeAll()

@@ -250,8 +250,8 @@ if [[ -n "$archive_path" ]]; then
   application_path="$(plutil -extract ApplicationProperties.ApplicationPath raw "$archive_path/Info.plist")"
   archived_app="$archive_path/Products/$application_path"
   archived_info="$archived_app/Info.plist"
-  [[ "$(plutil -extract HafaDistributionAudience raw "$archived_info")" == "$distribution_audience" ]] || { echo "Archived distribution audience does not match." >&2; exit 1; }
   [[ -d "$archived_app" ]] || { echo "Archived app not found: $archived_app" >&2; exit 1; }
+  [[ "$(plutil -extract HafaDistributionAudience raw "$archived_info")" == "$distribution_audience" ]] || { echo "Archived distribution audience does not match." >&2; exit 1; }
 
   [[ "$(plutil -extract CFBundleIdentifier raw "$archived_info")" == "$(setting PRODUCT_BUNDLE_IDENTIFIER)" ]] || { echo "Archived bundle ID does not match." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleShortVersionString raw "$archived_info")" == "$(setting MARKETING_VERSION)" ]] || { echo "Archived marketing version does not match." >&2; exit 1; }
