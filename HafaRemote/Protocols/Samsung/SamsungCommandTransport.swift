@@ -125,13 +125,23 @@ actor SamsungCommandTransport: SamsungTransporting {
 
     func convenience(_ request: TVConvenienceRequest) async throws -> TVConvenienceResponse {
         guard let socket = webSocket else { throw SamsungConnectionError.notConnected }
+        let query = appQuery
+        let generation = socketGeneration
         switch request {
         case .apps:
-            return .apps(try await listApps(on: socket))
+            let apps = try await listApps(on: socket, query: query)
+            try Task.checkCancellation()
+            guard socketGeneration == generation, webSocket === socket else { throw CancellationError() }
+            return .apps(apps)
         case .launch(let app):
             guard app.target.brand == .samsung else { throw TVConvenienceError.wrongTV }
-            let available = try await listApps(on: socket)
-            guard available.contains(where: { $0.target == app.target }), webSocket === socket else {
+            let serializer = commandSerializer
+            let available = try await query.catalogForLaunch {
+                try await serializer.perform { try await socket.send(SamsungAppCodec.request()) }
+            }
+            try Task.checkCancellation()
+            guard socketGeneration == generation, webSocket === socket else { throw CancellationError() }
+            guard available.contains(where: { $0.target == app.target }) else {
                 throw TVConvenienceError.unavailable
             }
             let message = try SamsungAppCodec.launch(app)
@@ -141,10 +151,12 @@ actor SamsungCommandTransport: SamsungTransporting {
         }
     }
 
-    private func listApps(on socket: URLSessionWebSocketTask) async throws -> [TVAppShortcut] {
+    private func listApps(on socket: URLSessionWebSocketTask, query: SamsungAppListQuery) async throws
+        -> [TVAppShortcut]
+    {
         let message = try SamsungAppCodec.request()
         let serializer = commandSerializer
-        return try await appQuery.query {
+        return try await query.query {
             try await serializer.perform { try await socket.send(message) }
         }
     }

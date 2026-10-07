@@ -69,6 +69,15 @@ actor SamsungAppListQuery {
     private var timeoutTask: Task<Void, Never>?
     private var sendTask: Task<Void, Never>?
     private var acceptsQueries = true
+    private var successfulCatalog: [TVAppShortcut]?
+
+    func catalogForLaunch(
+        timeout: Duration = .seconds(3), send: @escaping @Sendable () async throws -> Void
+    ) async throws -> [TVAppShortcut] {
+        try Task.checkCancellation()
+        if let successfulCatalog { return successfulCatalog }
+        return try await query(timeout: timeout, send: send)
+    }
 
     func query(timeout: Duration = .seconds(3), send: @escaping @Sendable () async throws -> Void)
         async throws -> [TVAppShortcut]
@@ -102,6 +111,7 @@ actor SamsungAppListQuery {
     func reset() {
         if let requestID { finish(id: requestID, result: .failure(CancellationError())) }
         acceptsQueries = true
+        successfulCatalog = nil
     }
     private func finish(id: UUID, result: Result<[TVAppShortcut], Error>) {
         guard requestID == id, let continuation else { return }
@@ -112,6 +122,7 @@ actor SamsungAppListQuery {
         timeoutTask = nil
         sendTask = nil
         if case .failure = result { acceptsQueries = false }
+        if case .success(let apps) = result { successfulCatalog = apps }
         continuation.resume(with: result)
     }
 }

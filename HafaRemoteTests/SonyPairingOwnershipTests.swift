@@ -6,6 +6,99 @@ import Testing
 @testable import HafaRemote
 
 struct SonyPairingOwnershipTests {
+    @Test("A superseding teardown still retires the original owned control channel")
+    func supersededTeardownRetiresOldSockets() async throws {
+        let pairing = OwnedRetirementChannel()
+        let control = OwnedRetirementChannel()
+        let coordinator = SonyPairingCoordinator(
+            pairingChannel: pairing, controlChannel: control, keyboardPreference: { _ in true })
+        let television = try reviewTelevision()
+        try await coordinator.installSyntheticSessionForTesting(television, reportedFeatures: 615)
+        let original = await coordinator.syntheticChannelOwnershipForTesting()
+        await pairing.bind(original)
+        await control.bind(original)
+        await pairing.holdNextRetirement()
+        let first = Task { await coordinator.disconnect() }
+        await pairing.waitUntilRetirementStarted()
+        let intermediate = await coordinator.syntheticChannelOwnershipForTesting()
+        let second = Task { await coordinator.disconnect() }
+        await reviewWait { await coordinator.syntheticChannelOwnershipForTesting() !== intermediate }
+        await pairing.releaseRetirement()
+        await first.value
+        await second.value
+        #expect(await !pairing.isOpen)
+        #expect(await !control.isOpen)
+        #expect(await control.retirementCount == 1)
+    }
+
+    @Test("Real TLS scoped retirement ignores a replacement but closes a revoked matching owner")
+    func realTLSRetirementMatchesOwnerEvenWhenRevoked() async throws {
+        let channel = SonyTLSChannel()
+        let old = SonyTLSChannelOwnership()
+        let replacement = SonyTLSChannelOwnership()
+        let payload = Data([4, 5, 6])
+        try await channel.seedBufferedOwnershipForTesting(replacement, message: payload)
+        old.invalidate()
+        await (channel as any SonyTLSChanneling).disconnect(ownership: old)
+        #expect(try await channel.receive(ownership: replacement) == payload)
+        #expect(await channel.syntheticOwnershipForTesting() === replacement)
+        replacement.invalidate()
+        await (channel as any SonyTLSChanneling).disconnect(ownership: replacement)
+        #expect(await channel.syntheticOwnershipForTesting() == nil)
+    }
+
+    @Test("Queued Sony text errors describe the live serialized state", arguments: TextReviewState.allCases)
+    func queuedTextReportsTruthfulState(state: TextReviewState) async throws {
+        let channel = PairingFixtureChannel()
+        let coordinator = SonyPairingCoordinator(controlChannel: channel, keyboardPreference: { _ in true })
+        let television = try reviewTelevision()
+        try await coordinator.installSyntheticSessionForTesting(television, reportedFeatures: 615)
+        await channel.openSyntheticControl()
+        await coordinator.focusSyntheticFieldForTesting()
+        await channel.holdNextWrite(failOnRelease: state == .dead)
+        let request = Task {
+            try await coordinator.convenience(
+                state == .disabled
+                    ? .setKeyboardEnabled(false) : .launch(TVAppShortcut.sonyConfiguredLinks[0]))
+        }
+        await channel.waitUntilWriteStarted()
+        let text = Task { try await coordinator.sendText(RemoteTextInput("synthetic queued text")) }
+        await reviewWait { await coordinator.pendingSyntheticWritesForTesting() == 1 }
+        switch state {
+        case .stale:
+            await coordinator.disconnect()
+            try await coordinator.installSyntheticSessionForTesting(television, reportedFeatures: 615)
+            await channel.openSyntheticControl()
+        case .unsupported:
+            await coordinator.renegotiateSyntheticFeaturesForTesting(611)
+        case .standby:
+            await coordinator.publishSyntheticPowerForTesting(.standby)
+        default: break
+        }
+        await channel.releaseWrite()
+        _ = await request.result
+        do {
+            try await text.value
+            Issue.record("Queued text must be rejected in this state")
+        } catch {
+            switch state {
+            case .stale: #expect(error is CancellationError)
+            case .dead: #expect(error as? SonyTLSChannelError == .connectionClosed)
+            case .disabled, .unsupported: #expect(error as? TVDriverError == .unsupportedTextInput)
+            case .standby: #expect(error as? TVConvenienceError == .unavailable)
+            case .missingFocus: #expect(error as? TVConvenienceError == .textFieldNotFocused)
+            }
+        }
+        #expect(await channel.textCount == 0)
+        await coordinator.disconnect()
+    }
+
+    private func reviewTelevision() throws -> ConnectedTV {
+        ConnectedTV(
+            brand: .sony, reportedDeviceID: "synthetic-review-tv",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.91"),
+            modelName: "Synthetic Model", firmwareVersion: nil, powerState: .on)
+    }
     @Test(
         "Production Sony pairing cannot close B after A's held lookup or save",
         arguments: [false, true], [false, true])
@@ -277,6 +370,10 @@ private actor PairingFixtureChannel: SonyTLSChanneling {
     private var shouldHoldLaunch = false
     private var launchContinuation: CheckedContinuation<Void, Never>?
     private var launchStarted: CheckedContinuation<Void, Never>?
+    private var holdAnyWrite = false
+    private var failWriteOnRelease = false
+    private var writeContinuation: CheckedContinuation<Void, Never>?
+    private var writeStarted: CheckedContinuation<Void, Never>?
     init(material: SyntheticPairingMaterial? = nil, isControl: Bool = true) {
         self.material = material
         self.isControl = isControl
@@ -305,6 +402,15 @@ private actor PairingFixtureChannel: SonyTLSChanneling {
     func send(_ message: Data) async throws {
         guard activeLabel != nil else { throw SonyTLSChannelError.connectionClosed }
         let fields = try SonyProtobuf.fields(in: message)
+        if holdAnyWrite {
+            holdAnyWrite = false
+            await withCheckedContinuation {
+                writeContinuation = $0
+                writeStarted?.resume()
+                writeStarted = nil
+            }
+            if failWriteOnRelease { throw SonyTLSChannelError.unavailable }
+        }
         if fields.contains(where: { $0.number == 21 }) { textCount += 1 }
         if fields.contains(where: { $0.number == 10 }) { commandCount += 1 }
         if shouldHoldLaunch, fields.contains(where: { $0.number == 90 }) {
@@ -350,4 +456,69 @@ private actor PairingFixtureChannel: SonyTLSChanneling {
         launchContinuation?.resume()
         launchContinuation = nil
     }
+    func holdNextWrite(failOnRelease: Bool) {
+        holdAnyWrite = true
+        failWriteOnRelease = failOnRelease
+    }
+    func waitUntilWriteStarted() async {
+        guard writeContinuation == nil else { return }
+        await withCheckedContinuation { writeStarted = $0 }
+    }
+    func releaseWrite() {
+        writeContinuation?.resume()
+        writeContinuation = nil
+    }
+}
+
+enum TextReviewState: CaseIterable, Sendable {
+    case stale, dead, disabled, unsupported, standby, missingFocus
+}
+
+private func reviewWait(_ condition: @escaping @Sendable () async -> Bool) async {
+    let clock = ContinuousClock()
+    let deadline = clock.now.advanced(by: .seconds(2))
+    while clock.now < deadline {
+        if await condition() { return }
+        await Task.yield()
+    }
+    Issue.record("Review fixture did not reach its explicit boundary")
+}
+
+private actor OwnedRetirementChannel: SonyTLSChanneling {
+    private var ownership: SonyTLSChannelOwnership?
+    private var shouldHold = false
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var started: CheckedContinuation<Void, Never>?
+    private(set) var retirementCount = 0
+    var isOpen: Bool { ownership != nil }
+    func bind(_ ownership: SonyTLSChannelOwnership) { self.ownership = ownership }
+    func holdNextRetirement() { shouldHold = true }
+    func waitUntilRetirementStarted() async {
+        guard continuation == nil else { return }
+        await withCheckedContinuation { started = $0 }
+    }
+    func releaseRetirement() {
+        continuation?.resume()
+        continuation = nil
+    }
+    func disconnect(ownership: SonyTLSChannelOwnership) async {
+        if shouldHold {
+            shouldHold = false
+            await withCheckedContinuation {
+                continuation = $0
+                started?.resume()
+                started = nil
+            }
+        }
+        guard self.ownership === ownership else { return }
+        self.ownership = nil
+        retirementCount += 1
+    }
+    func connect(
+        address: PrivateIPv4Address, port: UInt16, identity: SonyClientIdentityReference,
+        trustMode: SonyTLSTrustMode
+    ) async throws -> SonyTLSPeer { throw SonyTLSChannelError.unavailable }
+    func send(_ message: Data) async throws {}
+    func receive() async throws -> Data { throw SonyTLSChannelError.connectionClosed }
+    func disconnect() async { ownership = nil }
 }

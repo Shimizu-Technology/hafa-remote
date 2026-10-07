@@ -242,6 +242,16 @@ actor SonyTLSChannel: SonyTLSChanneling {
     private var connectionOwnership: SonyTLSChannelOwnership?
     private var messageBuffer = SonyTLSMessageBuffer()
 
+    #if DEBUG
+        /// Socket-free admission/retirement fixture; buffers only synthetic test bytes.
+        func seedBufferedOwnershipForTesting(_ ownership: SonyTLSChannelOwnership, message: Data) throws {
+            guard connection == nil, connectionOwnership == nil else { throw SonyTLSChannelError.unavailable }
+            connectionOwnership = ownership
+            _ = try messageBuffer.append(SonyProtobuf.framed(Data([0])) + SonyProtobuf.framed(message))
+        }
+        func syntheticOwnershipForTesting() -> SonyTLSChannelOwnership? { connectionOwnership }
+    #endif
+
     func connect(
         address: PrivateIPv4Address,
         port: UInt16,

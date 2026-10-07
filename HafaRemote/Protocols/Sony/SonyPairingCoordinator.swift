@@ -172,6 +172,8 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     }
 
     func sendText(_ input: RemoteTextInput) async throws {
+        try Task.checkCancellation()
+        guard isRemoteSessionAlive else { throw SonyTLSChannelError.connectionClosed }
         guard keyboardEnabled, negotiatedFeatures & 4 != 0 else { throw TVDriverError.unsupportedTextInput }
         let generation = sessionGeneration
         try await writeSerializer.perform { [weak self] in
@@ -181,11 +183,10 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     }
 
     private func writeText(_ input: RemoteTextInput, generation: UUID) async throws {
-        try Task.checkCancellation()
-        guard sessionGeneration == generation, isRemoteSessionAlive, keyboardEnabled,
-            negotiatedFeatures & 4 != 0,
-            activeTV?.powerState != .standby
-        else { throw TVConvenienceError.textFieldNotFocused }
+        try requireAttempt(generation)
+        guard isRemoteSessionAlive else { throw SonyTLSChannelError.connectionClosed }
+        guard keyboardEnabled, negotiatedFeatures & 4 != 0 else { throw TVDriverError.unsupportedTextInput }
+        guard activeTV?.powerState != .standby else { throw TVConvenienceError.unavailable }
         let counters = try imeFocus.snapshot()
         let message = try SonyConvenienceCodec.text(
             input, imeCounter: counters.ime, fieldCounter: counters.field)
@@ -313,6 +314,16 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         func syntheticKeyboardStateForTesting() -> (enabled: Bool, features: UInt64, hasFocus: Bool) {
             (keyboardEnabled, negotiatedFeatures, (try? imeFocus.snapshot()) != nil)
         }
+        func syntheticChannelOwnershipForTesting() -> SonyTLSChannelOwnership { channelOwnership }
+        func pendingSyntheticWritesForTesting() async -> Int { await writeSerializer.pendingWritesForTesting }
+        func publishSyntheticPowerForTesting(_ power: TVPowerState) async {
+            await publishObservation(powerState: power, generation: sessionGeneration)
+        }
+        func renegotiateSyntheticFeaturesForTesting(_ features: UInt64) async {
+            applyReportedFeatures(features)
+            await publishObservation(
+                powerState: activeTV?.powerState ?? .unknown, generation: sessionGeneration)
+        }
     #endif
 
     func checkConnection() async throws {
@@ -374,12 +385,12 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     }
 
     private func closeChannels(generation: UUID, ownership: SonyTLSChannelOwnership) async {
+        // Revocation blocks new I/O, but captured ownership must still be retired.
+        // The channel actor closes only a matching owner, never a replacement.
+        await pairingChannel.disconnect(ownership: ownership)
+        await controlChannel.disconnect(ownership: ownership)
         guard sessionGeneration == generation else { return }
         await observationBroadcaster.reset()
-        guard sessionGeneration == generation else { return }
-        await pairingChannel.disconnect(ownership: ownership)
-        guard sessionGeneration == generation else { return }
-        await controlChannel.disconnect(ownership: ownership)
     }
 
     private func requireAttempt(_ generation: UUID) throws {
@@ -643,9 +654,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
                     guard vendor.localizedCaseInsensitiveContains("sony"), reportedFeatures & 2 == 2 else {
                         throw SonyPairingCoordinatorError.unsupportedDevice
                     }
-                    self.reportedFeatures = reportedFeatures
-                    negotiatedFeatures = reportedFeatures & requestedFeatures
-                    imeFocus.clear()
+                    applyReportedFeatures(reportedFeatures)
                     let features = negotiatedFeatures
                     try await writeSerializer.perform { [controlChannel] in
                         try await controlChannel.send(
@@ -681,6 +690,12 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         )
         activeTV = television.applying(observation)
         await observationBroadcaster.publish(observation)
+    }
+
+    private func applyReportedFeatures(_ features: UInt64) {
+        reportedFeatures = features
+        negotiatedFeatures = features & requestedFeatures
+        imeFocus.clear()
     }
 
 }
@@ -850,6 +865,9 @@ actor SonyWriteSerializer {
         let continuation: CheckedContinuation<Bool, Never>
     }
     private var waiters: [Waiter] = []
+    #if DEBUG
+        var pendingWritesForTesting: Int { waiters.count }
+    #endif
 
     func perform(_ operation: @Sendable () async throws -> Void) async throws {
         try await acquire()

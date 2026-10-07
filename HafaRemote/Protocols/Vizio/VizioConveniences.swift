@@ -27,6 +27,27 @@ enum VizioConvenienceCodec {
         else { throw TVConvenienceError.invalidResponse }
         return hash
     }
+    static func isCurrentInput(
+        _ input: TVInputSource, current data: Data, available: [TVInputSource]
+    ) throws -> Bool {
+        let envelope = try object(data)
+        guard let items = envelope["ITEMS"] as? [[String: Any]],
+            let row = items.first(where: { $0["CNAME"] as? String == "current_input" })
+        else { throw TVConvenienceError.invalidResponse }
+        let metadata = row["VALUE"] as? [String: Any]
+        guard
+            let value = row["VALUE"] as? String ?? metadata?["NAME"] as? String ?? metadata?["name"]
+                as? String,
+            RemoteConvenienceValidation.label(value)
+        else { return false }
+        // Firmware may report a returned identifier or its returned display alias.
+        // Ambiguous aliases cannot establish that this particular input is active.
+        let matching = available.filter {
+            $0.value.caseInsensitiveCompare(value) == .orderedSame
+                || $0.name.caseInsensitiveCompare(value) == .orderedSame
+        }
+        return matching.count == 1 && matching[0].value == input.value
+    }
     static func selectInput(_ input: TVInputSource, currentHash: Int) throws -> Data {
         guard currentHash >= 0, RemoteConvenienceValidation.label(input.value) else {
             throw TVConvenienceError.invalidResponse

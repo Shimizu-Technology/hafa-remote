@@ -116,11 +116,15 @@ actor VizioHTTPSClient: VizioHTTPClienting {
         case .selectInput(let input):
             let list = try await self.request(
                 path: VizioConvenienceCodec.inputsPath, method: "GET", authToken: authToken)
-            guard try VizioConvenienceCodec.inputs(from: list).contains(where: { $0.value == input.value })
+            let available = try VizioConvenienceCodec.inputs(from: list)
+            guard let selected = available.first(where: { $0.value == input.value })
             else { throw TVConvenienceError.unavailable }
             let current = try await self.request(
                 path: VizioConvenienceCodec.currentInputPath, method: "GET", authToken: authToken)
             let hash = try VizioConvenienceCodec.currentInputHash(from: current)
+            if try VizioConvenienceCodec.isCurrentInput(selected, current: current, available: available) {
+                return .sent
+            }
             let body = try VizioConvenienceCodec.selectInput(input, currentHash: hash)
             _ = try await self.request(
                 path: VizioConvenienceCodec.currentInputPath, method: "PUT", body: body, authToken: authToken)

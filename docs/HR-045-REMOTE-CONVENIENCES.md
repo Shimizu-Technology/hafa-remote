@@ -45,8 +45,11 @@ Samsung requests `ed.installedApp.get` and parses only bounded, validated app
 records. A socket has one pending query, with a three-second deadline. Timeout or
 cancellation closes app discovery until the next socket, so a late response cannot
 answer a later indistinguishable request. A new socket owns a new query actor. A
-favorite launch refreshes the list and requires its ID and launch type to still
-appear. Service/factory/reset/internal-tool entries are excluded. App support
+favorite launch validates its ID and launch type against the last successful
+catalog for the current socket, querying first only when no catalog exists.
+A failed refresh preserves that catalog for launches but cannot reopen uncorrelated
+queries; late responses cannot replace it. Reconnection starts a fresh catalog.
+Service/factory/reset/internal-tool entries are excluded. App support
 becomes protocol-available only after a valid response, not from a brand name.
 
 Vizio reads the TV's input list, accepts only returned input `NAME` values, and uses
