@@ -736,6 +736,13 @@ actor RemoteSessionController {
             || error as? SonyTLSChannelError == .certificateChanged
         {
             transition(to: .certificateChanged)
+        } else if error as? SonyPairingCoordinatorError == .pairingRejected,
+            connectionTarget?.brand == .sony,
+            connectionTarget?.expectedSavedDeviceID != nil
+        {
+            // A rejected saved credential requires deliberate record-scoped repair.
+            // Keep its expected identity out of the fresh-pairing manual fallback.
+            transition(to: .savedPairingRejected)
         } else if error as? SonyPairingCoordinatorError == .invalidPairingCode
             || error as? SonyPairingCoordinatorError == .pairingRejected
             || error as? VizioPairingCoordinatorError == .pinRejected

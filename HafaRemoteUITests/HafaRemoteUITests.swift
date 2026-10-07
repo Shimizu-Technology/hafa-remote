@@ -73,6 +73,90 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(addressField.waitForExistence(timeout: 2))
     }
 
+    /// Persisted discovery aliases must carry authenticated identity into deliberate saved-TV repair.
+    @MainActor
+    func testUniqueSavedSonyAliasRequiresScopedManagementAfterRejection() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-saved-sony-alias")
+        app.launch()
+        let candidate = app.buttons["discoveredTVButton"]
+        XCTAssertTrue(candidate.waitForExistence(timeout: 5))
+        candidate.tap()
+        assertSavedSonyManagement(app, expectedIdentity: "synthetic-authenticated-sony-a")
+        XCTAssertEqual(app.staticTexts["sonyAssociationConnectionAttempts"].label, "1")
+    }
+
+    /// A collision cannot select or pair implicitly; a deliberate choice retains that record's identity.
+    @MainActor
+    func testCollidingSavedSonyAliasesRequireExplicitChoiceAndCancelDoesNotPair() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-colliding-sony-alias")
+        app.launch()
+        let candidate = app.buttons["discoveredTVButton"]
+        XCTAssertTrue(candidate.waitForExistence(timeout: 5))
+        candidate.tap()
+        let study = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Synthetic Study TV")
+        ).firstMatch
+        let den = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Synthetic Den TV")
+        ).firstMatch
+        XCTAssertTrue(study.waitForExistence(timeout: 2))
+        XCTAssertTrue(den.exists)
+        let sheetCancel = app.sheets.buttons["Cancel"].firstMatch
+        if sheetCancel.exists && sheetCancel.isHittable {
+            sheetCancel.tap()
+        } else {
+            // iOS 26 presents a popover with outside-tap dismissal instead of a Cancel row.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)).tap()
+        }
+        XCTAssertTrue(study.waitForNonExistence(timeout: 2))
+        XCTAssertEqual(app.staticTexts["sonyAssociationConnectionAttempts"].label, "0")
+        XCTAssertEqual(app.staticTexts["sonyAssociationExpectedIdentity"].label, "none")
+        XCTAssertFalse(app.staticTexts["savedTVManagementRecoveryMessage"].exists)
+
+        candidate.tap()
+        XCTAssertTrue(study.waitForExistence(timeout: 2))
+        study.tap()
+        assertSavedSonyManagement(app, expectedIdentity: "synthetic-authenticated-sony-b")
+        XCTAssertEqual(app.staticTexts["sonyAssociationConnectionAttempts"].label, "1")
+    }
+
+    /// The same real Sony rejection error remains a fresh-pair denial without saved identity.
+    @MainActor
+    func testFreshSonyRejectionRetainsManualDiscoveryRecovery() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-fresh-sony-rejection")
+        app.launch()
+        let candidate = app.buttons["discoveredTVButton"]
+        XCTAssertTrue(candidate.waitForExistence(timeout: 5))
+        candidate.tap()
+        let error = app.staticTexts["setupErrorMessage"]
+        XCTAssertTrue(error.waitForExistence(timeout: 3))
+        XCTAssertTrue(error.label.contains("Sony pairing code was not accepted"))
+        XCTAssertTrue(app.buttons["manualSetupButton"].exists)
+        XCTAssertFalse(app.staticTexts["savedTVManagementRecoveryMessage"].exists)
+        XCTAssertEqual(app.staticTexts["sonyAssociationExpectedIdentity"].label, "none")
+        XCTAssertEqual(app.staticTexts["sonyAssociationConnectionAttempts"].label, "1")
+        XCTAssertEqual(app.staticTexts["sonyAssociationAddressBasedAttempts"].label, "0")
+        XCTAssertEqual(app.staticTexts["sonyAssociationForgetAttempts"].label, "0")
+    }
+
+    @MainActor
+    private func assertSavedSonyManagement(_ app: XCUIApplication, expectedIdentity: String) {
+        let instruction = app.staticTexts["savedTVManagementRecoveryMessage"]
+        XCTAssertTrue(instruction.waitForExistence(timeout: 3))
+        XCTAssertTrue(instruction.label.contains("open My TVs"))
+        XCTAssertTrue(instruction.label.contains("forget only this TV"))
+        XCTAssertTrue(app.buttons["closeSetupForSavedTVManagement"].exists)
+        XCTAssertEqual(app.staticTexts["sonyAssociationExpectedIdentity"].label, expectedIdentity)
+        XCTAssertEqual(app.staticTexts["sonyAssociationAddressBasedAttempts"].label, "0")
+        XCTAssertEqual(app.staticTexts["sonyAssociationForgetAttempts"].label, "0")
+        XCTAssertFalse(app.buttons["manualSetupButton"].exists)
+        XCTAssertFalse(app.buttons["forgetPairingButton"].exists)
+        XCTAssertFalse(app.textFields["tvIPAddressField"].exists)
+    }
+
     /// Sony discovery stays address-free and uses the short code shown on the TV.
     @MainActor
     func testSonyPairingCodeFlow() throws {

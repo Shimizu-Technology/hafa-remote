@@ -4,6 +4,23 @@ import Testing
 @testable import HafaRemote
 
 struct RemoteSessionControllerTests {
+    @Test(
+        "Sony saved pairing rejection requires record-scoped repair, while fresh rejection stays denied",
+        arguments: [false, true])
+    func sonyRejectionPreservesSavedContext(isSaved: Bool) async throws {
+        let address = try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.42")
+        let target = TVConnectionTarget(
+            brand: .sony, reportedDeviceID: "synthetic-sony-advertisement", address: address,
+            controlPort: 6466,
+            expectedSavedDeviceID: isSaved ? "synthetic-authenticated-sony" : nil,
+            discoveryIdentifier: "synthetic-sony-advertisement"
+        )
+        let controller = RemoteSessionController(driver: RejectingSonyPairingContextFixture())
+        await controller.connect(to: target)
+        #expect(await controller.state == (isSaved ? .savedPairingRejected : .denied))
+        await controller.disconnect()
+    }
+
     @Test("Automatic reconnect promotes first-pair discovery into a saved authenticated target")
     func reconnectPinsFirstPairedIdentity() async throws {
         let address = try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.43")
@@ -2843,4 +2860,23 @@ private func waitUntil(
         await Task.yield()
     }
     Issue.record("Timed out waiting for deterministic test state.", sourceLocation: sourceLocation)
+}
+
+private actor RejectingSonyPairingContextFixture: RemoteSessionDriving {
+    nonisolated var brand: TVBrand { .sony }
+    func connect(
+        to target: TVConnectionTarget,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> ConnectedTV {
+        throw SonyPairingCoordinatorError.pairingRejected
+    }
+    func connect(
+        addressText: String,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> ConnectedTV {
+        throw SonyPairingCoordinatorError.pairingRejected
+    }
+    func send(_ command: RemoteCommand) {}
+    func forget(addressText: String) {}
+    func disconnect() {}
 }
