@@ -4,6 +4,236 @@ import Testing
 @testable import HafaRemote
 
 struct RemoteConvenienceTests {
+    @Test("Missing Sony protocol model uses a generic model, separate from display name")
+    func genericSonyModelFallback() async throws {
+        let info = SonyProtobuf.stringField(2, "Sony")
+        let configure = SonyProtobuf.bytesField(
+            1, SonyProtobuf.varintField(1, 2) + SonyProtobuf.bytesField(2, info))
+        let power = SonyProtobuf.bytesField(40, SonyProtobuf.varintField(1, 1))
+        let channel = ConvenienceSonyChannel(messages: [configure, power])
+        let device = try await SonyRemoteHandshake.run(
+            on: channel, fallbackModelName: "Sony Google TV", timeout: .seconds(1), maximumMessages: 8)
+        #expect(device.model == "Sony Google TV")
+    }
+
+    @Test("Refreshing focus cannot renew expired Sony IME counters")
+    func focusDoesNotRefreshCounters() throws {
+        var focus = SonyIMEFocus()
+        let start = ContinuousClock.now
+        focus.focus(fieldCounter: 1, at: start)
+        focus.counters(ime: 2, field: 1, at: start)
+        let later = start.advanced(by: .seconds(16))
+        focus.focus(fieldCounter: 1, at: later)
+        #expect(throws: TVConvenienceError.textFieldNotFocused) { try focus.snapshot(at: later) }
+        focus.counters(ime: 3, field: 1, at: later)
+        #expect(try focus.snapshot(at: later).ime == 3)
+        focus.focus(fieldCounter: 1, at: start)
+        #expect(throws: TVConvenienceError.textFieldNotFocused) { try focus.snapshot(at: later) }
+    }
+
+    @MainActor
+    @Test("Sony keyboard failed and cancelled writes leave negotiation and saved preference unchanged")
+    func transactionalKeyboardFailure() async throws {
+        let suite = "synthetic-keyboard-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = TVConveniencePreferences(defaults: defaults)
+        let channel = ConvenienceSonyChannel()
+        let coordinator = SonyPairingCoordinator(
+            controlChannel: channel, keyboardPreference: { preferences.keyboardEnabled(for: $0) })
+        let tv = try syntheticSony("synthetic-a")
+        try await coordinator.installSyntheticSessionForTesting(tv, reportedFeatures: 615)
+        await coordinator.focusSyntheticFieldForTesting()
+        await channel.setBehavior(.fail)
+        do {
+            _ = try await coordinator.convenience(.setKeyboardEnabled(false))
+            Issue.record("Expected failed configuration write")
+        } catch { #expect(error as? SonyTLSChannelError == .unavailable) }
+        let failed = await coordinator.syntheticKeyboardStateForTesting()
+        #expect(failed.enabled && failed.features == 615 && failed.hasFocus)
+        #expect(preferences.keyboardEnabled(for: tv.stableDeviceKey))
+        try await coordinator.installSyntheticSessionForTesting(tv, reportedFeatures: 615)
+        await coordinator.focusSyntheticFieldForTesting()
+        await channel.setBehavior(.stall)
+        let task = Task { try await coordinator.convenience(.setKeyboardEnabled(false)) }
+        await channel.waitUntilWriteStarted()
+        task.cancel()
+        if case .success = await task.result { Issue.record("Cancelled configuration must not commit") }
+        let cancelled = await coordinator.syntheticKeyboardStateForTesting()
+        #expect(cancelled.enabled && cancelled.features == 615 && cancelled.hasFocus)
+        #expect(preferences.keyboardEnabled(for: tv.stableDeviceKey))
+        try await coordinator.installSyntheticSessionForTesting(tv, reportedFeatures: 615)
+        await channel.setBehavior(.stall)
+        let stale = Task { try await coordinator.convenience(.setKeyboardEnabled(false)) }
+        await channel.waitUntilWriteStarted()
+        let replacement = try syntheticSony("synthetic-b")
+        try await coordinator.installSyntheticSessionForTesting(replacement, reportedFeatures: 615)
+        await channel.setBehavior(.succeed)
+        stale.cancel()
+        _ = await stale.result
+        #expect(await coordinator.syntheticKeyboardStateForTesting().features == 615)
+        try await coordinator.checkConnection()
+        await coordinator.disconnect()
+    }
+
+    @MainActor
+    @Test("Each Sony connection reloads its own saved keyboard preference")
+    func perTVKeyboardPreference() async throws {
+        let suite = "synthetic-keyboard-reconnect-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = TVConveniencePreferences(defaults: defaults)
+        let a = try syntheticSony("synthetic-a")
+        let b = try syntheticSony("synthetic-b")
+        try preferences.setKeyboardEnabled(false, for: a.stableDeviceKey)
+        let coordinator = SonyPairingCoordinator(
+            controlChannel: ConvenienceSonyChannel(),
+            keyboardPreference: { preferences.keyboardEnabled(for: $0) })
+        try await coordinator.installSyntheticSessionForTesting(a, reportedFeatures: 615)
+        #expect(await coordinator.syntheticKeyboardStateForTesting().features == 611)
+        try await coordinator.installSyntheticSessionForTesting(b, reportedFeatures: 615)
+        #expect(await coordinator.syntheticKeyboardStateForTesting().features == 615)
+        try await coordinator.installSyntheticSessionForTesting(a, reportedFeatures: 615)
+        #expect(await coordinator.syntheticKeyboardStateForTesting().features == 611)
+        await coordinator.disconnect()
+    }
+
+    @Test(
+        "Cancelled Sony state-changing requests invalidate transport connectivity",
+        arguments: [
+            TVConvenienceRequest.launch(try! TVAppShortcut(name: "YouTube", target: .sony(.youtube))),
+            .setKeyboardEnabled(false),
+        ])
+    func cancelledSonyRequestRecovers(_ request: TVConvenienceRequest) async throws {
+        let driver = ConvenienceSonySessionDriver()
+        let controller = RemoteSessionController(driver: driver)
+        let target = TVConnectionTarget(
+            brand: .sony, reportedDeviceID: "synthetic-a",
+            address: try .init(documentationAddressForTesting: "192.0.2.10"), controlPort: 6466)
+        await controller.connect(to: target)
+        await driver.channel.setBehavior(.stall)
+        let task = Task { try await controller.convenience(request, expectedDeviceKey: "sony:synthetic-a") }
+        await driver.channel.waitUntilWriteStarted()
+        task.cancel()
+        if case .success = await task.result {
+            Issue.record("Cancelled state-changing request must not succeed")
+        }
+        if case .connected = await controller.state {
+            Issue.record("Cancelled TLS write cannot remain connected")
+        }
+        #expect(await driver.disconnectCount > 0)
+        do {
+            try await controller.send(.right, expectedDeviceKey: "sony:synthetic-a")
+            Issue.record("Ordinary command must wait for recovery")
+        } catch {}
+        await controller.disconnect()
+    }
+
+    @Test(
+        "Timed-out Sony writes recover instead of preserving connected",
+        arguments: [
+            TVConvenienceRequest.launch(try! TVAppShortcut(name: "YouTube", target: .sony(.youtube))),
+            .setKeyboardEnabled(false),
+        ])
+    func timedOutSonyRequestRecovers(_ request: TVConvenienceRequest) async throws {
+        let driver = ConvenienceSonySessionDriver()
+        let controller = RemoteSessionController(
+            driver: driver, clock: StartedWriteTimeoutClock(channel: driver.channel))
+        let target = TVConnectionTarget(
+            brand: .sony, reportedDeviceID: "synthetic-a",
+            address: try .init(documentationAddressForTesting: "192.0.2.10"), controlPort: 6466)
+        await controller.connect(to: target)
+        await driver.channel.setBehavior(.stall)
+        do {
+            _ = try await controller.convenience(request, expectedDeviceKey: "sony:synthetic-a")
+            Issue.record("Expected bounded write timeout")
+        } catch { #expect(error as? RemoteSessionControllerError == .timedOut(.send)) }
+        if case .connected = await controller.state {
+            Issue.record("Timed-out TLS write cannot remain connected")
+        }
+        #expect(await driver.disconnectCount > 0)
+        await controller.disconnect()
+    }
+
+    @Test("Cancelling an unexecuted FIFO write does not tear down a healthy current session")
+    func cancelledQueueWaiterPreservesSession() async throws {
+        let driver = ConvenienceTestDriver()
+        let controller = RemoteSessionController(driver: driver)
+        await controller.connect(to: try target("synthetic-a"))
+        await driver.blockNextCommand()
+        let first = Task { try await controller.send(.up, expectedDeviceKey: "samsung:synthetic-a") }
+        await driver.waitUntilCommandBlocks()
+        let disconnects = await driver.disconnectCount
+        let app = try TVAppShortcut(
+            name: "Synthetic", target: .samsung(appID: "synthetic-app", deepLink: true))
+        let queued = Task {
+            try await controller.convenience(.launch(app), expectedDeviceKey: "samsung:synthetic-a")
+        }
+        for _ in 0..<10 { await Task.yield() }
+        queued.cancel()
+        _ = await queued.result
+        if case .connected = await controller.state {
+        } else {
+            Issue.record("A cancelled FIFO waiter must preserve transport")
+        }
+        #expect(await driver.disconnectCount == disconnects)
+        #expect(await driver.requestCount == 0)
+        first.cancel()
+        _ = await first.result
+        await controller.disconnect()
+    }
+
+    @MainActor
+    @Test("A suspended old power-off cannot disconnect or clear the newly selected TV")
+    func oldPowerOffDoesNotTearDownReplacement() async throws {
+        let driver = ConvenienceTestDriver()
+        let controller = RemoteSessionController(driver: driver)
+        let store = RemoteSessionStore(controller: controller)
+        await store.connect(to: try target("synthetic-a"))
+        await driver.blockNextCommand()
+        let oldPower = Task { try await store.powerOffSelectedTV(expectedDeviceKey: "samsung:synthetic-a") }
+        await driver.waitUntilCommandBlocks()
+        await store.connect(to: try target("synthetic-b"))
+        let disconnects = await driver.disconnectCount
+        if case .success = await oldPower.result { Issue.record("Stale power-off must not succeed") }
+        for _ in 0..<10 { await Task.yield() }
+        #expect(store.connectedTV?.stableDeviceKey == "samsung:synthetic-b")
+        #expect(store.lastConnectedTV?.stableDeviceKey == "samsung:synthetic-b")
+        #expect(await driver.disconnectCount == disconnects)
+        await store.disconnect()
+    }
+
+    @MainActor
+    @Test("Rebound Sony aliases wait for authenticated identity and stale wake guards reject connection")
+    func reboundIdentityAndWakeOwnership() async throws {
+        let driver = ConvenienceTestDriver()
+        let controller = RemoteSessionController(driver: driver)
+        let store = RemoteSessionStore(controller: controller)
+        let address = try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.10")
+        let rebound = TVConnectionTarget(
+            brand: .samsung, reportedDeviceID: "synthetic-alias", address: address, controlPort: 8002,
+            expectedSavedDeviceID: "synthetic-a")
+        let result = try await store.connectAndWait(to: rebound, timeout: .seconds(1))
+        #expect(result.stableDeviceKey == "samsung:synthetic-a")
+        await store.connect(to: try target("synthetic-b"))
+        do {
+            _ = try await store.connectAndWait(to: rebound, timeout: .seconds(1), isStillSelected: { false })
+            Issue.record("Stale wake must not restart A")
+        } catch {}
+        if case .connected(let current) = await controller.state {
+            #expect(current.stableDeviceKey == "samsung:synthetic-b")
+        } else {
+            Issue.record("Stale wake must retain B")
+        }
+        await store.disconnect()
+    }
+
+    private func syntheticSony(_ id: String) throws -> ConnectedTV {
+        ConnectedTV(
+            brand: .sony, reportedDeviceID: id,
+            address: try .init(documentationAddressForTesting: "192.0.2.10"), modelName: "Synthetic Sony",
+            firmwareVersion: nil, powerState: .on)
+    }
     @Test("Swipes produce one dominant-axis D-pad action and reject jitter")
     func swipeMapping() {
         #expect(RemoteSwipeMapping.command(horizontal: 30, vertical: 3) == .right)
@@ -293,6 +523,7 @@ private actor ConvenienceTestDriver: RemoteSessionDriving {
     nonisolated let brand = TVBrand.samsung
     private(set) var commandCount = 0
     private(set) var requestCount = 0
+    private(set) var disconnectCount = 0
     private var shouldBlock = false
     private var blocked = false
     private var blockStarted: CheckedContinuation<Void, Never>?
@@ -310,7 +541,8 @@ private actor ConvenienceTestDriver: RemoteSessionDriving {
         to target: TVConnectionTarget, onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> ConnectedTV {
         ConnectedTV(
-            reportedDeviceID: target.reportedDeviceID, address: target.address, modelName: "Synthetic",
+            reportedDeviceID: target.expectedSavedDeviceID ?? target.reportedDeviceID,
+            address: target.address, modelName: "Synthetic",
             firmwareVersion: nil)
     }
     func send(_ command: RemoteCommand) async throws {
@@ -328,7 +560,7 @@ private actor ConvenienceTestDriver: RemoteSessionDriving {
         requestCount += 1
         return .apps([])
     }
-    func disconnect() {}
+    func disconnect() { disconnectCount += 1 }
     func forget(addressText: String) {}
 }
 
@@ -408,5 +640,103 @@ private actor DelayedConvenienceViewGate {
         let pending = waiters
         waiters = []
         for waiter in pending { waiter.resume() }
+    }
+}
+
+private actor ConvenienceSonyChannel: SonyTLSChanneling {
+    enum Behavior { case succeed, fail, stall }
+    private var messages: [Data]
+    init(messages: [Data] = []) { self.messages = messages }
+    private var behavior: Behavior = .succeed
+    private var started = false
+    private var startedWaiter: CheckedContinuation<Void, Never>?
+    private var closed = false
+    private var connectionGeneration = UUID()
+    func setBehavior(_ value: Behavior) {
+        behavior = value
+        connectionGeneration = UUID()
+        started = false
+        closed = false
+    }
+    func waitUntilWriteStarted() async {
+        if started { return }
+        await withCheckedContinuation { startedWaiter = $0 }
+    }
+    func connect(
+        address: PrivateIPv4Address, port: UInt16, identity: SonyClientIdentityReference,
+        trustMode: SonyTLSTrustMode
+    ) async throws -> SonyTLSPeer { throw SonyTLSChannelError.unavailable }
+    func send(_ message: Data) async throws {
+        guard !closed else { throw SonyTLSChannelError.connectionClosed }
+        started = true
+        startedWaiter?.resume()
+        startedWaiter = nil
+        switch behavior {
+        case .succeed: return
+        case .fail: throw SonyTLSChannelError.unavailable
+        case .stall:
+            let ownerGeneration = connectionGeneration
+            do { try await Task.sleep(for: .seconds(60)) } catch {
+                if connectionGeneration == ownerGeneration { closed = true }
+                throw CancellationError()
+            }
+        }
+    }
+    func receive() async throws -> Data {
+        guard !messages.isEmpty else { throw SonyTLSChannelError.connectionClosed }
+        return messages.removeFirst()
+    }
+    func checkConnection() throws { if closed { throw SonyTLSChannelError.connectionClosed } }
+    func disconnect() {
+        connectionGeneration = UUID()
+        closed = true
+    }
+}
+
+private actor ConvenienceSonySessionDriver: RemoteSessionDriving {
+    nonisolated let brand = TVBrand.sony
+    let channel = ConvenienceSonyChannel()
+    private var coordinator: SonyPairingCoordinator?
+    private(set) var disconnectCount = 0
+    func connect(addressText: String, onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void)
+        async throws -> ConnectedTV
+    { throw SonyTLSChannelError.unavailable }
+    func connect(
+        to target: TVConnectionTarget, onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> ConnectedTV {
+        let tv = ConnectedTV(
+            brand: .sony, reportedDeviceID: target.reportedDeviceID, address: target.address,
+            modelName: "Synthetic", firmwareVersion: nil, powerState: .on)
+        let coordinator = SonyPairingCoordinator(controlChannel: channel, keyboardPreference: { _ in true })
+        try await coordinator.installSyntheticSessionForTesting(tv, reportedFeatures: 615)
+        await channel.setBehavior(.succeed)
+        self.coordinator = coordinator
+        return tv
+    }
+    func send(_ command: RemoteCommand) async throws {
+        guard let coordinator else { throw SonyTLSChannelError.connectionClosed }
+        try await coordinator.send(command)
+    }
+    func convenience(_ request: TVConvenienceRequest) async throws -> TVConvenienceResponse {
+        guard let coordinator else { throw SonyTLSChannelError.connectionClosed }
+        return try await coordinator.convenience(request)
+    }
+    func disconnect() async {
+        disconnectCount += 1
+        await coordinator?.disconnect()
+        coordinator = nil
+    }
+    func forget(addressText: String) {}
+}
+
+private struct StartedWriteTimeoutClock: RemoteSessionClock {
+    let channel: ConvenienceSonyChannel
+    func sleep(for duration: Duration) async throws {
+        if duration == .seconds(10) {
+            await channel.waitUntilWriteStarted()
+            try await Task.sleep(for: .milliseconds(1))
+        } else {
+            try await Task.sleep(for: duration)
+        }
     }
 }

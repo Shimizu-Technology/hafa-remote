@@ -83,6 +83,7 @@ final class RemoteSessionStore {
     }
 
     func connect(to target: TVConnectionTarget) async {
+        guard !Task.isCancelled else { return }
         hasInitiatedConnection = true
         projectionRevision &+= 1
         acceptsConnectedTVUpdates = true
@@ -131,15 +132,22 @@ final class RemoteSessionStore {
     /// Connects to a saved brand-scoped target and ignores any stale state from another TV.
     func connectAndWait(
         to target: TVConnectionTarget,
-        timeout: Duration
+        timeout: Duration,
+        isStillSelected: @escaping @MainActor @Sendable () -> Bool = { true }
     ) async throws -> ConnectedTV {
+        try Task.checkCancellation()
+        guard isStillSelected() else { throw CancellationError() }
         let states = await controller.states()
+        try Task.checkCancellation()
+        guard isStillSelected() else { throw CancellationError() }
         let connectionWaitClock = connectionWaitClock
         let expectedDeviceKey =
             "\(target.brand.rawValue):\(target.expectedSavedDeviceID ?? target.reportedDeviceID)"
 
         return try await withThrowingTaskGroup(of: ConnectedTV?.self) { group in
             group.addTask {
+                try Task.checkCancellation()
+                guard await isStillSelected() else { throw CancellationError() }
                 await self.connect(to: target)
                 try Task.checkCancellation()
                 return nil
@@ -147,6 +155,7 @@ final class RemoteSessionStore {
             group.addTask {
                 for await state in states {
                     try Task.checkCancellation()
+                    guard await isStillSelected() else { throw CancellationError() }
                     if case .connected(let tv) = state, tv.stableDeviceKey == expectedDeviceKey {
                         return tv
                     }
@@ -187,6 +196,20 @@ final class RemoteSessionStore {
 
     func submitPairingCode(_ code: String) async throws {
         try await controller.submitPairingCode(code)
+    }
+
+    func powerOffSelectedTV(expectedDeviceKey: String) async throws {
+        let revision = projectionRevision
+        let didDisconnect = try await controller.powerOffAndDisconnect(expectedDeviceKey: expectedDeviceKey)
+        try Task.checkCancellation()
+        guard didDisconnect, projectionRevision == revision,
+            connectedTV == nil || connectedTV?.stableDeviceKey == expectedDeviceKey
+        else { throw CancellationError() }
+        projectionRevision &+= 1
+        acceptsConnectedTVUpdates = false
+        if lastConnectedTV?.stableDeviceKey == expectedDeviceKey {
+            lastConnectedTV = lastConnectedTV?.forgettingPowerObservation
+        }
     }
 
     func disconnect(clearRememberedTV: Bool = true) async {

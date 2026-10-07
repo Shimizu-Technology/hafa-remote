@@ -4,25 +4,29 @@ struct SonyIMEFocus: Equatable, Sendable {
     private(set) var fieldCounter: UInt64?
     private(set) var imeCounter: UInt64?
     private(set) var countersField: UInt64?
-    private var refreshedAt: ContinuousClock.Instant?
+    private var focusedAt: ContinuousClock.Instant?
+    private var countersAt: ContinuousClock.Instant?
 
-    mutating func focus(fieldCounter: UInt64?) {
+    mutating func focus(fieldCounter: UInt64?, at now: ContinuousClock.Instant = .now) {
         self.fieldCounter = fieldCounter
         if fieldCounter != countersField {
             imeCounter = nil
             countersField = nil
+            countersAt = nil
         }
-        refreshedAt = fieldCounter == nil ? nil : .now
+        focusedAt = fieldCounter == nil ? nil : now
     }
-    mutating func counters(ime: UInt64, field: UInt64) {
+    mutating func counters(ime: UInt64, field: UInt64, at now: ContinuousClock.Instant = .now) {
         imeCounter = ime
         countersField = field
-        refreshedAt = .now
+        countersAt = now
     }
     mutating func clear() { self = Self() }
     func snapshot(at now: ContinuousClock.Instant = .now) throws -> (ime: UInt64, field: UInt64) {
         guard let fieldCounter, let imeCounter, countersField == fieldCounter,
-            let refreshedAt, refreshedAt.duration(to: now) < .seconds(15)
+            let focusedAt, let countersAt,
+            focusedAt.duration(to: now) >= .zero, focusedAt.duration(to: now) < .seconds(15),
+            countersAt.duration(to: now) >= .zero, countersAt.duration(to: now) < .seconds(15)
         else { throw TVConvenienceError.textFieldNotFocused }
         return (imeCounter, fieldCounter)
     }

@@ -47,14 +47,26 @@ inventory and never open a browser or perform an iPhone HTTP request. The local
 launch request passes the selected link to the TV. There is no arbitrary intent,
 URL, package action, or settings shortcut.
 
-Sony text requires a focused field and matching IME/field counters refreshed
-within 15 seconds. Incoming text, label, and package content is discarded. Text
+Sony text requires a focused field and matching IME/field counters each refreshed
+within 15 seconds. Focus and counter timestamps are independent: a repeated focus
+event cannot renew expired counters, and a counter update cannot renew old focus.
+Incoming text, label, and package content is discarded. Text
 selection indices count UTF-16 units. Navigation, power-off, standby, disconnect,
 reconfiguration, and a completed text send clear focus evidence. After sending,
 focus must be established again rather than reusing old counters. A per-TV
 keyboard preference is applied during connection and can be disabled if the TV's
 onscreen keyboard becomes unavailable. Missing/stale focus produces a useful
 focus-field message without declaring the whole remote disconnected.
+
+A keyboard configuration is proposed without changing local state, written through
+the serialized stream, and committed only after successful delivery and current
+generation/identity checks. Failed or cancelled writes preserve the previous
+preference and feature mask. Saved UI preferences change only after the current
+controller operation returns successfully. A cancelled state-changing write can
+cancel Sony's whole TLS connection, so the controller tears down that generation
+and reconnects instead of retaining a connected claim. Unsupported optional reads
+remain soft failures. Missing Sony protocol model names use the static label
+Sony Google TV; household display names never become diagnostic model data.
 
 ## Ownership and interaction
 
@@ -63,6 +75,22 @@ plus authenticated stable TV identity. Up to 12 favorites per TV and 100 TV
 preference records are accepted. Forgetting a saved TV removes its preferences.
 No pairing credential is stored with a favorite. Launch requests are described as
 sent; display execution is never asserted.
+
+The preference blob uses the app's standard UserDefaults domain, rather than an
+app group, global domain, or cloud preference store. It contains noncredential
+local metadata: app names/launch descriptors, brand-scoped stable TV association,
+and a keyboard toggle. It uses the iOS app sandbox and system storage protection;
+no custom encryption or file-protection class is claimed. Ordinary device backups
+may include these preferences. Pairing tokens, private keys, raw certificates,
+addresses, MACs, Wi-Fi names, entered text, and dynamic playback messages are never
+written to the blob. Stable associations stay local and are omitted from reports.
+
+The app manifest declares UserDefaults with own-app reason CA92.1. The control
+extension remains stateless with no required-reason API declaration; the validator
+checks them separately. This declaration covers local API use and is separate
+from App Store Connect's Data Not Collected answer. Apple describes CA92.1 for
+reading/writing data accessible only to the app itself, excluding other apps' and
+system-written data. [Apple required-reason documentation](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitypereasons?language=objc).
 
 The remote offers explicit Buttons and Swipe modes. A completed swipe must exceed
 24 points and have a dominant axis; diagonal/jitter input is ignored. One swipe
@@ -73,8 +101,12 @@ There is no mouse protocol, macro, gesture repeat queue, or long-held TV key.
 View tasks are cancelled on dismissal, backgrounding, and disconnect. Home actions
 carry their captured stable TV key. The controller checks both expected identity
 and its connection generation immediately before queued execution, and rejects
-stale results after suspension. Optional-feature errors preserve ordinary remote
-controls. Convenience operations have a ten-second outer deadline; normal command
+stale results after suspension. Power-off sends and conditional teardown share one
+controller ownership generation; late A teardown cannot close or clear B. Wake
+operations recheck selection revision/cancellation before reconnecting and send
+power-on with a captured stable key. Rebound aliases wait for expected authenticated
+identity. Unsupported optional-feature errors preserve ordinary remote controls;
+uncertain state-changing writes recover the transport. Convenience operations have a ten-second outer deadline; normal command
 deadlines remain unchanged.
 
 Manual setup includes an explicit brand chooser: Samsung secure port 8002, Sony
@@ -95,7 +127,10 @@ privacy/ownership, bounded Samsung queries, Vizio fresh-hash request order, dyna
 payload rejection, Sony Unicode/focus/counter behavior, manual brand routing,
 delayed view actions, and queued requests across TV switching. Runtime test results
 passed in an isolated macOS 14 Swift package: all 13 new tests passed using the
-unchanged core and protocol sources. The package included the real controller and
+unchanged core and protocol sources. After material review fixes, all 22 focused
+tests passed, including failed/cancelled configuration writes, independent IME
+freshness, timeout recovery, stale power-off/store projection, alias identity,
+and stale wake guards. The package included the real controller and
 HTTPS client; the Vizio transaction used an injected URLProtocol and RFC 5737
 address, with no TV contact. The temporary package was removed. These results do
 not replace the integrated iPhone simulator gate or real UI checks.

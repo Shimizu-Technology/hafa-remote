@@ -103,6 +103,13 @@ enum TVConvenienceRequest: Equatable, Sendable {
     case launch(TVAppShortcut)
     case currentApp
     case setKeyboardEnabled(Bool)
+
+    var changesTVState: Bool {
+        switch self {
+        case .launch, .selectInput, .setKeyboardEnabled: true
+        case .apps, .inputs, .currentApp: false
+        }
+    }
 }
 
 enum TVConvenienceResponse: Equatable, Sendable {

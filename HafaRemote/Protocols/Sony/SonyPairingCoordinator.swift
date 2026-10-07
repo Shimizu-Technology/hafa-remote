@@ -32,6 +32,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     private let pairingChannel: any SonyTLSChanneling
     private let controlChannel: any SonyTLSChanneling
     private let writeSerializer = SonyWriteSerializer()
+    private let keyboardPreference: @MainActor @Sendable (String) -> Bool
 
     private let observationBroadcaster = TVSessionObservationBroadcaster()
     private var activeTV: ConnectedTV?
@@ -50,12 +51,16 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         identityStore: SonyClientIdentityStore = SonyClientIdentityStore(),
         credentialStore: any SonyPairingCredentialStoring = KeychainSonyPairingCredentialStore(),
         pairingChannel: any SonyTLSChanneling = SonyTLSChannel(),
-        controlChannel: any SonyTLSChanneling = SonyTLSChannel()
+        controlChannel: any SonyTLSChanneling = SonyTLSChannel(),
+        keyboardPreference: @escaping @MainActor @Sendable (String) -> Bool = {
+            TVConveniencePreferences.shared.keyboardEnabled(for: $0)
+        }
     ) {
         self.identityStore = identityStore
         self.credentialStore = credentialStore
         self.pairingChannel = pairingChannel
         self.controlChannel = controlChannel
+        self.keyboardPreference = keyboardPreference
     }
 
     func connect(
@@ -101,6 +106,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     }
 
     func send(_ command: RemoteCommand) async throws {
+        guard isRemoteSessionAlive else { throw SonyTLSChannelError.connectionClosed }
         guard activeTV?.capabilities.contains(command.requiredCapability) == true else {
             throw TVDriverError.unsupportedCommand
         }
@@ -151,27 +157,82 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             }
             return .sent
         case .setKeyboardEnabled(let enabled):
-            keyboardEnabled = enabled
-            imeFocus.clear()
-            negotiatedFeatures = reportedFeatures & requestedFeatures
-            let features = negotiatedFeatures
             let generation = sessionGeneration
-            let message = SonyRemoteProtocolCodec.configurationResponse(negotiatedFeatures: features)
             try await writeSerializer.perform { [weak self] in
                 guard let self else { throw CancellationError() }
-                try await self.writeConvenience(message, generation: generation)
+                try await self.configureKeyboard(enabled, generation: generation)
             }
-            await publishObservation(powerState: activeTV?.powerState ?? .unknown, generation: generation)
             return .sent
         default: throw TVConvenienceError.unavailable
         }
     }
 
+    private func configureKeyboard(_ enabled: Bool, generation: UUID) async throws {
+        try Task.checkCancellation()
+        guard sessionGeneration == generation, isRemoteSessionAlive, let television = activeTV else {
+            throw CancellationError()
+        }
+        let serverFeatures = reportedFeatures
+        let proposedFeatures = serverFeatures & Self.requestedFeatures(keyboardEnabled: enabled)
+        let message = SonyRemoteProtocolCodec.configurationResponse(negotiatedFeatures: proposedFeatures)
+        try await writeConvenience(message, generation: generation)
+        try Task.checkCancellation()
+        guard sessionGeneration == generation, activeTV?.stableDeviceKey == television.stableDeviceKey,
+            reportedFeatures == serverFeatures, isRemoteSessionAlive
+        else { throw CancellationError() }
+        // Only a successfully written, still-owned transaction changes local negotiation.
+        keyboardEnabled = enabled
+        negotiatedFeatures = proposedFeatures
+        imeFocus.clear()
+        await publishObservation(powerState: television.powerState, generation: generation)
+        try Task.checkCancellation()
+        guard sessionGeneration == generation else { throw CancellationError() }
+    }
+
     private func writeConvenience(_ message: Data, generation: UUID) async throws {
         try Task.checkCancellation()
         guard sessionGeneration == generation, isRemoteSessionAlive else { throw CancellationError() }
-        try await controlChannel.send(message)
+        do {
+            try await controlChannel.send(message)
+            try Task.checkCancellation()
+            guard sessionGeneration == generation else { throw CancellationError() }
+        } catch {
+            if sessionGeneration == generation { isRemoteSessionAlive = false }
+            if Task.isCancelled || error is CancellationError { throw CancellationError() }
+            throw SonyTLSChannelError.unavailable
+        }
     }
+
+    private static func requestedFeatures(keyboardEnabled: Bool) -> UInt64 {
+        SonyRemoteProtocolCodec.requestedFeatures & (keyboardEnabled ? UInt64.max : ~UInt64(4))
+    }
+
+    #if DEBUG
+        /// Installs only synthetic injected-channel sessions, without pairing/network/keychain access.
+        func installSyntheticSessionForTesting(_ television: ConnectedTV, reportedFeatures: UInt64)
+            async throws
+        {
+            await disconnect()
+            let generation = sessionGeneration
+            let enabled = await keyboardPreference(television.stableDeviceKey)
+            try Task.checkCancellation()
+            guard sessionGeneration == generation, television.brand == .sony else {
+                throw CancellationError()
+            }
+            keyboardEnabled = enabled
+            self.reportedFeatures = reportedFeatures
+            negotiatedFeatures = reportedFeatures & Self.requestedFeatures(keyboardEnabled: enabled)
+            activeTV = television
+            isRemoteSessionAlive = true
+        }
+        func focusSyntheticFieldForTesting() {
+            imeFocus.focus(fieldCounter: 1)
+            imeFocus.counters(ime: 1, field: 1)
+        }
+        func syntheticKeyboardStateForTesting() -> (enabled: Bool, features: UInt64, hasFocus: Bool) {
+            (keyboardEnabled, negotiatedFeatures, (try? imeFocus.snapshot()) != nil)
+        }
+    #endif
 
     func checkConnection() async throws {
         guard isRemoteSessionAlive else {
@@ -208,6 +269,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         activeTV = nil
         negotiatedFeatures = 0
         reportedFeatures = 0
+        keyboardEnabled = true
         imeFocus.clear()
         await observationBroadcaster.reset()
         await pairingChannel.disconnect()
@@ -330,15 +392,15 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             throw SonyPairingCoordinatorError.certificateChanged
         }
 
-        keyboardEnabled = await MainActor.run {
-            TVConveniencePreferences.shared.keyboardEnabled(for: "sony:\(credential.reportedDeviceID)")
-        }
+        let preferredKeyboard = await keyboardPreference("sony:\(credential.reportedDeviceID)")
+        try Task.checkCancellation()
+        guard sessionGeneration == connectionGeneration else { throw CancellationError() }
         let device = try await SonyRemoteHandshake.run(
             on: controlChannel,
-            fallbackModelName: peer.displayName,
+            fallbackModelName: "Sony Google TV",
             timeout: Self.remoteHandshakeTimeout,
             maximumMessages: Self.maximumRemoteHandshakeMessages,
-            requestedFeatures: requestedFeatures
+            requestedFeatures: Self.requestedFeatures(keyboardEnabled: preferredKeyboard)
         )
 
         try Task.checkCancellation()
@@ -358,6 +420,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             )
         )
         activeTV = television
+        keyboardEnabled = preferredKeyboard
         negotiatedFeatures = device.negotiatedFeatures
         reportedFeatures = device.reportedFeatures
         await observationBroadcaster.publish(

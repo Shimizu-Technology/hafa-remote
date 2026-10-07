@@ -230,6 +230,7 @@ actor RemoteSessionController {
     }
 
     func connect(to target: TVConnectionTarget) async {
+        guard !Task.isCancelled else { return }
         guard driver.supports(target.brand) else {
             generation = UUID()
             targetAddressText = nil
@@ -282,7 +283,7 @@ actor RemoteSessionController {
         {
             throw TVDriverError.unsupportedCommand
         }
-        try await performSend { [weak self] in
+        try await performSend(recoverCancelledWrite: true) { [weak self] in
             guard let self else { throw CancellationError() }
             try await self.executeCommand(
                 command, expectedDeviceKey: expectedDeviceKey, generation: requestedGeneration)
@@ -304,7 +305,7 @@ actor RemoteSessionController {
 
     func sendText(_ input: RemoteTextInput, expectedDeviceKey: String? = nil) async throws {
         let requestedGeneration = generation
-        try await performSend { [weak self] in
+        try await performSend(recoverCancelledWrite: true) { [weak self] in
             guard let self else { throw CancellationError() }
             try await self.executeText(
                 input, expectedDeviceKey: expectedDeviceKey, generation: requestedGeneration)
@@ -329,7 +330,10 @@ actor RemoteSessionController {
         }
         let requestedGeneration = generation
         let box = TVConvenienceResultBox()
-        try await performSend(optionalFeature: true, timeout: .seconds(10)) { [weak self] in
+        try await performSend(
+            optionalFeature: !request.changesTVState, recoverCancelledWrite: request.changesTVState,
+            timeout: .seconds(10)
+        ) { [weak self] in
             guard let self else { throw CancellationError() }
             let response = try await self.executeConvenience(
                 request, expectedDeviceKey: expectedDeviceKey, generation: requestedGeneration)
@@ -381,6 +385,7 @@ actor RemoteSessionController {
 
     private func performSend(
         optionalFeature: Bool = false,
+        recoverCancelledWrite: Bool = false,
         timeout requestedTimeout: Duration? = nil,
         _ operation: @escaping @Sendable () async throws -> Void
     ) async throws {
@@ -401,6 +406,7 @@ actor RemoteSessionController {
         let commandSerializer = commandSerializer
         let clock = clock
         let timeout = requestedTimeout ?? configuration.commandTimeout
+        let execution = RemoteSessionCommandExecution()
         let task = Task {
             try await RemoteSessionTimeout.run(
                 operation: .send,
@@ -408,6 +414,7 @@ actor RemoteSessionController {
                 clock: clock
             ) {
                 try await commandSerializer.perform {
+                    execution.begin()
                     try await operation()
                 }
             }
@@ -442,6 +449,16 @@ actor RemoteSessionController {
                 // A local capability rejection says nothing about transport health.
                 throw error
             }
+            if wasCancelled, recoverCancelledWrite, execution.hasBegun, generation == commandGeneration,
+                isForeground
+            {
+                // Sony cancels its TLS connection when a write is cancelled. A sent-or-not
+                // outcome is uncertain, so preserve no connected claim for this generation.
+                transition(to: .offline)
+                transitionToPendingReconnectIfAvailable(generation: commandGeneration)
+                await disconnectDriverWithinLimit()
+                if generation == commandGeneration { scheduleReconnect(generation: commandGeneration) }
+            }
             if generation == commandGeneration, !wasCancelled {
                 let queuedCommands = Array(commandTasks.values)
                 commandTasks.removeAll()
@@ -471,6 +488,25 @@ actor RemoteSessionController {
             }
             throw error
         }
+    }
+
+    func powerOffAndDisconnect(expectedDeviceKey: String) async throws -> Bool {
+        let ownerGeneration = generation
+        try await send(.powerOff, expectedDeviceKey: expectedDeviceKey)
+        try Task.checkCancellation()
+        guard generation == ownerGeneration, case .connected(let television) = state,
+            television.stableDeviceKey == expectedDeviceKey
+        else { throw CancellationError() }
+        generation = UUID()
+        let teardownGeneration = generation
+        targetAddressText = nil
+        connectionTarget = nil
+        reconnectAttempt = 0
+        await cancelInFlightWork()
+        guard generation == teardownGeneration else { return false }
+        transition(to: .idle)
+        await disconnectDriverWithinLimit()
+        return generation == teardownGeneration
     }
 
     func disconnect() async {
@@ -1505,5 +1541,21 @@ private actor RemoteSessionCommandSerializer {
     private func cancelWaiter(_ waiterID: UUID) {
         guard let index = waiters.firstIndex(where: { $0.id == waiterID }) else { return }
         waiters.remove(at: index).continuation.resume(returning: false)
+    }
+}
+
+/// Distinguishes cancelled FIFO waiters from writes that may have reached the transport.
+private final class RemoteSessionCommandExecution: @unchecked Sendable {
+    private let lock = NSLock()
+    private var began = false
+    func begin() {
+        lock.lock()
+        defer { lock.unlock() }
+        began = true
+    }
+    var hasBegun: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return began
     }
 }
