@@ -18,7 +18,7 @@ A remembered address can be reassigned to a different, already paired TV. Connec
 
 Deterministic regressions cover already-paired wrong targets for Samsung and Vizio, router rejection before commands, Sony hash/fingerprint collisions, preserved expected Sony pins, moved Sony candidates, Sony/Vizio alias rebinding, same-endpoint alias collisions, SwiftData alias persistence, and first-pair foreground reconnect promotion.
 
-Credential scans, strict Swift formatting, release fixture checks, release preflight, and generic simulator `build-for-testing` passed locally. The generic build compiles the app and both test targets; it does not execute tests. The integrating session must run the complete gate, simulator journeys, and current-head code review before merge. Physical DHCP-change and certificate checks remain hardware acceptance work.
+The complete integrated gate passed locally: credential scans, strict Swift formatting, release fixture checks, release preflight, signed simulator build, unit/UI execution, bundle verification, install and launch. Physical DHCP-change and certificate checks remain hardware acceptance work. Current PR-head review and hosted CI are checked before merge.
 
 New networked-test-double endpoints use RFC 5737 addresses through a DEBUG-only fixture initializer. Normal initialization, decoding, and Release builds retain the strict private/link-local network policy.
 
@@ -26,14 +26,14 @@ New networked-test-double endpoints use RFC 5737 addresses through a DEBUG-only 
 
 Old Sony/Vizio records have no discovery alias. Selecting the TV once from discovery associates its current advertisement only after authenticating the endpoint. A previously paired Sony certificate can be reused after that peer presents it, but its unassociated service hash alone cannot select a saved pin. Later selections reuse the established association directly. A renamed Bonjour service may likewise require selecting the TV again. The implementation never guesses among unrelated candidates or relaxes a saved certificate pin to recover an address.
 
-No simulator, server, browser tab, or device was started by the implementation agent. Generic build processes completed and their lifecycle records were released. The worktree remains available for the integrating session's full gate and review.
+Only claimed development resources were used during integration. Ticket-owned simulators and build/test processes were shut down or released after each QA phase; borrowed devices and services were preserved.
 
 ## Integrated simulator evidence
 
-On October 8, the integrating session completed the full gate at `1583f46` on iOS 18.5: 310 tests passed, with zero failures or skips. Two older endpoint-merge assertions were corrected to require the retained discovery alias. CodeRabbit CLI reviewed the committed ticket delta with zero findings; final PR-head coverage and CI remain merge checks.
+On October 8, the integrating session completed the full gate for the implemented identity/setup code at `a9c127a` on iOS 18.5: 314 tests passed, with zero failures or skips. Two older endpoint-merge assertions were corrected to require the retained discovery alias. CodeRabbit CLI reviewed the complete committed ticket delta with zero findings. Dedicated iOS 26.5 controller/setup coverage passed 78 tests / 80 executions, also with zero failures or skips.
 
 Computer use exercised the in-memory saved-TV fixture: switch Samsung to Sony and observe the Sony connected header; open its management menu; cancel Forget and confirm Sony remains selected; then deliberately forget that synthetic Sony and observe only its row removed, with Samsung reconnecting and the malformed Vizio record preserved. No real driver, television, or household credential participated. The exact owned simulator was shut down after the QA phase.
 
 ![Synthetic saved Sony selected after switching](evidence/HR-042/saved-sony-selection.png)
 
-These journeys verify the native library flow. They do not establish physical DHCP, certificate, wake, or hardware-command acceptance. The final rebased commit still requires the full gate and review before merge.
+These journeys verify the native library and setup safeguards. They do not establish physical DHCP, certificate, wake, or hardware-command acceptance. Review coverage, hosted CI, and cleanup are rechecked on the final PR head before merge; subsequent changes require validation on their own commit.
