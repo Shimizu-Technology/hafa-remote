@@ -375,7 +375,9 @@ struct TVSetupView: View {
             .accessibilityValue(isShowingManualSetup ? "Expanded" : "Collapsed")
 
             if isShowingManualSetup {
-                VStack(alignment: .leading, spacing: 12) {
+                // Keep controls as separate Form rows. A stacked menu Picker can otherwise
+                // claim the hit area of neighboring text fields and repair actions.
+                Group {
                     Text(
                         "Choose the TV brand, then enter its private address from the TV network settings. Samsung asks for approval, Sony shows a pairing code, and Vizio shows a PIN."
                     )
@@ -386,6 +388,7 @@ struct TVSetupView: View {
                         ForEach(TVBrand.allCases, id: \.self) { brand in Text(brand.displayName).tag(brand) }
                     }
                     .disabled(isBusy)
+                    .frame(minHeight: 44)
                     .accessibilityIdentifier("manualTVBrandPicker")
                     if let manualFailure { Text(manualFailure).foregroundStyle(.secondary) }
                     TextField("192.168.1.25", text: $address)
@@ -393,6 +396,7 @@ struct TVSetupView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .disabled(isBusy)
+                        .frame(minHeight: 44)
                         .accessibilityLabel("TV IP address")
                         .accessibilityIdentifier("tvIPAddressField")
 
@@ -410,6 +414,7 @@ struct TVSetupView: View {
                                 ProgressView()
                             }
                         }
+                        .frame(minHeight: 44)
                     }
                     .disabled(isBusy || address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityIdentifier("connectToTVButton")
@@ -429,6 +434,7 @@ struct TVSetupView: View {
                             }
                         }
                         .disabled(isForgettingPairing)
+                        .frame(minHeight: 44)
                         .accessibilityIdentifier("forgetPairingButton")
                     }
                 }

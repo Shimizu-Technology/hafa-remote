@@ -97,8 +97,11 @@
                 }
             }
             .overlay(alignment: .bottomTrailing) {
-                Text(probe.lastEvent).font(.caption2).opacity(0.01).accessibilityIdentifier(
-                    "convenienceFixtureTrace")
+                Text(probe.lastEvent).font(.caption2)
+                    .opacity(
+                        ProcessInfo.processInfo.arguments.contains("-convenience-visible-trace") ? 1 : 0.01
+                    )
+                    .accessibilityIdentifier("convenienceFixtureTrace")
             }
             .preferredColorScheme(
                 ProcessInfo.processInfo.arguments.contains("-convenience-dark") ? .dark : .light)

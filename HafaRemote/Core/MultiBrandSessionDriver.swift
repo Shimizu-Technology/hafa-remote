@@ -403,7 +403,9 @@ enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
                 address: target.address,
                 controlPort: 6466,
                 modelName: "Sony BRAVIA",
-                firmwareVersion: "1.0"
+                firmwareVersion: "1.0",
+                // This fixture pairs keys only; it does not negotiate IME or app-link support.
+                capabilities: [.navigation, .volume, .mute, .playback, .powerOff, .powerOn]
             )
         }
 

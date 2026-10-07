@@ -297,6 +297,7 @@ struct RemoteConveniencesView: View {
 
 struct RemoteSwipeControl: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let isEnabled: Bool
     let action: @MainActor @Sendable (RemoteCommand) async -> Void
     @State private var commandTask: Task<Void, Never>?
@@ -306,12 +307,15 @@ struct RemoteSwipeControl: View {
             .overlay {
                 VStack(spacing: 12) {
                     Image(systemName: "hand.draw").font(.title)
-                    Text("Swipe to move · Tap to select").font(.subheadline)
+                    Text("Swipe to move · Tap to select")
+                        .font(.subheadline)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .foregroundStyle(HafaTheme.primaryText)
                 .padding()
             }
-            .frame(minHeight: 210)
+            .frame(minHeight: dynamicTypeSize.isAccessibilitySize ? 320 : 210)
             .contentShape(RoundedRectangle(cornerRadius: 28))
             .gesture(
                 DragGesture(minimumDistance: 10).onEnded { value in

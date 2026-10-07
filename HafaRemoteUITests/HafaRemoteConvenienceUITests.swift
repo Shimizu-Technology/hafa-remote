@@ -103,14 +103,14 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
         netflix.tap()
         assertTrace("request:launch:Netflix", in: app)
         let toggle = app.switches["remoteKeyboardPreference"]
-        reveal(toggle, in: app)
+        revealGestureSurface(toggle, in: app)
         toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         assertTrace("request:keyboard:false", in: app)
         XCTAssertEqual(toggle.value as? String, "0")
         backToRemote(app)
         XCTAssertFalse(app.buttons["remote-keyboard"].exists)
         openMore(app)
-        reveal(toggle, in: app)
+        revealGestureSurface(toggle, in: app)
         toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
         assertTrace("request:keyboard:true", in: app)
         backToRemote(app)
@@ -130,20 +130,21 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
 
     @MainActor
     func testButtonsSwipeFallbackAndLargeTextDarkControls() {
-        let app = launch(extra: [
-            "-convenience-dark", "-UIPreferredContentSizeCategoryName",
-            "UICTContentSizeCategoryAccessibilityXXXL",
-        ])
+        let app = launch(
+            contentSizeCategory: "UICTContentSizeCategoryAccessibilityXXXL", extra: ["-convenience-dark"])
         let picker = app.segmentedControls["navigationModePicker"]
         reveal(picker, in: app)
         picker.buttons["Swipe"].tap()
         let swipe = app.otherElements["remoteSwipeControl"]
-        reveal(swipe, in: app, direction: .down)
+        revealGestureSurface(swipe, in: app)
         XCTAssertTrue(swipe.isHittable)
+        attach(app, name: "Dark-largest-text-swipe-surface")
         let from = swipe.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5))
         let to = swipe.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
         from.press(forDuration: 0.05, thenDragTo: to)
         assertTrace("command:right", in: app)
+        swipe.tap()
+        assertTrace("command:select", in: app)
         reveal(picker, in: app)
         picker.buttons["Buttons"].tap()
         let up = app.buttons["remote-up"]
@@ -155,19 +156,53 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
         attach(app, name: "Dark-large-text-buttons-fallback")
     }
 
+    /// Hittability includes partially visible surfaces; a drag needs its full path below the bar.
+    @MainActor private func revealGestureSurface(_ element: XCUIElement, in app: XCUIApplication) {
+        let top = app.navigationBars.firstMatch.frame.maxY + 16
+        // Keep the whole control above the home indicator without reserving unused Form footer space.
+        let bottom = app.frame.maxY - 44
+        for _ in 0..<12 {
+            // Form rows below the viewport may not have an accessibility element yet.
+            guard element.exists else {
+                panGutter(in: app, upward: true)
+                continue
+            }
+            let frame = element.frame
+            if element.isHittable, frame.minY >= top, frame.maxY <= bottom { break }
+            let upward = frame.maxY > bottom && frame.minY >= top
+            panGutter(in: app, upward: upward)
+        }
+        XCTAssertTrue(element.isHittable)
+        XCTAssertGreaterThanOrEqual(element.frame.minY, top)
+        XCTAssertLessThanOrEqual(element.frame.maxY, bottom)
+    }
+
+    @MainActor private func panGutter(in app: XCUIApplication, upward: Bool) {
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.7))
+        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: upward ? 0.45 : 0.9))
+        from.press(forDuration: 0.1, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.2)
+    }
+
     private enum Direction { case up, down }
     @MainActor private func reveal(
         _ element: XCUIElement, in app: XCUIApplication, direction: Direction = .up
     ) {
         for _ in 0..<12 where !element.isHittable {
-            if direction == .up { app.swipeUp() } else { app.swipeDown() }
+            panGutter(in: app, upward: direction == .up)
         }
         XCTAssertTrue(element.waitForExistence(timeout: 2))
+        XCTAssertTrue(element.isHittable)
     }
-    @MainActor private func launch(brand: String = "samsung", extra: [String] = []) -> XCUIApplication {
+    @MainActor private func launch(
+        brand: String = "samsung", contentSizeCategory: String = "UICTContentSizeCategoryL",
+        extra: [String] = []
+    ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments =
-            ["-ui-testing-in-memory-store", "-ui-testing-conveniences", "-convenience-\(brand)"] + extra
+            [
+                "-ui-testing-in-memory-store", "-ui-testing-conveniences", "-convenience-\(brand)",
+                "-UIPreferredContentSizeCategoryName", contentSizeCategory,
+            ] + extra
         app.launch()
         XCTAssertTrue(app.navigationBars["Remote"].waitForExistence(timeout: 5))
         return app
