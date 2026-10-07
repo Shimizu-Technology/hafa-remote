@@ -27,3 +27,13 @@ New networked-test-double endpoints use RFC 5737 addresses through a DEBUG-only 
 Old Sony/Vizio records have no discovery alias. Selecting the TV once from discovery associates its current advertisement only after authenticating the endpoint. A previously paired Sony certificate can be reused after that peer presents it, but its unassociated service hash alone cannot select a saved pin. Later selections reuse the established association directly. A renamed Bonjour service may likewise require selecting the TV again. The implementation never guesses among unrelated candidates or relaxes a saved certificate pin to recover an address.
 
 No simulator, server, browser tab, or device was started by the implementation agent. Generic build processes completed and their lifecycle records were released. The worktree remains available for the integrating session's full gate and review.
+
+## Integrated simulator evidence
+
+On October 8, the integrating session completed the full gate at `1583f46` on iOS 18.5: 310 tests passed, with zero failures or skips. Two older endpoint-merge assertions were corrected to require the retained discovery alias. CodeRabbit CLI reviewed the committed ticket delta with zero findings; final PR-head coverage and CI remain merge checks.
+
+Computer use exercised the in-memory saved-TV fixture: switch Samsung to Sony and observe the Sony connected header; open its management menu; cancel Forget and confirm Sony remains selected; then deliberately forget that synthetic Sony and observe only its row removed, with Samsung reconnecting and the malformed Vizio record preserved. No real driver, television, or household credential participated. The exact owned simulator was shut down after the QA phase.
+
+![Synthetic saved Sony selected after switching](evidence/HR-042/saved-sony-selection.png)
+
+These journeys verify the native library flow. They do not establish physical DHCP, certificate, wake, or hardware-command acceptance. The final rebased commit still requires the full gate and review before merge.
