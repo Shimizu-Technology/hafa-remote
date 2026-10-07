@@ -180,3 +180,20 @@ Reduce Motion. Verify Release availability and no local-network prompt in demo.
 
 No physical-TV behavior or release readiness is certified by this module. No
 simulator, service, or browser resource was started during isolated development.
+
+The final integration uses merged HR-045 parent `932070c`. Its hosted job ran
+29 minutes 47 seconds, with the canonical gate taking 29 minutes 31 seconds.
+The three added native support journeys take about 170 seconds locally, so the
+workflow's bounded job allowance increases from 30 to 45 minutes. Commands,
+assertions, test coverage, and existing skip policy remain unchanged; no blanket
+retries are added.
+
+A bounded computer-use smoke on an owned iPhone 17 Pro/iOS 26.5 observed first
+launch Help, the clearly labeled demo at initial volume 20, default-off diagnostics,
+report preview, native share presentation, cancellation back to the unchanged
+report, and readable light/dark increased-contrast report controls. Only synthetic
+and app/version content appears in the accompanying images. The iOS 18.5 CUA
+bridge intermittently omitted the iOS accessibility subtree and did not scroll;
+its actual three native tests remain the functional evidence. Complete Release
+appearance/accessibility coverage belongs to HR-047. Both owned QA simulators
+were shut down after the preparation phase.
