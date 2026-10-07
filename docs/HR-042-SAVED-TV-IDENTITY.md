@@ -10,6 +10,8 @@ A remembered address can be reassigned to a different, already paired TV. Connec
 - The router validates the final brand and expected identity before activating command routing.
 - A successful first pairing promotes the controller's reconnect target to the authenticated identity.
 - Sony service-name hashes and Vizio fallback identifiers are persisted separately from authenticated device identity. Address recovery matches that discovery alias, then binds the candidate to the selected saved identity. A candidate at the unchanged endpoint cannot cause a retry loop merely because its metadata differs.
+- Setup rebinds a discovered row to exactly one existing brand-scoped saved alias (or a Samsung/Vizio stable identifier). Known Sony rows reuse their saved certificate pin without restarting PIN pairing. Conflicting aliases require an explicit saved-TV choice and never automatically select a pin or begin new pairing. Pending-removal records are excluded.
+- A rejected or changed remembered pairing uses the explicit **My TVs → Forget only the selected TV → Add TV** flow. Setup does not silently clear the saved identity, guess another candidate, or remove unrelated credentials. Existing saved-target repair refuses an absent pin; that refusal is deliberate until the user completes this management flow.
 - Identity mismatches present a useful Find TV message. Certificate failures can search for a moved endpoint without clearing or bypassing certificate trust.
 
 ## Verification
@@ -22,6 +24,6 @@ New networked-test-double endpoints use RFC 5737 addresses through a DEBUG-only 
 
 ## Recovery limits
 
-Old Sony/Vizio records have no discovery alias. Selecting the TV once from discovery associates its current advertisement with its authenticated identity while retaining its credential. A renamed Bonjour service may likewise require selecting the TV again. The implementation never guesses among unrelated candidates or relaxes a saved certificate pin to recover an address.
+Old Sony/Vizio records have no discovery alias. Selecting the TV once from discovery associates its current advertisement only after authenticating the endpoint. A previously paired Sony certificate can be reused after that peer presents it, but its unassociated service hash alone cannot select a saved pin. Later selections reuse the established association directly. A renamed Bonjour service may likewise require selecting the TV again. The implementation never guesses among unrelated candidates or relaxes a saved certificate pin to recover an address.
 
 No simulator, server, browser tab, or device was started by the implementation agent. Generic build processes completed and their lifecycle records were released. The worktree remains available for the integrating session's full gate and review.

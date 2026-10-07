@@ -4,6 +4,37 @@ import Testing
 @testable import HafaRemote
 
 struct SonyPairingCredentialTests {
+    @MainActor
+    @Test("Reselecting a known Sony discovery alias selects its authenticated saved pin")
+    func knownDiscoveryRowReusesSavedPin() async throws {
+        let savedCredential = try SonyPairingCredential(certificateSHA256: Data(repeating: 45, count: 32))
+        let alias = SonyBonjourCandidateMetadata(serviceName: "Synthetic Known Sony").reportedIdentifier
+        let saved = SavedTV(
+            brand: .sony, reportedDeviceID: savedCredential.reportedDeviceID,
+            displayName: "Synthetic Known Sony",
+            modelName: "Synthetic BRAVIA", firmwareVersion: nil, lastKnownAddress: "192.0.2.45",
+            discoveryIdentifier: alias
+        )
+        let candidate = DiscoveredTV(
+            brand: .sony, reportedIdentifier: alias, displayName: "Synthetic Known Sony",
+            modelName: "Synthetic BRAVIA",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.46"),
+            controlPort: 6466
+        )
+        guard case .saved(let target) = SavedTVDiscoveryAssociation.resolve(candidate, savedTVs: [saved])
+        else {
+            Issue.record("The known discovery alias should be rebound to its saved identity")
+            return
+        }
+        let store = KeychainSonyPairingCredentialStore(keychain: InMemorySonyPairingCredentialKeychain())
+        try await store.save(savedCredential)
+        #expect(target.expectedSavedDeviceID == savedCredential.reportedDeviceID)
+        #expect(target.discoveryIdentifier == alias)
+        #expect(target.address == candidate.address)
+        #expect(
+            try await SonySavedTargetCredentialLookup.credential(for: target, in: store) == savedCredential)
+    }
+
     @Test("Sony advertisement hashes never select a saved certificate pin")
     func candidateHashCannotSelectSavedCredential() async throws {
         let saved = try SonyPairingCredential(certificateSHA256: Data(repeating: 42, count: 32))
