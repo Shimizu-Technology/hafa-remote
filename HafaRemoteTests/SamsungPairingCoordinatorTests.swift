@@ -4,6 +4,43 @@ import Testing
 @testable import HafaRemote
 
 struct SamsungPairingCoordinatorTests {
+    @Test("A remembered Samsung target refuses an already paired TV at its old address")
+    func rejectsWrongSavedTargetBeforeUsingCredential() async throws {
+        let address = try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.42")
+        let otherIdentity = try SamsungPairingCredentialIdentity(reportedDeviceID: "synthetic-other-tv")
+        let otherCredential = try SamsungPairingCredential(
+            token: "synthetic-other-token",
+            certificateSHA256: Data(repeating: 42, count: 32)
+        )
+        let store = InMemorySamsungCredentialStore()
+        await store.save(otherCredential, for: otherIdentity)
+        let transport = StubSamsungTransport(issuedCredential: otherCredential)
+        let approval = ApprovalRecorder()
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(
+                reportedDeviceID: otherIdentity.reportedDeviceID),
+            credentialStore: store,
+            transport: transport
+        )
+        let target = TVConnectionTarget(
+            brand: .samsung,
+            reportedDeviceID: "synthetic-selected-tv",
+            address: address,
+            controlPort: 8002,
+            expectedSavedDeviceID: "synthetic-selected-tv"
+        )
+
+        await #expect(throws: TVDriverError.savedDeviceIdentityMismatch) {
+            try await coordinator.pair(target: target) { approval.record() }
+        }
+        #expect(await transport.connectCount == 0)
+        #expect(await transport.presentedCredential == nil)
+        #expect(await approval.count == 0)
+        #expect(
+            await store.credential(for: otherIdentity, discardingLegacyCredentialFor: address)
+                == otherCredential)
+    }
+
     @Test("The select convenience forwards one semantic select command")
     func selectConvenienceForwardsSemanticCommand() async throws {
         let coordinator = SetupCoordinatorStub(suspendsPairing: false)
@@ -681,6 +718,7 @@ private actor InMemorySamsungCredentialStore: SamsungPairingCredentialStoring {
 }
 
 private actor StubSamsungTransport: SamsungTransporting {
+    private(set) var connectCount = 0
     private let issuedCredential: SamsungPairingCredential
     private let connectError: SamsungConnectionError?
     private(set) var sentCommands: [RemoteCommand] = []
@@ -699,6 +737,7 @@ private actor StubSamsungTransport: SamsungTransporting {
         using credential: SamsungPairingCredential?,
         attemptID: SamsungConnectionAttemptID
     ) throws -> SamsungPairingCredential {
+        connectCount += 1
         presentedCredential = credential
         if let connectError {
             throw connectError

@@ -21,6 +21,7 @@ struct SavedTVTests {
             firmwareVersion: "2210",
             lastKnownAddress: "192.168.10.20",
             controlPort: 6466,
+            discoveryIdentifier: "synthetic-discovery-alias",
             macAddress: "02:00:5E:10:00:01",
             wakeWasVerified: true,
             lastSeenAt: Date(timeIntervalSince1970: 100),
@@ -42,6 +43,9 @@ struct SavedTVTests {
         #expect(fetched.first?.firmwareVersion == "2210")
         #expect(fetched.first?.validatedAddress == (try PrivateIPv4Address("192.168.10.20")))
         #expect(fetched.first?.validatedControlPort == 6466)
+        #expect(fetched.first?.discoveryIdentifier == "synthetic-discovery-alias")
+        #expect(fetched.first?.connectionTarget?.expectedSavedDeviceID == "synthetic-device-id")
+        #expect(fetched.first?.connectionTarget?.discoveryDeviceKey == "sony:synthetic-discovery-alias")
         #expect(fetched.first?.validatedMACAddress == (try SamsungMACAddress("02:00:5E:10:00:01")))
         #expect(fetched.first?.wakeWasVerified == true)
         #expect(fetched.first?.pendingCredentialRemoval == false)
@@ -857,6 +861,79 @@ struct SavedTVTests {
         #expect(connectedTargets == [second])
         #expect(selection.selectedDeviceKey == "sony:second")
         #expect(!selection.isSwitching)
+    }
+
+    @MainActor
+    @Test(
+        "Saved-TV rediscovery binds candidate aliases to the remembered identity",
+        arguments: [TVBrand.sony, .vizio])
+    func recoveryKeepsSavedIdentityWhenAliasDiffers(brand: TVBrand) async throws {
+        let port: UInt16 = brand == .sony ? 6466 : 7345
+        let alias = "synthetic-discovery-alias"
+        let savedIdentity = "synthetic-authenticated-identity"
+        let cached = TVConnectionTarget(
+            brand: brand,
+            reportedDeviceID: savedIdentity,
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.45"),
+            controlPort: port,
+            expectedSavedDeviceID: savedIdentity,
+            discoveryIdentifier: alias
+        )
+        let moved = DiscoveredTV(
+            brand: brand,
+            reportedIdentifier: alias,
+            displayName: "Synthetic Office TV",
+            modelName: "Synthetic Model",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.46"),
+            controlPort: port
+        )
+        let recovery = SavedTVAddressRecoveryCoordinator(
+            discovery: TVDiscoveryStore(
+                backend: SavedTVRecoveryDiscoveryBackend(events: [.found(moved), .finished])
+            ))
+        var connectedTargets: [TVConnectionTarget] = []
+        recovery.recover(stableDeviceKey: "\(brand.rawValue):\(savedIdentity)", cachedTarget: cached) {
+            connectedTargets.append($0)
+        }
+        await waitForSelectionState { !recovery.isRecovering }
+
+        #expect(connectedTargets == [moved.connectionTarget.expectingSavedIdentity(savedIdentity)])
+        #expect(connectedTargets.first?.reportedDeviceID == alias)
+        #expect(connectedTargets.first?.expectedSavedDeviceID == savedIdentity)
+    }
+
+    @MainActor
+    @Test("Recovery does not retry the same endpoint when only candidate metadata differs")
+    func recoveryDoesNotLoopOnAliasCollisionAtCachedAddress() async throws {
+        let address = try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.45")
+        let alias = "synthetic-colliding-alias"
+        let cached = TVConnectionTarget(
+            brand: .sony,
+            reportedDeviceID: "synthetic-authenticated-identity",
+            address: address,
+            controlPort: 6466,
+            expectedSavedDeviceID: "synthetic-authenticated-identity",
+            discoveryIdentifier: alias
+        )
+        let candidate = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: alias,
+            displayName: "Synthetic Other Name",
+            modelName: "Synthetic Other Model",
+            address: address,
+            controlPort: 6466
+        )
+        let recovery = SavedTVAddressRecoveryCoordinator(
+            discovery: TVDiscoveryStore(
+                backend: SavedTVRecoveryDiscoveryBackend(events: [.found(candidate), .finished])
+            ))
+        var connections = 0
+        recovery.recover(stableDeviceKey: "sony:synthetic-authenticated-identity", cachedTarget: cached) {
+            _ in
+            connections += 1
+        }
+        await waitForSelectionState { !recovery.isRecovering }
+        #expect(connections == 0)
     }
 
     @MainActor

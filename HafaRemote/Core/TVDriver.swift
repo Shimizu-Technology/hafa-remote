@@ -59,6 +59,10 @@ struct TVConnectionTarget: Equatable, Sendable {
     let address: PrivateIPv4Address
     let controlPort: UInt16?
     let suggestedDisplayName: String?
+    /// Required authenticated identity for a remembered TV; nil only for explicit new setup.
+    let expectedSavedDeviceID: String?
+    /// Discovery metadata locates an endpoint, but never authorizes credential selection.
+    let discoveryIdentifier: String?
 
     /// Creates a brand-scoped endpoint with optional user-facing discovery metadata.
     init(
@@ -66,13 +70,41 @@ struct TVConnectionTarget: Equatable, Sendable {
         reportedDeviceID: String,
         address: PrivateIPv4Address,
         controlPort: UInt16?,
-        suggestedDisplayName: String? = nil
+        suggestedDisplayName: String? = nil,
+        expectedSavedDeviceID: String? = nil,
+        discoveryIdentifier: String? = nil
     ) {
         self.brand = brand
         self.reportedDeviceID = reportedDeviceID
         self.address = address
         self.controlPort = controlPort
         self.suggestedDisplayName = suggestedDisplayName
+        self.expectedSavedDeviceID = expectedSavedDeviceID
+        self.discoveryIdentifier = discoveryIdentifier
+    }
+    var discoveryDeviceKey: String {
+        "\(brand.rawValue):\(discoveryIdentifier ?? reportedDeviceID)"
+    }
+
+    /// Rebinds an untrusted discovery endpoint to the TV the user actually selected.
+    func expectingSavedIdentity(_ identity: String?) -> TVConnectionTarget {
+        TVConnectionTarget(
+            brand: brand,
+            reportedDeviceID: reportedDeviceID,
+            address: address,
+            controlPort: controlPort,
+            suggestedDisplayName: suggestedDisplayName,
+            expectedSavedDeviceID: identity,
+            discoveryIdentifier: discoveryIdentifier
+        )
+    }
+
+    func validateConnectedIdentity(_ television: ConnectedTV) throws {
+        guard television.brand == brand,
+            expectedSavedDeviceID == nil || expectedSavedDeviceID == television.reportedDeviceID
+        else {
+            throw TVDriverError.savedDeviceIdentityMismatch
+        }
     }
 }
 
@@ -137,6 +169,7 @@ struct ConnectedTV: Equatable, Sendable {
     let networkConnection: TVNetworkConnection
     let macAddress: TVMACAddress?
     let capabilities: Set<TVCapability>
+    let discoveryIdentifier: String?
 
     init(
         brand: TVBrand = .samsung,
@@ -148,7 +181,8 @@ struct ConnectedTV: Equatable, Sendable {
         firmwareVersion: String?,
         networkConnection: TVNetworkConnection = .unavailable,
         macAddress: TVMACAddress? = nil,
-        capabilities: Set<TVCapability>? = nil
+        capabilities: Set<TVCapability>? = nil,
+        discoveryIdentifier: String? = nil
     ) {
         self.brand = brand
         self.reportedDeviceID = reportedDeviceID
@@ -159,6 +193,7 @@ struct ConnectedTV: Equatable, Sendable {
         self.firmwareVersion = firmwareVersion
         self.networkConnection = networkConnection
         self.macAddress = macAddress
+        self.discoveryIdentifier = discoveryIdentifier
         var resolvedCapabilities = capabilities ?? TVCapability.implemented(for: brand)
         if capabilities == nil, brand == .samsung, networkConnection == .wireless, macAddress != nil {
             resolvedCapabilities.insert(.powerOn)
@@ -176,23 +211,26 @@ struct ConnectedTV: Equatable, Sendable {
             reportedDeviceID: reportedDeviceID,
             address: address,
             controlPort: controlPort,
-            suggestedDisplayName: displayName
+            suggestedDisplayName: displayName,
+            expectedSavedDeviceID: reportedDeviceID,
+            discoveryIdentifier: discoveryIdentifier
         )
     }
 
     /// Keeps a verified protocol name when available, otherwise using discovery metadata.
-    func applyingSuggestedDisplayName(_ suggestedDisplayName: String?) -> ConnectedTV {
+    func applyingDiscoveryMetadata(from target: TVConnectionTarget) -> ConnectedTV {
         ConnectedTV(
             brand: brand,
             reportedDeviceID: reportedDeviceID,
             address: address,
             controlPort: controlPort,
-            displayName: displayName ?? suggestedDisplayName,
+            displayName: displayName ?? target.suggestedDisplayName,
             modelName: modelName,
             firmwareVersion: firmwareVersion,
             networkConnection: networkConnection,
             macAddress: macAddress,
-            capabilities: capabilities
+            capabilities: capabilities,
+            discoveryIdentifier: target.discoveryIdentifier ?? discoveryIdentifier
         )
     }
 
@@ -271,8 +309,14 @@ enum RemoteTextInputError: LocalizedError, Equatable, Sendable {
 
 enum TVDriverError: LocalizedError, Equatable, Sendable {
     case unsupportedTextInput
+    case savedDeviceIdentityMismatch
 
     var errorDescription: String? {
-        "This TV connection does not support remote text input."
+        switch self {
+        case .unsupportedTextInput:
+            "This TV connection does not support remote text input."
+        case .savedDeviceIdentityMismatch:
+            "A different TV is using the remembered address. Find your TV again before connecting."
+        }
     }
 }

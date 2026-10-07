@@ -4,6 +4,47 @@ import Testing
 @testable import HafaRemote
 
 struct SonyPairingCredentialTests {
+    @Test("Sony advertisement hashes never select a saved certificate pin")
+    func candidateHashCannotSelectSavedCredential() async throws {
+        let saved = try SonyPairingCredential(certificateSHA256: Data(repeating: 42, count: 32))
+        let store = KeychainSonyPairingCredentialStore(keychain: InMemorySonyPairingCredentialKeychain())
+        try await store.save(saved)
+        let candidate = TVConnectionTarget(
+            brand: .sony,
+            reportedDeviceID: saved.reportedDeviceID,
+            address: try PrivateIPv4Address(documentationAddressForTesting: "203.0.113.42"),
+            controlPort: 6466,
+            discoveryIdentifier: saved.reportedDeviceID
+        )
+
+        #expect(try await SonySavedTargetCredentialLookup.credential(for: candidate, in: store) == nil)
+        #expect(
+            try await SonySavedTargetCredentialLookup.credential(
+                for: candidate.expectingSavedIdentity(saved.reportedDeviceID), in: store
+            ) == saved
+        )
+    }
+
+    @Test("Sony rediscovery keeps the saved pin separate from the advertised alias")
+    func aliasSelectsOnlyExpectedSavedPin() async throws {
+        let selected = try SonyPairingCredential(certificateSHA256: Data(repeating: 43, count: 32))
+        let other = try SonyPairingCredential(certificateSHA256: Data(repeating: 44, count: 32))
+        let store = KeychainSonyPairingCredentialStore(keychain: InMemorySonyPairingCredentialKeychain())
+        try await store.save(selected)
+        try await store.save(other)
+        let candidate = TVConnectionTarget(
+            brand: .sony,
+            reportedDeviceID: other.reportedDeviceID,
+            address: try PrivateIPv4Address(documentationAddressForTesting: "203.0.113.43"),
+            controlPort: 6466,
+            expectedSavedDeviceID: selected.reportedDeviceID,
+            discoveryIdentifier: other.reportedDeviceID
+        )
+
+        #expect(try await SonySavedTargetCredentialLookup.credential(for: candidate, in: store) == selected)
+        #expect(try await store.credential(for: other.certificateSHA256) == other)
+    }
+
     @Test("A Sony certificate fingerprint round-trips through its stable device ID")
     func roundTripsStableIdentity() throws {
         let fingerprint = Data((0..<32).map(UInt8.init))

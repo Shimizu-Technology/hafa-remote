@@ -26,10 +26,17 @@ extension RemoteSessionDriving {
         to target: TVConnectionTarget,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> ConnectedTV {
-        try await connect(
+        let television = try await connect(
             addressText: target.address.rawValue,
             onWaitingForApproval: onWaitingForApproval
         )
+        do {
+            try target.validateConnectedIdentity(television)
+        } catch {
+            await disconnect()
+            throw error
+        }
+        return television.applyingDiscoveryMetadata(from: target)
     }
 
     func forget(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws {
@@ -77,7 +84,7 @@ extension SamsungPairingCoordinator: RemoteSessionDriving {
             throw SamsungPairingCoordinatorError.unsupportedTokenAuthentication
         }
         return try await pair(
-            addressText: target.address.rawValue,
+            target: target,
             onWaitingForApproval: onWaitingForApproval
         )
     }
@@ -683,6 +690,9 @@ actor RemoteSessionController {
             reconnectTask = nil
             reconnectAttempt = 0
             consecutiveHealthFailures = 0
+            // A successful first pairing turns a candidate into a remembered,
+            // authenticated identity before any automatic reconnect can occur.
+            self.connectionTarget = tv.connectionTarget
             transition(to: .connected(tv))
             startHealthChecks(generation: requestedGeneration)
         } catch {
@@ -714,6 +724,8 @@ actor RemoteSessionController {
         {
             transition(to: .failed(.timedOut(.connect)))
             scheduleReconnect(generation: requestedGeneration)
+        } else if error as? TVDriverError == .savedDeviceIdentityMismatch {
+            transition(to: .failed(.savedDeviceIdentityMismatch))
         } else if error as? SamsungConnectionError == .denied {
             transition(to: .denied)
         } else if error as? SamsungPairingCoordinatorError == .savedPairingRejected {

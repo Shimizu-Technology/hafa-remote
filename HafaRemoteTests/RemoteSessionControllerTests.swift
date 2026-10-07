@@ -4,6 +4,38 @@ import Testing
 @testable import HafaRemote
 
 struct RemoteSessionControllerTests {
+    @Test("Automatic reconnect promotes first-pair discovery into a saved authenticated target")
+    func reconnectPinsFirstPairedIdentity() async throws {
+        let address = try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.43")
+        let tv = ConnectedTV(
+            reportedDeviceID: "synthetic-authenticated-tv",
+            address: address,
+            modelName: "Synthetic Samsung",
+            firmwareVersion: nil,
+            discoveryIdentifier: "synthetic-advertisement"
+        )
+        let candidate = TVConnectionTarget(
+            brand: .samsung,
+            reportedDeviceID: "synthetic-advertisement",
+            address: address,
+            controlPort: 8002,
+            discoveryIdentifier: "synthetic-advertisement"
+        )
+        let driver = MockRemoteSessionDriver(outcomes: [
+            .success(tv: tv, announcesPairing: false),
+            .success(tv: tv, announcesPairing: false),
+        ])
+        let session = RemoteSessionController(
+            driver: driver, configuration: testConfiguration(reconnectDelays: []))
+        await session.connect(to: candidate)
+        await session.applicationDidEnterBackground()
+        await session.applicationWillEnterForeground()
+
+        #expect(await driver.presentedTargets == [candidate, tv.connectionTarget])
+        #expect(await driver.presentedTargets.last?.expectedSavedDeviceID == tv.reportedDeviceID)
+        await session.disconnect()
+    }
+
     @Test("Production health policy tolerates one miss and the Vizio request deadline")
     func productionHealthPolicyIsResilient() {
         let configuration = RemoteSessionConfiguration.production

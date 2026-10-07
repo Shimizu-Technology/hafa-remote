@@ -165,7 +165,7 @@ struct HomeView: View {
                 saveConnectedTV(tv)
             case .offline:
                 recoverSelectedTVAddressIfNeeded()
-            case .failed(.timedOut(.connect)):
+            case .failed(.timedOut(.connect)), .failed(.savedDeviceIdentityMismatch), .certificateChanged:
                 recoverSelectedTVAddressIfNeeded()
             default:
                 break
@@ -613,6 +613,7 @@ struct HomeView: View {
                     firmwareVersion: tv.firmwareVersion,
                     lastKnownAddress: tv.address.rawValue,
                     controlPort: tv.controlPort,
+                    discoveryIdentifier: tv.discoveryIdentifier,
                     macAddress: canPersistWakeMetadata ? tv.macAddress?.persistedValue : nil,
                     wakeWasVerified: canPersistWakeMetadata && wakeWasJustVerified,
                     capabilities: tv.capabilities,
@@ -1303,11 +1304,17 @@ final class SavedTVAddressRecoveryCoordinator {
         taskHolder.install(
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                let target = await discovery.findDevice(stableDeviceKey: stableDeviceKey)
+                let candidate = await discovery.findDevice(
+                    stableDeviceKey: cachedTarget.discoveryIdentifier == nil
+                        ? stableDeviceKey : cachedTarget.discoveryDeviceKey
+                )
+                let target = candidate?.expectingSavedIdentity(cachedTarget.expectedSavedDeviceID)
                 guard !Task.isCancelled, self.operationID == operationID else { return }
                 self.operationID = nil
                 self.isRecovering = false
-                guard let target, target != cachedTarget else { return }
+                guard let target,
+                    target.address != cachedTarget.address || target.controlPort != cachedTarget.controlPort
+                else { return }
                 await connect(target)
             }
         )

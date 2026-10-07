@@ -4,6 +4,62 @@ import Testing
 @testable import HafaRemote
 
 struct MultiBrandSessionDriverTests {
+    @Test(
+        "Router refuses a saved target mismatch before activating commands",
+        arguments: [TVBrand.sony, .vizio])
+    @MainActor
+    func refusesMismatchedDriverResult(brand: TVBrand) async throws {
+        let samsung = MultiBrandSamsungFixture()
+        let sony = MultiBrandSonyFixture()
+        let vizio = MultiBrandVizioFixture()
+        let driver = MultiBrandSessionDriver(samsung: samsung, sony: sony, vizio: vizio)
+        let target = TVConnectionTarget(
+            brand: brand,
+            reportedDeviceID: "synthetic-candidate-alias",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.44"),
+            controlPort: brand == .sony ? 6466 : 7345,
+            expectedSavedDeviceID: "synthetic-selected-tv",
+            discoveryIdentifier: "synthetic-candidate-alias"
+        )
+        let signal = PairingRequestSignal()
+        let connection = Task { try await driver.connect(to: target) { await signal.signal() } }
+        try await signal.wait()
+        try await driver.submitPairingCode(brand == .sony ? "A1B2C3" : "1234")
+
+        await #expect(throws: TVDriverError.savedDeviceIdentityMismatch) { try await connection.value }
+        await #expect(throws: MultiBrandSessionDriverError.notConnected) { try await driver.send(.home) }
+        #expect(await samsung.commands.isEmpty)
+        #expect(await sony.commands.isEmpty)
+        #expect(await vizio.commands.isEmpty)
+    }
+
+    @Test("A Vizio fallback alias survives pairing without becoming the saved identity")
+    @MainActor
+    func preservesVizioCandidateAliasSeparately() async throws {
+        let driver = MultiBrandSessionDriver(
+            samsung: MultiBrandSamsungFixture(), sony: MultiBrandSonyFixture(),
+            vizio: MultiBrandVizioFixture()
+        )
+        let target = TVConnectionTarget(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-service-hash",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.44"),
+            controlPort: 7345,
+            discoveryIdentifier: "synthetic-service-hash"
+        )
+        let signal = PairingRequestSignal()
+        let connection = Task { try await driver.connect(to: target) { await signal.signal() } }
+        try await signal.wait()
+        try await driver.submitPairingCode("1234")
+        let television = try await connection.value
+
+        #expect(television.reportedDeviceID == "synthetic-vizio-serial")
+        #expect(television.discoveryIdentifier == "synthetic-service-hash")
+        #expect(television.connectionTarget.expectedSavedDeviceID == "synthetic-vizio-serial")
+        #expect(television.connectionTarget.discoveryDeviceKey == "vizio:synthetic-service-hash")
+        await driver.disconnect()
+    }
+
     @Test("Sony selection requests a code and routes commands only to Sony")
     @MainActor
     func routesSonyPairingAndCommands() async throws {

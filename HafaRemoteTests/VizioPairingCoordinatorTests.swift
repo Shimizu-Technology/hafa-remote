@@ -4,6 +4,40 @@ import Testing
 @testable import HafaRemote
 
 struct VizioPairingCoordinatorTests {
+    @Test("A remembered Vizio target refuses an already paired TV at its old address")
+    func rejectsWrongSavedTargetBeforeUsingCredential() async throws {
+        let credential = try VizioPairingCredential(
+            authToken: "synthetic-other-token",
+            certificateSHA256: Data(repeating: 42, count: 32),
+            clientID: "00000000-0000-4000-8000-000000000042"
+        )
+        let otherIdentity = try VizioPairingIdentity(reportedDeviceID: info.reportedDeviceID)
+        let store = InMemoryVizioCredentialStore()
+        await store.save(credential, for: otherIdentity)
+        let client = StubVizioHTTPClient(info: info)
+        let factory = VizioClientFactoryRecorder(clients: [client])
+        let coordinator = VizioPairingCoordinator(credentialStore: store, makeClient: factory.makeClient)
+        let target = TVConnectionTarget(
+            brand: .vizio,
+            reportedDeviceID: "synthetic-selected-tv",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.42"),
+            controlPort: 7345,
+            expectedSavedDeviceID: "synthetic-selected-tv"
+        )
+
+        await #expect(throws: TVDriverError.savedDeviceIdentityMismatch) {
+            try await coordinator.pair(target: target) { _ in
+                Issue.record("A remembered target mismatch must never prompt for a PIN")
+                return "1234"
+            }
+        }
+        #expect(factory.requests.count == 1)
+        #expect(factory.requests.first?.authToken == nil)
+        #expect(await client.finishedPIN == nil)
+        #expect(await client.isDisconnected)
+        #expect(await store.credential(for: otherIdentity) == credential)
+    }
+
     private let target: TVConnectionTarget
     private let info = VizioDeviceInfo(
         reportedDeviceID: "synthetic-vizio-serial",
