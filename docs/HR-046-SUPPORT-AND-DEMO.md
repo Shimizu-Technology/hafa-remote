@@ -74,6 +74,20 @@ connection lease. Pending retry status and deferred teardown recovery retain the
 failure or waiting attempt's origin; merely scheduling a timer is not a new
 activity. The executed attempt obtains a fresh origin when that timer fires.
 
+Integration onto the HR-045 convenience stack preserves expected-TV checks,
+controller generations, cancellation recovery, optional-feature errors, and
+selection guards. State-changing conveniences retain the device scope and
+collection lease captured before delivery. Their failures, optional-query
+failures, canceled writes, and selected-TV power teardown carry the originating
+activity time into later recovery. Query payloads and launch descriptors never
+enter diagnostics. The saved-target waiter combines its producer ownership with
+the caller's current-selection predicate.
+
+Home's native Help button opens support, with TV Help & About available inside
+it. The existing setup and Control Center help routes remain available. The
+Release demo handles every semantic RemoteCommand, including input, channel,
+guide, and number keys, using only local simulated status.
+
 Model/display-name fallback comparisons normalize both inputs using the same
 control-character removal and whitespace trimming before checking equality.
 Padded or sanitized household names therefore remain omitted.
@@ -113,6 +127,19 @@ readiness. Including the unchanged independent retry probes, the final harness
 passed 32 tests in eight suites. The temporary packages were removed. The iPhone
 UI journeys compiled and still require execution in the integrated gate. These
 isolated results do not replace that gate or computer-use verification.
+
+After rebasing the five support commits onto HR-045 `d574163`, the final
+real-source harness passed 64 tests in eleven suites. This adds the current
+convenience and Sony pairing ownership suites, exhaustive offline command
+coverage, held convenience success after Clear/reconsent, and 14 pending-retry
+cases spanning connection, health, command, state-changing convenience,
+optional-query, and canceled-write paths. Both current signed generic Debug
+build-for-testing and Release build passed without warnings; both app seals
+verified. Formatting, PBX validation, credential scan, release preflight and
+compiler-probe regressions passed. The macOS harness omits the full controller
+test file because its restoration test depends on the SwiftUI Home coordinator;
+the signed iPhone test build compiles it. The complete iPhone gate remains
+required after final integration.
 
 Root integration must run the complete gate on the integrated current head and
 exercise these flows with computer use: first launch → demo → navigate/volume/

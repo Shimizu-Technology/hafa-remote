@@ -51,6 +51,12 @@ final class DemoRemoteModel {
             activity = "Demo playback paused."
         case .rewind: activity = "Demo playback rewound."
         case .fastForward: activity = "Demo playback advanced."
+        case .inputSource: activity = "Demo input chooser opened."
+        case .channelUp: activity = "Demo channel advanced."
+        case .channelDown: activity = "Demo channel moved back."
+        case .guide: activity = "Demo guide opened."
+        case .digit0, .digit1, .digit2, .digit3, .digit4, .digit5, .digit6, .digit7, .digit8, .digit9:
+            activity = "Demo number key selected."
         case .powerOn: break
         }
     }

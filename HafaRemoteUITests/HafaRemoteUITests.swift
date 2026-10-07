@@ -53,6 +53,9 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(help.waitForExistence(timeout: 5))
         XCTAssertTrue(help.isHittable)
         help.tap()
+        let tvHelp = app.buttons["supportTVHelpButton"]
+        XCTAssertTrue(tvHelp.waitForExistence(timeout: 2))
+        tvHelp.tap()
         XCTAssertTrue(app.navigationBars["Help & About"].waitForExistence(timeout: 2))
         XCTAssertTrue(
             app.staticTexts[
@@ -66,6 +69,8 @@ final class HafaRemoteUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(sonyGuidance.waitForExistence(timeout: 2))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["openOfflineDemoButton"].waitForExistence(timeout: 2))
         app.buttons["Done"].tap()
         XCTAssertTrue(app.buttons["addTVButton"].isHittable)
         app.buttons["addTVButton"].tap()
@@ -941,7 +946,7 @@ final class HafaRemoteUITests: XCTestCase {
     func testOfflineDemoIsAvailableBeforePairing() throws {
         let app = makeApplication()
         app.launch()
-        app.buttons["homeSupportButton"].tap()
+        app.buttons["homeHelpButton"].tap()
         let demo = app.buttons["openOfflineDemoButton"]
         XCTAssertTrue(demo.waitForExistence(timeout: 5))
         demo.tap()
@@ -960,7 +965,7 @@ final class HafaRemoteUITests: XCTestCase {
     func testDiagnosticsAreOptInAndPreviewableBeforeSharing() throws {
         let app = makeApplication()
         app.launch()
-        app.buttons["homeSupportButton"].tap()
+        app.buttons["homeHelpButton"].tap()
         let diagnostics = app.buttons["openDiagnosticsButton"]
         XCTAssertTrue(diagnostics.waitForExistence(timeout: 5))
         diagnostics.tap()

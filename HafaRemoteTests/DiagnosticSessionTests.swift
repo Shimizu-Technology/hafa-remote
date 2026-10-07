@@ -823,17 +823,29 @@ private struct DiagnosticPendingRetryTests {
         if boundary == .health {
             await advance(clock, .seconds(17))
             command = nil
-        } else if boundary == .command {
-            command = Task { try await store.send(.home) }
+        } else if boundary == .command || boundary == .cancelledCommand {
+            command = Task { try await store.send(.home, expectedDeviceKey: "samsung:synthetic-retry") }
+        } else if boundary == .convenience || boundary == .cancelledConvenience || boundary == .query {
+            command = Task {
+                _ = try await store.convenience(
+                    boundary == .query ? .apps : .setKeyboardEnabled(false),
+                    expectedDeviceKey: "samsung:synthetic-retry")
+            }
         } else {
             command = nil
         }
         await gate.waitUntilStarted()
         reset(recorder, togglesConsent)
+        let isCancelledWrite = boundary == .cancelledCommand || boundary == .cancelledConvenience
+        if isCancelledWrite { command?.cancel() }
         await gate.release()
         try await connect.value
         if let command {
-            await #expect(throws: SamsungConnectionError.notConnected) { try await command.value }
+            if isCancelledWrite {
+                await #expect(throws: CancellationError.self) { try await command.value }
+            } else {
+                await #expect(throws: SamsungConnectionError.notConnected) { try await command.value }
+            }
         }
         await settle {
             if case .reconnecting = store.state { return true }
@@ -930,7 +942,9 @@ private struct DiagnosticPendingRetryTests {
     }
 }
 
-private enum DiagnosticRetryBoundary: CaseIterable, Sendable { case connection, health, command }
+private enum DiagnosticRetryBoundary: CaseIterable, Sendable {
+    case connection, health, command, convenience, query, cancelledCommand, cancelledConvenience
+}
 
 private actor DiagnosticRetryDriver: RemoteSessionDriving {
     let boundary: DiagnosticRetryBoundary
@@ -963,11 +977,82 @@ private actor DiagnosticRetryDriver: RemoteSessionDriving {
         }
     }
     func send(_ command: RemoteCommand) async throws {
-        if boundary == .command {
+        if boundary == .command || boundary == .cancelledCommand {
             await gate.wait()
             throw SamsungConnectionError.notConnected
         }
     }
+    func convenience(_ request: TVConvenienceRequest) async throws -> TVConvenienceResponse {
+        await gate.wait()
+        throw SamsungConnectionError.notConnected
+    }
+    func forget(addressText: String) {}
+    func disconnect() {}
+}
+
+@MainActor
+private struct DiagnosticConvenienceCollectionTests {
+    @Test("A held convenience completion retains its collection lease", arguments: [false, true])
+    func completionCannotRenewConsent(togglesConsent: Bool) async throws {
+        let gate = DiagnosticOwnershipGate()
+        let driver = DiagnosticSuccessfulConvenienceDriver(gate: gate)
+        let recorder = DiagnosticRecorder()
+        recorder.setEnabled(true)
+        let store = RemoteSessionStore(
+            controller: RemoteSessionController(driver: driver), diagnostics: recorder)
+        let target = TVConnectionTarget(
+            brand: .samsung, reportedDeviceID: "synthetic-convenience",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.46"),
+            controlPort: 8002, expectedSavedDeviceID: "synthetic-convenience")
+        await store.connect(to: target)
+        for _ in 0..<5000 {
+            if store.connectedTV != nil { break }
+            await Task.yield()
+        }
+        #expect(store.connectedTV != nil)
+        let delivery = Task {
+            try await store.convenience(
+                .setKeyboardEnabled(false),
+                expectedDeviceKey: "samsung:synthetic-convenience")
+        }
+        await gate.waitUntilStarted()
+        if togglesConsent {
+            recorder.setEnabled(false)
+            recorder.setEnabled(true)
+        } else {
+            recorder.clear()
+        }
+        await gate.release()
+        #expect(try await delivery.value == .sent)
+        #expect(recorder.events.isEmpty)
+        #expect(
+            try await store.convenience(
+                .setKeyboardEnabled(true),
+                expectedDeviceKey: "samsung:synthetic-convenience") == .sent)
+        #expect(recorder.events.map(\.kind) == [.commandSent])
+        await store.disconnect()
+    }
+}
+
+private actor DiagnosticSuccessfulConvenienceDriver: RemoteSessionDriving {
+    let gate: DiagnosticOwnershipGate
+    init(gate: DiagnosticOwnershipGate) { self.gate = gate }
+    func connect(
+        to target: TVConnectionTarget,
+        onWaitingForApproval: @escaping @MainActor @Sendable () async -> Void
+    ) -> ConnectedTV {
+        ConnectedTV(
+            reportedDeviceID: target.reportedDeviceID, address: target.address,
+            modelName: "SYNTHETIC_MODEL", firmwareVersion: "1.0")
+    }
+    func connect(addressText: String, onWaitingForApproval: @escaping @MainActor @Sendable () async -> Void)
+        throws -> ConnectedTV
+    { throw SamsungConnectionError.notConnected }
+    func convenience(_ request: TVConvenienceRequest) async -> TVConvenienceResponse {
+        await gate.wait()
+        return .sent
+    }
+    func send(_ command: RemoteCommand) {}
     func forget(addressText: String) {}
     func disconnect() {}
 }

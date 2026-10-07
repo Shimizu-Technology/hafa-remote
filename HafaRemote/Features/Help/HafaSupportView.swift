@@ -33,6 +33,7 @@ struct HafaSupportView: View {
                         isShowingTVHelp = true
                     }
                     .frame(minHeight: 44)
+                    .accessibilityIdentifier("supportTVHelpButton")
                 }
             }
             .scrollContentBackground(.hidden)

@@ -142,20 +142,34 @@ final class RemoteSessionStore {
         try await connectAndWait(addressText: addressText, target: nil, timeout: timeout)
     }
 
-    func connectAndWait(to target: TVConnectionTarget, timeout: Duration) async throws -> ConnectedTV {
-        try await connectAndWait(addressText: target.address.rawValue, target: target, timeout: timeout)
+    func connectAndWait(
+        to target: TVConnectionTarget, timeout: Duration,
+        isStillSelected: @escaping @MainActor @Sendable () -> Bool = { true }
+    ) async throws -> ConnectedTV {
+        try await connectAndWait(
+            addressText: target.address.rawValue, target: target, timeout: timeout,
+            isStillSelected: isStillSelected)
     }
 
     /// Old snapshots, including same-TV/ABA snapshots, cannot satisfy a new admission.
-    private func connectAndWait(addressText: String, target: TVConnectionTarget?, timeout: Duration)
+    private func connectAndWait(
+        addressText: String, target: TVConnectionTarget?, timeout: Duration,
+        isStillSelected: @escaping @MainActor @Sendable () -> Bool = { true }
+    )
         async throws -> ConnectedTV
     {
+        try Task.checkCancellation()
+        guard isStillSelected() else { throw CancellationError() }
         let requestID = UUID()
         let updates = await controller.stateUpdates()
+        try Task.checkCancellation()
+        guard isStillSelected() else { throw CancellationError() }
         let controller = controller
         let clock = connectionWaitClock
         return try await withThrowingTaskGroup(of: ConnectedTV?.self) { group in
             group.addTask {
+                try Task.checkCancellation()
+                guard await isStillSelected() else { throw CancellationError() }
                 let adopted = await self.performConnection(
                     addressText: addressText, target: target, requestID: requestID)
                 try Task.checkCancellation()
@@ -174,6 +188,7 @@ final class RemoteSessionStore {
                                 || television.reportedDeviceID == target.expectedSavedDeviceID
                         else { continue }
                     }
+                    guard await isStillSelected() else { throw CancellationError() }
                     return television
                 }
                 throw CancellationError()
@@ -186,6 +201,7 @@ final class RemoteSessionStore {
             while let value = try await group.next() {
                 if let television = value {
                     group.cancelAll()
+                    guard isStillSelected() else { throw CancellationError() }
                     return television
                 }
             }
@@ -216,7 +232,8 @@ final class RemoteSessionStore {
         let scope = diagnosticDeviceKey
         let collection = diagnostics.captureCollection()
         do {
-            try await controller.send(command, expectedDeviceKey: expectedDeviceKey, activityStartedAt: startedAt)
+            try await controller.send(
+                command, expectedDeviceKey: expectedDeviceKey, activityStartedAt: startedAt)
             recordDiagnosticDelivery(.commandSent, since: startedAt, scope: scope, collection: collection)
         } catch {
             if !(error is CancellationError) {
@@ -232,7 +249,8 @@ final class RemoteSessionStore {
         let scope = diagnosticDeviceKey
         let collection = diagnostics.captureCollection()
         do {
-            try await controller.sendText(input, expectedDeviceKey: expectedDeviceKey, activityStartedAt: startedAt)
+            try await controller.sendText(
+                input, expectedDeviceKey: expectedDeviceKey, activityStartedAt: startedAt)
             recordDiagnosticDelivery(.textSent, since: startedAt, scope: scope, collection: collection)
         } catch {
             if !(error is CancellationError) {
@@ -246,7 +264,24 @@ final class RemoteSessionStore {
     func convenience(_ request: TVConvenienceRequest, expectedDeviceKey: String) async throws
         -> TVConvenienceResponse
     {
-        try await controller.convenience(request, expectedDeviceKey: expectedDeviceKey)
+        let startedAt = ContinuousClock.now
+        let scope = diagnosticDeviceKey
+        let collection = diagnostics.captureCollection()
+        do {
+            let response = try await controller.convenience(
+                request, expectedDeviceKey: expectedDeviceKey,
+                activityStartedAt: startedAt)
+            if request.changesTVState {
+                recordDiagnosticDelivery(.commandSent, since: startedAt, scope: scope, collection: collection)
+            }
+            return response
+        } catch {
+            if request.changesTVState, !(error is CancellationError) {
+                recordDiagnosticDelivery(
+                    .commandDeliveryFailed, since: startedAt, scope: scope, collection: collection)
+            }
+            throw error
+        }
     }
 
     func refreshObservation() async { await controller.refreshObservation() }
@@ -257,7 +292,22 @@ final class RemoteSessionStore {
 
     func powerOffSelectedTV(expectedDeviceKey: String) async throws {
         let revision = projectionRevision
-        let didDisconnect = try await controller.powerOffAndDisconnect(expectedDeviceKey: expectedDeviceKey)
+        let startedAt = ContinuousClock.now
+        let scope = diagnosticDeviceKey
+        let collection = diagnostics.captureCollection()
+        let didDisconnect: Bool
+        do {
+            didDisconnect = try await controller.powerOffAndDisconnect(
+                expectedDeviceKey: expectedDeviceKey,
+                activityStartedAt: startedAt)
+            recordDiagnosticDelivery(.commandSent, since: startedAt, scope: scope, collection: collection)
+        } catch {
+            if !(error is CancellationError) {
+                recordDiagnosticDelivery(
+                    .commandDeliveryFailed, since: startedAt, scope: scope, collection: collection)
+            }
+            throw error
+        }
         try Task.checkCancellation()
         guard didDisconnect, projectionRevision == revision,
             connectedTV == nil || connectedTV?.stableDeviceKey == expectedDeviceKey

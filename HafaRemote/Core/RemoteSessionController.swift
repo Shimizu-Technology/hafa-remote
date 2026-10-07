@@ -328,7 +328,10 @@ actor RemoteSessionController {
             generation: requestedGeneration, isReconnect: false, activityStartedAt: activityStartedAt)
     }
 
-    func send(_ command: RemoteCommand, expectedDeviceKey: String? = nil, activityStartedAt: ContinuousClock.Instant = .now) async throws {
+    func send(
+        _ command: RemoteCommand, expectedDeviceKey: String? = nil,
+        activityStartedAt: ContinuousClock.Instant = .now
+    ) async throws {
         let requestedGeneration = generation
         if let expectedDeviceKey {
             guard case .connected(let tv) = state, tv.stableDeviceKey == expectedDeviceKey else {
@@ -340,7 +343,8 @@ actor RemoteSessionController {
         {
             throw TVDriverError.unsupportedCommand
         }
-        try await performSend(recoverCancelledWrite: true, activityStartedAt: activityStartedAt) { [weak self] in
+        try await performSend(recoverCancelledWrite: true, activityStartedAt: activityStartedAt) {
+            [weak self] in
             guard let self else { throw CancellationError() }
             try await self.executeCommand(
                 command, expectedDeviceKey: expectedDeviceKey, generation: requestedGeneration)
@@ -360,9 +364,13 @@ actor RemoteSessionController {
         try await driver.send(command)
     }
 
-    func sendText(_ input: RemoteTextInput, expectedDeviceKey: String? = nil, activityStartedAt: ContinuousClock.Instant = .now) async throws {
+    func sendText(
+        _ input: RemoteTextInput, expectedDeviceKey: String? = nil,
+        activityStartedAt: ContinuousClock.Instant = .now
+    ) async throws {
         let requestedGeneration = generation
-        try await performSend(recoverCancelledWrite: true, activityStartedAt: activityStartedAt) { [weak self] in
+        try await performSend(recoverCancelledWrite: true, activityStartedAt: activityStartedAt) {
+            [weak self] in
             guard let self else { throw CancellationError() }
             try await self.executeText(
                 input, expectedDeviceKey: expectedDeviceKey, generation: requestedGeneration)
@@ -379,7 +387,10 @@ actor RemoteSessionController {
         try await driver.sendText(input)
     }
 
-    func convenience(_ request: TVConvenienceRequest, expectedDeviceKey: String) async throws
+    func convenience(
+        _ request: TVConvenienceRequest, expectedDeviceKey: String,
+        activityStartedAt: ContinuousClock.Instant = .now
+    ) async throws
         -> TVConvenienceResponse
     {
         guard case .connected(let tv) = state, tv.stableDeviceKey == expectedDeviceKey, isForeground else {
@@ -390,7 +401,7 @@ actor RemoteSessionController {
         try await performSend(
             optionalFeature: !request.changesTVState, isConvenienceRequest: true,
             recoverCancelledWrite: request.changesTVState,
-            timeout: .seconds(10)
+            timeout: .seconds(10), activityStartedAt: activityStartedAt
         ) { [weak self] in
             guard let self else { throw CancellationError() }
             let response = try await self.executeConvenience(
@@ -521,10 +532,12 @@ actor RemoteSessionController {
             {
                 // This driver can close its connection when a write is cancelled.
                 // Preserve no connected claim for that generation's uncertain transport.
-                transition(to: .offline)
-                transitionToPendingReconnectIfAvailable(generation: commandGeneration)
+                transition(to: .offline, activityStartedAt: activityStartedAt)
+                transitionToPendingReconnectIfAvailable(generation: commandGeneration, activityStartedAt: activityStartedAt)
                 await disconnectDriverWithinLimit()
-                if generation == commandGeneration { scheduleReconnect(generation: commandGeneration) }
+                if generation == commandGeneration {
+                    scheduleReconnect(generation: commandGeneration, activityStartedAt: activityStartedAt)
+                }
             }
             if generation == commandGeneration, !wasCancelled {
                 let queuedCommands = Array(commandTasks.values)
@@ -559,9 +572,11 @@ actor RemoteSessionController {
         }
     }
 
-    func powerOffAndDisconnect(expectedDeviceKey: String) async throws -> Bool {
+    func powerOffAndDisconnect(expectedDeviceKey: String, activityStartedAt: ContinuousClock.Instant = .now)
+        async throws -> Bool
+    {
         let ownerGeneration = generation
-        try await send(.powerOff, expectedDeviceKey: expectedDeviceKey)
+        try await send(.powerOff, expectedDeviceKey: expectedDeviceKey, activityStartedAt: activityStartedAt)
         try Task.checkCancellation()
         guard generation == ownerGeneration, case .connected(let television) = state,
             television.stableDeviceKey == expectedDeviceKey
@@ -573,7 +588,7 @@ actor RemoteSessionController {
         reconnectAttempt = 0
         await cancelInFlightWork()
         guard generation == teardownGeneration else { return false }
-        transition(to: .idle)
+        transition(to: .idle, activityStartedAt: activityStartedAt)
         await disconnectDriverWithinLimit()
         return generation == teardownGeneration
     }

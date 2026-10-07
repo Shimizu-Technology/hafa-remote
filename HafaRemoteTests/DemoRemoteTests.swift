@@ -22,6 +22,16 @@ struct DemoRemoteTests {
         #expect(!second.isPlaying)
     }
 
+    @Test("Every semantic command is handled by the offline model", arguments: RemoteCommand.allCases)
+    func semanticCommandIsOffline(_ command: RemoteCommand) {
+        let model = DemoRemoteModel()
+        model.send(command)
+        #expect((0..<model.tiles.count).contains(model.focusedTile))
+        #expect((0...100).contains(model.volume))
+        #expect(model.textCharacterCount == 0)
+        #expect(!model.activity.isEmpty)
+    }
+
     @Test("Sleeping demo ignores control and text until explicitly powered on")
     func simulatedPower() throws {
         let model = DemoRemoteModel()
