@@ -42,10 +42,13 @@ struct VizioProtocolCodecTests {
             .volumeUp: (5, 1),
             .volumeDown: (5, 0),
             .mute: (5, 4),
+            .inputSource: (7, 1),
+            .channelUp: (8, 1),
+            .channelDown: (8, 0),
         ]
 
-        #expect(expected.count == RemoteCommand.allCases.count)
-        for command in RemoteCommand.allCases {
+        #expect(expected.count == RemoteCommand.allCases.filter { $0.digit == nil && $0 != .guide }.count)
+        for command in expected.keys {
             let object = try jsonObject(VizioProtocolCodec.remoteCommand(command))
             let keys = try #require(object["KEYLIST"] as? [[String: Any]])
             let key = try #require(keys.first)

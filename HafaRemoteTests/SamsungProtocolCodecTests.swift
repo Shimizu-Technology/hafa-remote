@@ -83,12 +83,26 @@ struct SamsungProtocolCodecTests {
             (.volumeUp, "KEY_VOLUP"),
             (.volumeDown, "KEY_VOLDOWN"),
             (.mute, "KEY_MUTE"),
+            (.inputSource, "KEY_SOURCE"),
+            (.channelUp, "KEY_CHUP"),
+            (.channelDown, "KEY_CHDOWN"),
+            (.guide, "KEY_GUIDE"),
+            (.digit0, "KEY_0"),
+            (.digit1, "KEY_1"),
+            (.digit2, "KEY_2"),
+            (.digit3, "KEY_3"),
+            (.digit4, "KEY_4"),
+            (.digit5, "KEY_5"),
+            (.digit6, "KEY_6"),
+            (.digit7, "KEY_7"),
+            (.digit8, "KEY_8"),
+            (.digit9, "KEY_9"),
         ]
 
         #expect(mappings.map(\.0) == RemoteCommand.allCases.filter { $0 != .powerOn })
         #expect(Set(mappings.map(\.1)).count == mappings.count)
         let repeatable: Set<RemoteCommand> = [
-            .up, .down, .left, .right, .volumeUp, .volumeDown,
+            .up, .down, .left, .right, .volumeUp, .volumeDown, .channelUp, .channelDown,
         ]
         for command in RemoteCommand.allCases {
             #expect(command.supportsRepeat == repeatable.contains(command))

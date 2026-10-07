@@ -52,11 +52,17 @@ struct HomeView: View {
                     powerOnWasVerified: savedTV?.hardwareVerifiedCapabilities.contains(.powerOn) == true,
                     powerOnHelpText: powerOnHelpText(for: tv.brand),
                     powerOnFailureText: powerOnFailureText(for: tv.brand),
-                    powerOffFailureText: powerOffFailureText(for: tv.brand)
+                    powerOffFailureText: powerOffFailureText(for: tv.brand),
+                    convenienceContext: RemoteConvenienceContext(
+                        stableDeviceKey: tv.stableDeviceKey, brand: tv.brand
+                    ) { request in
+                        try await session.convenience(request, expectedDeviceKey: tv.stableDeviceKey)
+                    }
                 ) { command in
-                    guard isPresentedTVConnected else { return }
+                    guard isPresentedTVConnected, session.connectedTV?.stableDeviceKey == tv.stableDeviceKey
+                    else { return }
                     do {
-                        try await session.send(command)
+                        try await session.send(command, expectedDeviceKey: tv.stableDeviceKey)
                     } catch {
                         // The session projects the protocol failure and reconnect state.
                     }
@@ -64,7 +70,7 @@ struct HomeView: View {
                     guard isPresentedTVConnected else {
                         throw TVSelectionError.notConnected
                     }
-                    try await session.sendText(input)
+                    try await session.sendText(input, expectedDeviceKey: tv.stableDeviceKey)
                 } powerOnAction: {
                     try await powerOn(tv, savedTV: savedTV)
                 } powerOffAction: {
@@ -499,6 +505,7 @@ struct HomeView: View {
             throw error
         }
 
+        TVConveniencePreferences.shared.forget(stableDeviceKey: removedKey)
         if affectsActiveSession {
             await session.disconnect()
         }

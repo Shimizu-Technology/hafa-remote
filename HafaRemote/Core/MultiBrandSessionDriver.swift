@@ -128,6 +128,16 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
         }
     }
 
+    func convenience(_ request: TVConvenienceRequest) async throws -> TVConvenienceResponse {
+        try Task.checkCancellation()
+        switch activeBrand {
+        case .samsung: return try await samsung.convenience(request)
+        case .sony: return try await sony.convenience(request)
+        case .vizio: return try await vizio.convenience(request)
+        case .none: throw MultiBrandSessionDriverError.notConnected
+        }
+    }
+
     func sessionObservation() async throws -> TVSessionObservation? {
         switch activeBrand {
         case .samsung: try await samsung.sessionObservation()

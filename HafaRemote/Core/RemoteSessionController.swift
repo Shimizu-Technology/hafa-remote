@@ -270,23 +270,88 @@ actor RemoteSessionController {
         await attemptConnection(generation: requestedGeneration, isReconnect: false)
     }
 
-    func send(_ command: RemoteCommand) async throws {
+    func send(_ command: RemoteCommand, expectedDeviceKey: String? = nil) async throws {
+        let requestedGeneration = generation
+        if let expectedDeviceKey {
+            guard case .connected(let tv) = state, tv.stableDeviceKey == expectedDeviceKey else {
+                throw TVConvenienceError.wrongTV
+            }
+        }
         if case .connected(let television) = state,
             !television.capabilities.contains(command.requiredCapability)
         {
             throw TVDriverError.unsupportedCommand
         }
-        let driver = driver
-        try await performSend {
-            try await driver.send(command)
+        try await performSend { [weak self] in
+            guard let self else { throw CancellationError() }
+            try await self.executeCommand(
+                command, expectedDeviceKey: expectedDeviceKey, generation: requestedGeneration)
         }
     }
 
-    func sendText(_ input: RemoteTextInput) async throws {
-        let driver = driver
-        try await performSend {
-            try await driver.sendText(input)
+    private func executeCommand(
+        _ command: RemoteCommand, expectedDeviceKey: String?, generation requestedGeneration: UUID
+    ) async throws {
+        try Task.checkCancellation()
+        guard generation == requestedGeneration, isForeground, case .connected(let tv) = state,
+            expectedDeviceKey == nil || expectedDeviceKey == tv.stableDeviceKey
+        else { throw CancellationError() }
+        guard tv.capabilities.contains(command.requiredCapability) else {
+            throw TVDriverError.unsupportedCommand
         }
+        try await driver.send(command)
+    }
+
+    func sendText(_ input: RemoteTextInput, expectedDeviceKey: String? = nil) async throws {
+        let requestedGeneration = generation
+        try await performSend { [weak self] in
+            guard let self else { throw CancellationError() }
+            try await self.executeText(
+                input, expectedDeviceKey: expectedDeviceKey, generation: requestedGeneration)
+        }
+    }
+
+    private func executeText(
+        _ input: RemoteTextInput, expectedDeviceKey: String?, generation requestedGeneration: UUID
+    ) async throws {
+        try Task.checkCancellation()
+        guard generation == requestedGeneration, isForeground, case .connected(let tv) = state,
+            expectedDeviceKey == nil || expectedDeviceKey == tv.stableDeviceKey
+        else { throw CancellationError() }
+        try await driver.sendText(input)
+    }
+
+    func convenience(_ request: TVConvenienceRequest, expectedDeviceKey: String) async throws
+        -> TVConvenienceResponse
+    {
+        guard case .connected(let tv) = state, tv.stableDeviceKey == expectedDeviceKey, isForeground else {
+            throw TVConvenienceError.wrongTV
+        }
+        let requestedGeneration = generation
+        let box = TVConvenienceResultBox()
+        try await performSend(optionalFeature: true, timeout: .seconds(10)) { [weak self] in
+            guard let self else { throw CancellationError() }
+            let response = try await self.executeConvenience(
+                request, expectedDeviceKey: expectedDeviceKey, generation: requestedGeneration)
+            await box.store(response)
+        }
+        guard generation == requestedGeneration, isForeground, case .connected(let current) = state,
+            current.stableDeviceKey == expectedDeviceKey
+        else { throw CancellationError() }
+        let response = try await box.value()
+        await refreshObservation()
+        guard generation == requestedGeneration else { throw CancellationError() }
+        return response
+    }
+
+    private func executeConvenience(
+        _ request: TVConvenienceRequest, expectedDeviceKey: String, generation requestedGeneration: UUID
+    ) async throws -> TVConvenienceResponse {
+        try Task.checkCancellation()
+        guard generation == requestedGeneration, isForeground, case .connected(let tv) = state,
+            tv.stableDeviceKey == expectedDeviceKey
+        else { throw CancellationError() }
+        return try await driver.convenience(request)
     }
 
     /// Refreshes optional power evidence after an explicit action without claiming success.
@@ -315,6 +380,8 @@ actor RemoteSessionController {
     }
 
     private func performSend(
+        optionalFeature: Bool = false,
+        timeout requestedTimeout: Duration? = nil,
         _ operation: @escaping @Sendable () async throws -> Void
     ) async throws {
         guard case .connected = state else {
@@ -333,7 +400,7 @@ actor RemoteSessionController {
         let commandID = UUID()
         let commandSerializer = commandSerializer
         let clock = clock
-        let timeout = configuration.commandTimeout
+        let timeout = requestedTimeout ?? configuration.commandTimeout
         let task = Task {
             try await RemoteSessionTimeout.run(
                 operation: .send,
@@ -361,6 +428,12 @@ actor RemoteSessionController {
             }
         } catch {
             commandTasks[commandID] = nil
+            if error is TVConvenienceError { throw error }
+            if optionalFeature, error is VizioProtocolError { throw TVConvenienceError.unavailable }
+            if optionalFeature, let timeout = error as? RemoteSessionControllerError, case .timedOut = timeout
+            {
+                throw TVConvenienceError.timedOut
+            }
             let wasCancelled = Task.isCancelled || error is CancellationError
             if !wasCancelled,
                 error as? TVDriverError == .unsupportedCommand

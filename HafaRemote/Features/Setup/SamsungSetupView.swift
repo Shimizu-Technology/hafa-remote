@@ -9,6 +9,8 @@ struct TVSetupView: View {
     @Query private var savedTVs: [SavedTV]
     @State private var discovery: TVDiscoveryStore
     @State private var address = ""
+    @State private var manualBrand: TVBrand = .samsung
+    @State private var manualFailure: String?
     @State private var selectedTV: DiscoveredTV?
     @State private var ambiguousCandidate: DiscoveredTV?
     @State private var ambiguousSavedTVs: [SavedTV] = []
@@ -47,6 +49,7 @@ struct TVSetupView: View {
             initialTarget?.expectedSavedDeviceID ?? initialTarget?.reportedDeviceID ?? initialReportedDeviceID
         _address = State(initialValue: initialTarget?.address.rawValue ?? initialAddress)
         _selectedBrand = State(initialValue: initialTarget?.brand)
+        _manualBrand = State(initialValue: initialTarget?.brand ?? .samsung)
         _selectedTarget = State(initialValue: initialTarget)
         _discovery = State(initialValue: discovery)
     }
@@ -374,11 +377,17 @@ struct TVSetupView: View {
             if isShowingManualSetup {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(
-                        "For a Samsung TV, enter the private address from Settings › Network › Network Status › IP Settings. Sony and Vizio use nearby discovery and their own pairing codes."
+                        "Choose the TV brand, then enter its private address from the TV network settings. Samsung asks for approval, Sony shows a pairing code, and Vizio shows a PIN."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
 
+                    Picker("TV Brand", selection: $manualBrand) {
+                        ForEach(TVBrand.allCases, id: \.self) { brand in Text(brand.displayName).tag(brand) }
+                    }
+                    .disabled(isBusy)
+                    .accessibilityIdentifier("manualTVBrandPicker")
+                    if let manualFailure { Text(manualFailure).foregroundStyle(.secondary) }
                     TextField("192.168.1.25", text: $address)
                         .keyboardType(.numbersAndPunctuation)
                         .textInputAutocapitalization(.never)
@@ -499,6 +508,7 @@ struct TVSetupView: View {
         resetPairingCodeSubmission()
         selectedTV = television
         selectedBrand = television.brand
+        manualBrand = television.brand
         selectedTarget = target
         pairingCode = ""
         hasSubmittedPairingCode = false
@@ -510,8 +520,7 @@ struct TVSetupView: View {
     private func connectManually() {
         resetPairingCodeSubmission()
         selectedTV = nil
-        selectedBrand = .samsung
-        selectedTarget = nil
+        selectedBrand = manualBrand
         pairingCode = ""
         hasSubmittedPairingCode = false
         discovery.stop()
@@ -532,16 +541,18 @@ struct TVSetupView: View {
     }
 
     private func connectUsingCurrentAddress() {
-        let operationID = UUID()
-        connectionTaskID = nil
-        connectionTask?.cancel()
-        let requestedAddress = address
-        connectionTaskID = operationID
-        connectionTask = Task {
-            await session.connect(to: requestedAddress)
-            guard connectionTaskID == operationID else { return }
-            connectionTaskID = nil
-            connectionTask = nil
+        do {
+            let validated = try PrivateIPv4Address(address.trimmingCharacters(in: .whitespacesAndNewlines))
+            let target = ManualTVTargetFactory.target(
+                address: validated, brand: manualBrand, savedTarget: selectedTarget ?? initialTarget)
+            selectedBrand = manualBrand
+            selectedTarget = target
+            manualFailure = nil
+            connect(to: target)
+        } catch {
+            manualFailure =
+                (error as? PrivateIPv4AddressError)?.errorDescription
+                ?? "Enter the TV's private network address."
         }
     }
 
@@ -700,7 +711,9 @@ struct TVSetupView: View {
             if let repairTarget {
                 await session.connect(to: repairTarget)
             } else {
-                await session.connect(to: address)
+                let endpoint = try PrivateIPv4Address(address.trimmingCharacters(in: .whitespacesAndNewlines))
+                let target = ManualTVTargetFactory.target(address: endpoint, brand: repairBrand)
+                await session.connect(to: target)
             }
         } catch is CancellationError {
             return

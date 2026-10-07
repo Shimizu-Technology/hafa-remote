@@ -36,6 +36,12 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     private let observationBroadcaster = TVSessionObservationBroadcaster()
     private var activeTV: ConnectedTV?
     private var negotiatedFeatures: UInt64 = 0
+    private var reportedFeatures: UInt64 = 0
+    private var keyboardEnabled = true
+    private var imeFocus = SonyIMEFocus()
+    private var requestedFeatures: UInt64 {
+        SonyRemoteProtocolCodec.requestedFeatures & (keyboardEnabled ? UInt64.max : ~UInt64(4))
+    }
     private var readTask: Task<Void, Never>?
     private var sessionGeneration = UUID()
     private var isRemoteSessionAlive = false
@@ -98,6 +104,9 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         guard activeTV?.capabilities.contains(command.requiredCapability) == true else {
             throw TVDriverError.unsupportedCommand
         }
+        if command.requiredCapability == .navigation || command == .powerOff || command == .inputSource {
+            imeFocus.clear()
+        }
         let message = try SonyRemoteProtocolCodec.command(command)
         try await writeSerializer.perform { [controlChannel] in
             try await controlChannel.send(message)
@@ -105,7 +114,63 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     }
 
     func sendText(_ input: RemoteTextInput) async throws {
-        throw TVDriverError.unsupportedTextInput
+        guard keyboardEnabled, negotiatedFeatures & 4 != 0 else { throw TVDriverError.unsupportedTextInput }
+        let generation = sessionGeneration
+        try await writeSerializer.perform { [weak self] in
+            guard let self else { throw CancellationError() }
+            try await self.writeText(input, generation: generation)
+        }
+    }
+
+    private func writeText(_ input: RemoteTextInput, generation: UUID) async throws {
+        try Task.checkCancellation()
+        guard sessionGeneration == generation, isRemoteSessionAlive, keyboardEnabled,
+            negotiatedFeatures & 4 != 0,
+            activeTV?.powerState != .standby
+        else { throw TVConvenienceError.textFieldNotFocused }
+        let counters = try imeFocus.snapshot()
+        let message = try SonyConvenienceCodec.text(
+            input, imeCounter: counters.ime, fieldCounter: counters.field)
+        imeFocus.clear()
+        try await controlChannel.send(message)
+    }
+
+    func convenience(_ request: TVConvenienceRequest) async throws -> TVConvenienceResponse {
+        guard isRemoteSessionAlive else { throw SonyTLSChannelError.connectionClosed }
+        switch request {
+        case .apps:
+            guard negotiatedFeatures & 512 != 0 else { throw TVConvenienceError.unavailable }
+            return .apps(TVAppShortcut.sonyConfiguredLinks)
+        case .launch(let app):
+            guard negotiatedFeatures & 512 != 0 else { throw TVConvenienceError.unavailable }
+            let message = try SonyConvenienceCodec.launch(app)
+            let generation = sessionGeneration
+            try await writeSerializer.perform { [weak self] in
+                guard let self else { throw CancellationError() }
+                try await self.writeConvenience(message, generation: generation)
+            }
+            return .sent
+        case .setKeyboardEnabled(let enabled):
+            keyboardEnabled = enabled
+            imeFocus.clear()
+            negotiatedFeatures = reportedFeatures & requestedFeatures
+            let features = negotiatedFeatures
+            let generation = sessionGeneration
+            let message = SonyRemoteProtocolCodec.configurationResponse(negotiatedFeatures: features)
+            try await writeSerializer.perform { [weak self] in
+                guard let self else { throw CancellationError() }
+                try await self.writeConvenience(message, generation: generation)
+            }
+            await publishObservation(powerState: activeTV?.powerState ?? .unknown, generation: generation)
+            return .sent
+        default: throw TVConvenienceError.unavailable
+        }
+    }
+
+    private func writeConvenience(_ message: Data, generation: UUID) async throws {
+        try Task.checkCancellation()
+        guard sessionGeneration == generation, isRemoteSessionAlive else { throw CancellationError() }
+        try await controlChannel.send(message)
     }
 
     func checkConnection() async throws {
@@ -142,6 +207,8 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         readTask = nil
         activeTV = nil
         negotiatedFeatures = 0
+        reportedFeatures = 0
+        imeFocus.clear()
         await observationBroadcaster.reset()
         await pairingChannel.disconnect()
         await controlChannel.disconnect()
@@ -263,11 +330,15 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             throw SonyPairingCoordinatorError.certificateChanged
         }
 
+        keyboardEnabled = await MainActor.run {
+            TVConveniencePreferences.shared.keyboardEnabled(for: "sony:\(credential.reportedDeviceID)")
+        }
         let device = try await SonyRemoteHandshake.run(
             on: controlChannel,
             fallbackModelName: peer.displayName,
             timeout: Self.remoteHandshakeTimeout,
-            maximumMessages: Self.maximumRemoteHandshakeMessages
+            maximumMessages: Self.maximumRemoteHandshakeMessages,
+            requestedFeatures: requestedFeatures
         )
 
         try Task.checkCancellation()
@@ -288,6 +359,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         )
         activeTV = television
         negotiatedFeatures = device.negotiatedFeatures
+        reportedFeatures = device.reportedFeatures
         await observationBroadcaster.publish(
             TVSessionObservation(
                 stableDeviceKey: television.stableDeviceKey,
@@ -334,7 +406,9 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
                     guard vendor.localizedCaseInsensitiveContains("sony"), reportedFeatures & 2 == 2 else {
                         throw SonyPairingCoordinatorError.unsupportedDevice
                     }
-                    negotiatedFeatures = reportedFeatures & SonyRemoteProtocolCodec.requestedFeatures
+                    self.reportedFeatures = reportedFeatures
+                    negotiatedFeatures = reportedFeatures & requestedFeatures
+                    imeFocus.clear()
                     let features = negotiatedFeatures
                     try await writeSerializer.perform { [controlChannel] in
                         try await controlChannel.send(
@@ -342,7 +416,12 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
                     }
                     await publishObservation(
                         powerState: activeTV?.powerState ?? .unknown, generation: generation)
+                case .imeFocus(let counter):
+                    imeFocus.focus(fieldCounter: keyboardEnabled ? counter : nil)
+                case .imeCounters(let ime, let field):
+                    if keyboardEnabled { imeFocus.counters(ime: ime, field: field) }
                 case .powerState(let isOn):
+                    if !isOn { imeFocus.clear() }
                     await publishObservation(powerState: isOn ? .on : .standby, generation: generation)
                 case .other:
                     continue
@@ -400,12 +479,17 @@ struct SonyRemoteDevice: Sendable {
     let softwareVersion: String
     let negotiatedFeatures: UInt64
     let powerState: TVPowerState
+    var reportedFeatures: UInt64 = 0
 
     var capabilities: Set<TVCapability> { Self.capabilities(for: negotiatedFeatures) }
 
     static func capabilities(for features: UInt64) -> Set<TVCapability> {
         var capabilities: Set<TVCapability> = []
-        if features & 2 != 0 { capabilities.formUnion([.navigation, .playback]) }
+        if features & 2 != 0 {
+            capabilities.formUnion([.navigation, .playback, .sourceMenu, .channels, .guide, .numberPad])
+        }
+        if features & 4 != 0 { capabilities.insert(.textInput) }
+        if features & 512 != 0 { capabilities.insert(.favoriteApps) }
         if features & 64 != 0 { capabilities.formUnion([.volume, .mute]) }
         if features & 32 != 0 { capabilities.formUnion([.powerOff, .powerOn]) }
         return capabilities
@@ -435,14 +519,16 @@ enum SonyRemoteHandshake {
         on controlChannel: any SonyTLSChanneling,
         fallbackModelName: String,
         timeout: Duration,
-        maximumMessages: Int
+        maximumMessages: Int,
+        requestedFeatures: UInt64 = SonyRemoteProtocolCodec.requestedFeatures
     ) async throws -> SonyRemoteDevice {
         do {
             return try await SonyTLSConnectionDeadline.run(timeout: timeout) {
                 try await complete(
                     on: controlChannel,
                     fallbackModelName: fallbackModelName,
-                    maximumMessages: maximumMessages
+                    maximumMessages: maximumMessages,
+                    requestedFeatures: requestedFeatures
                 )
             }
         } catch SonyTLSChannelError.timedOut {
@@ -453,7 +539,8 @@ enum SonyRemoteHandshake {
     private static func complete(
         on controlChannel: any SonyTLSChanneling,
         fallbackModelName: String,
-        maximumMessages: Int
+        maximumMessages: Int,
+        requestedFeatures: UInt64
     ) async throws -> SonyRemoteDevice {
         var device: SonyRemoteDevice?
         for _ in 0..<maximumMessages {
@@ -467,12 +554,13 @@ enum SonyRemoteHandshake {
                 device = SonyRemoteDevice(
                     model: model.isEmpty ? fallbackModelName : model,
                     softwareVersion: softwareVersion,
-                    negotiatedFeatures: supportedFeatures & SonyRemoteProtocolCodec.requestedFeatures,
-                    powerState: .unknown
+                    negotiatedFeatures: supportedFeatures & requestedFeatures,
+                    powerState: .unknown,
+                    reportedFeatures: supportedFeatures
                 )
                 try await controlChannel.send(
                     SonyRemoteProtocolCodec.configurationResponse(
-                        negotiatedFeatures: supportedFeatures & SonyRemoteProtocolCodec.requestedFeatures
+                        negotiatedFeatures: supportedFeatures & requestedFeatures
                     ))
             case .setActive:
                 try await controlChannel.send(
@@ -488,9 +576,10 @@ enum SonyRemoteHandshake {
                 return SonyRemoteDevice(
                     model: device.model, softwareVersion: device.softwareVersion,
                     negotiatedFeatures: device.negotiatedFeatures,
-                    powerState: isOn ? .on : .standby
+                    powerState: isOn ? .on : .standby,
+                    reportedFeatures: device.reportedFeatures
                 )
-            case .other:
+            case .imeFocus, .imeCounters, .other:
                 continue
             }
         }

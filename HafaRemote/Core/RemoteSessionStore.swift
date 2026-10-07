@@ -169,12 +169,18 @@ final class RemoteSessionStore {
         }
     }
 
-    func send(_ command: RemoteCommand) async throws {
-        try await controller.send(command)
+    func send(_ command: RemoteCommand, expectedDeviceKey: String? = nil) async throws {
+        try await controller.send(command, expectedDeviceKey: expectedDeviceKey)
     }
 
-    func sendText(_ input: RemoteTextInput) async throws {
-        try await controller.sendText(input)
+    func sendText(_ input: RemoteTextInput, expectedDeviceKey: String? = nil) async throws {
+        try await controller.sendText(input, expectedDeviceKey: expectedDeviceKey)
+    }
+
+    func convenience(_ request: TVConvenienceRequest, expectedDeviceKey: String) async throws
+        -> TVConvenienceResponse
+    {
+        try await controller.convenience(request, expectedDeviceKey: expectedDeviceKey)
     }
 
     func refreshObservation() async { await controller.refreshObservation() }

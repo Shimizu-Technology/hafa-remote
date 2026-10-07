@@ -234,11 +234,13 @@ enum SonyRemoteEvent: Equatable, Sendable {
     case setActive
     case ping(Int64)
     case powerState(Bool)
+    case imeFocus(UInt64?)
+    case imeCounters(ime: UInt64, field: UInt64)
     case other
 }
 
 enum SonyRemoteProtocolCodec {
-    static let requestedFeatures: UInt64 = 1 | 2 | 32 | 64
+    static let requestedFeatures: UInt64 = 1 | 2 | 4 | 32 | 64 | 512
 
     static func configurationResponse(negotiatedFeatures: UInt64 = requestedFeatures) -> Data {
         let deviceInfo =
@@ -282,6 +284,13 @@ enum SonyRemoteProtocolCodec {
         case .mute: keyCode = 164
         case .powerOn: keyCode = 224
         case .powerOff: keyCode = 223
+        case .inputSource: keyCode = 178
+        case .channelUp: keyCode = 166
+        case .channelDown: keyCode = 167
+        case .guide: keyCode = 172
+        case .digit0, .digit1, .digit2, .digit3, .digit4, .digit5, .digit6, .digit7, .digit8, .digit9:
+            guard let digit = command.digit else { throw SonyProtocolCodecError.unsupportedCommand }
+            keyCode = UInt64(7 + digit)
         }
         let key =
             SonyProtobuf.varintField(1, keyCode)
@@ -317,6 +326,7 @@ enum SonyRemoteProtocolCodec {
             guard let value, value == 0 || value == 1 else { return .other }
             return .powerState(value == 1)
         }
+        if let event = try SonyConvenienceCodec.event(in: fields) { return event }
         return .other
     }
 

@@ -23,6 +23,8 @@ actor VizioHTTPSClient: VizioHTTPClienting {
     private let session: URLSession
     private var authToken: String?
     private var isDisconnected = false
+    private var didReadInputs = false
+    private var didReadAppConfiguration = false
     private var reportedDeviceID: String?
 
     nonisolated static func supports(controlPort: UInt16) -> Bool {
@@ -102,6 +104,40 @@ actor VizioHTTPSClient: VizioHTTPClienting {
         return fingerprint
     }
 
+    func convenience(_ request: TVConvenienceRequest) async throws -> TVConvenienceResponse {
+        guard let authToken, !isDisconnected else { throw VizioHTTPSClientError.notConnected }
+        switch request {
+        case .inputs:
+            let data = try await self.request(
+                path: VizioConvenienceCodec.inputsPath, method: "GET", authToken: authToken)
+            let inputs = try VizioConvenienceCodec.inputs(from: data)
+            didReadInputs = true
+            return .inputs(inputs)
+        case .selectInput(let input):
+            let list = try await self.request(
+                path: VizioConvenienceCodec.inputsPath, method: "GET", authToken: authToken)
+            guard try VizioConvenienceCodec.inputs(from: list).contains(where: { $0.value == input.value })
+            else { throw TVConvenienceError.unavailable }
+            let current = try await self.request(
+                path: VizioConvenienceCodec.currentInputPath, method: "GET", authToken: authToken)
+            let hash = try VizioConvenienceCodec.currentInputHash(from: current)
+            let body = try VizioConvenienceCodec.selectInput(input, currentHash: hash)
+            _ = try await self.request(
+                path: VizioConvenienceCodec.currentInputPath, method: "PUT", body: body, authToken: authToken)
+            return .sent
+        case .currentApp:
+            let data = try await self.request(path: "/app/current", method: "GET", authToken: authToken)
+            let app = try VizioConvenienceCodec.currentApp(from: data)
+            didReadAppConfiguration = true
+            return .currentApp(app)
+        case .launch(let app):
+            let body = try VizioConvenienceCodec.launch(app)
+            _ = try await self.request(path: "/app/launch", method: "PUT", body: body, authToken: authToken)
+            return .sent
+        default: throw TVConvenienceError.unavailable
+        }
+    }
+
     func send(_ command: RemoteCommand) async throws {
         let body = try VizioProtocolCodec.remoteCommand(command)
         guard let authToken else {
@@ -139,7 +175,12 @@ actor VizioHTTPSClient: VizioHTTPClienting {
             // An optional read failing never proves the screen is asleep or awake.
             powerState = .unknown
         }
-        return TVSessionObservation(stableDeviceKey: "vizio:\(reportedDeviceID)", powerState: powerState)
+        var capabilities = TVCapability.implemented(for: .vizio).subtracting([.inputSelection, .favoriteApps])
+        if didReadInputs { capabilities.insert(.inputSelection) }
+        if didReadAppConfiguration { capabilities.insert(.favoriteApps) }
+        return TVSessionObservation(
+            stableDeviceKey: "vizio:\(reportedDeviceID)", powerState: powerState,
+            protocolReportedCapabilities: capabilities)
     }
 
     func disconnect() {

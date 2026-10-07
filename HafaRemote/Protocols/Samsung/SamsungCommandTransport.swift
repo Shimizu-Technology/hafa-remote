@@ -21,6 +21,9 @@ actor SamsungCommandTransport: SamsungTransporting {
     private var trustDelegate: SamsungTrustDelegate?
     private var attempts = SamsungConnectionAttemptTracker()
     private let commandSerializer = SamsungCommandSerializer()
+    private var appQuery = SamsungAppListQuery()
+    private var appReadTask: Task<Void, Never>?
+    private var socketGeneration = UUID()
     private let pairingTimeout: Duration
 
     init(pairingTimeout: Duration = .seconds(45)) {
@@ -34,6 +37,7 @@ actor SamsungCommandTransport: SamsungTransporting {
     ) async throws -> SamsungPairingCredential {
         try Task.checkCancellation()
         disconnectCurrentSocket()
+        await appQuery.reset()
         attempts.begin(attemptID)
 
         var attemptSession: URLSession?
@@ -70,6 +74,7 @@ actor SamsungCommandTransport: SamsungTransporting {
             session = createdSession
             webSocket = createdSocket
             trustDelegate = delegate
+            createdSocket.maximumMessageSize = 1_048_576
             createdSocket.resume()
 
             let token = try await waitForPairingToken(
@@ -82,6 +87,11 @@ actor SamsungCommandTransport: SamsungTransporting {
             }
             guard let fingerprint = delegate.candidateFingerprint else {
                 throw SamsungConnectionError.missingCertificate
+            }
+            let generation = socketGeneration
+            let query = appQuery
+            appReadTask = Task { [weak self] in
+                await self?.readAppEvents(on: createdSocket, generation: generation, query: query)
             }
             return try SamsungPairingCredential(
                 token: token,
@@ -110,6 +120,56 @@ actor SamsungCommandTransport: SamsungTransporting {
                 throw connectionError
             }
             throw SamsungConnectionError.unavailable
+        }
+    }
+
+    func convenience(_ request: TVConvenienceRequest) async throws -> TVConvenienceResponse {
+        guard let socket = webSocket else { throw SamsungConnectionError.notConnected }
+        switch request {
+        case .apps:
+            return .apps(try await listApps(on: socket))
+        case .launch(let app):
+            guard app.target.brand == .samsung else { throw TVConvenienceError.wrongTV }
+            let available = try await listApps(on: socket)
+            guard available.contains(where: { $0.target == app.target }), webSocket === socket else {
+                throw TVConvenienceError.unavailable
+            }
+            let message = try SamsungAppCodec.launch(app)
+            try await commandSerializer.perform { try await socket.send(message) }
+            return .sent
+        default: throw TVConvenienceError.unavailable
+        }
+    }
+
+    private func listApps(on socket: URLSessionWebSocketTask) async throws -> [TVAppShortcut] {
+        let message = try SamsungAppCodec.request()
+        let serializer = commandSerializer
+        return try await appQuery.query {
+            try await serializer.perform { try await socket.send(message) }
+        }
+    }
+
+    private func readAppEvents(
+        on socket: URLSessionWebSocketTask, generation: UUID, query: SamsungAppListQuery
+    ) async {
+        do {
+            while socketGeneration == generation, !Task.isCancelled {
+                let message = try await socket.receive()
+                guard socketGeneration == generation, webSocket === socket, !Task.isCancelled else { return }
+                do {
+                    if let apps = try SamsungAppCodec.apps(from: message) {
+                        await query.receive(.success(apps))
+                    }
+                } catch { await query.receive(.failure(TVConvenienceError.invalidResponse)) }
+                if case .unauthorized = try? SamsungProtocolCodec.event(from: message) {
+                    await query.receive(.failure(SamsungConnectionError.denied))
+                    socket.cancel(with: .goingAway, reason: nil)
+                    return
+                }
+            }
+        } catch {
+            guard socketGeneration == generation else { return }
+            await query.receive(.failure(SamsungConnectionError.unavailable))
         }
     }
 
@@ -187,13 +247,15 @@ actor SamsungCommandTransport: SamsungTransporting {
         }
     }
 
-    func disconnect() {
+    func disconnect() async {
         disconnectCurrentSocket()
+        await appQuery.reset()
     }
 
-    func disconnect(attemptID: SamsungConnectionAttemptID) {
+    func disconnect(attemptID: SamsungConnectionAttemptID) async {
         guard attempts.isCurrent(attemptID) else { return }
         disconnectCurrentSocket()
+        await appQuery.reset()
     }
 
     private func waitForPairingToken(
@@ -246,6 +308,12 @@ actor SamsungCommandTransport: SamsungTransporting {
     }
 
     private func disconnectCurrentSocket() {
+        let oldQuery = appQuery
+        appQuery = SamsungAppListQuery()
+        Task { await oldQuery.receive(.failure(CancellationError())) }
+        socketGeneration = UUID()
+        appReadTask?.cancel()
+        appReadTask = nil
         attempts.invalidate()
         webSocket?.cancel(with: .goingAway, reason: nil)
         session?.invalidateAndCancel()

@@ -169,7 +169,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                 try await credentialStore.save(credential, for: identity)
                 try Task.checkCancellation()
 
-                let television = ConnectedTV(
+                let baseTelevision = ConnectedTV(
                     brand: .samsung,
                     reportedDeviceID: deviceInfo.reportedDeviceID,
                     address: address,
@@ -179,6 +179,12 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                     macAddress: deviceInfo.macAddress,
                     powerState: deviceInfo.powerState
                 )
+                let television = baseTelevision.applying(
+                    TVSessionObservation(
+                        stableDeviceKey: baseTelevision.stableDeviceKey,
+                        powerState: baseTelevision.powerState,
+                        protocolReportedCapabilities: baseTelevision.capabilities.subtracting([.favoriteApps])
+                    ))
                 activeTV = television
                 return television
             } catch {
@@ -207,6 +213,20 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                 await transport.disconnect(attemptID: attemptID)
             }
         }
+    }
+
+    func convenience(_ request: TVConvenienceRequest) async throws -> TVConvenienceResponse {
+        let expectedKey = activeTV?.stableDeviceKey
+        let response = try await transport.convenience(request)
+        try Task.checkCancellation()
+        guard activeTV?.stableDeviceKey == expectedKey else { throw CancellationError() }
+        if case .apps = response, let tv = activeTV {
+            activeTV = tv.applying(
+                TVSessionObservation(
+                    stableDeviceKey: tv.stableDeviceKey, powerState: tv.powerState,
+                    protocolReportedCapabilities: tv.capabilities.union([.favoriteApps])))
+        }
+        return response
     }
 
     func send(_ command: RemoteCommand) async throws {
@@ -260,7 +280,9 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
         guard info.reportedDeviceID == activeTV.reportedDeviceID else {
             throw TVDriverError.savedDeviceIdentityMismatch
         }
-        return TVSessionObservation(stableDeviceKey: activeTV.stableDeviceKey, powerState: info.powerState)
+        return TVSessionObservation(
+            stableDeviceKey: activeTV.stableDeviceKey, powerState: info.powerState,
+            protocolReportedCapabilities: activeTV.capabilities)
     }
 
     func disconnect() async {
