@@ -11,6 +11,7 @@ final class RemoteSessionStore {
     private var acceptsConnectedTVUpdates = true
     private var projectionRevision = 0
     private var stateRequestID: UUID?
+    private var lastProjectedStateAt: ContinuousClock.Instant?
     let diagnostics: DiagnosticRecorder
     private var diagnosticDeviceKey: String?
     private var isAwaitingDiagnosticIdentity = false
@@ -46,7 +47,7 @@ final class RemoteSessionStore {
                     guard self != nil else { return }
                     if let expected = self?.stateRequestID, expected != update.requestID { continue }
                     let revision = self?.projectionRevision
-                    let collection = self?.diagnostics.captureCollection(producedAt: update.producedAt)
+                    let collection = self?.diagnostics.captureCollection(producedAt: update.activityStartedAt)
                     await beforeProjectingState(update.state)
                     guard !Task.isCancelled else { return }
                     guard await controller.ownsStateUpdate(update) else { continue }
@@ -55,13 +56,7 @@ final class RemoteSessionStore {
                         self.stateRequestID == nil || self.stateRequestID == update.requestID
                     else { continue }
                     self.stateRequestID = update.requestID
-                    self.recordDiagnosticState(update.state, replacing: self.state, collection: collection)
-                    self.state = update.state
-                    if case .connected(let tv) = update.state, self.acceptsConnectedTVUpdates {
-                        self.lastConnectedTV = tv
-                    } else if self.connectedTV == nil {
-                        self.lastConnectedTV = self.lastConnectedTV?.forgettingPowerObservation
-                    }
+                    self.project(update, collection: collection)
                 }
             }
         )
@@ -95,113 +90,124 @@ final class RemoteSessionStore {
     }
 
     func connect(to addressText: String) async {
-        guard !Task.isCancelled else { return }
-        let requestID = UUID()
-        stateRequestID = requestID
-        beginDiagnosticConnection(expectedDeviceKey: nil)
-        hasInitiatedConnection = true
-        projectionRevision &+= 1
-        acceptsConnectedTVUpdates = true
-        await controller.connect(to: addressText, requestID: requestID)
+        _ = await performConnection(addressText: addressText, target: nil, requestID: UUID())
     }
 
     func connect(to target: TVConnectionTarget) async {
-        guard !Task.isCancelled else { return }
-        let requestID = UUID()
-        stateRequestID = requestID
-        let expectedKey = target.expectedSavedDeviceID.map { "\(target.brand.rawValue):\($0)" }
-        beginDiagnosticConnection(expectedDeviceKey: expectedKey)
-        hasInitiatedConnection = true
-        projectionRevision &+= 1
-        acceptsConnectedTVUpdates = true
-        await controller.connect(to: target, requestID: requestID)
+        _ = await performConnection(addressText: target.address.rawValue, target: target, requestID: UUID())
     }
 
-    /// Starts one connection sequence and waits for its eventual connected state.
-    func connectAndWait(
-        to addressText: String,
-        timeout: Duration
-    ) async throws -> ConnectedTV {
-        let states = await controller.states()
-        let connectionWaitClock = connectionWaitClock
+    /// Provisional UI ownership must be reconciled if the controller never admitted it.
+    private func performConnection(addressText: String, target: TVConnectionTarget?, requestID: UUID) async
+        -> Bool
+    {
+        guard !Task.isCancelled else { return false }
+        stateRequestID = requestID
+        let expectedKey = target.flatMap { candidate in
+            candidate.expectedSavedDeviceID.map { "\(candidate.brand.rawValue):\($0)" }
+        }
+        beginDiagnosticConnection(expectedDeviceKey: expectedKey)
+        let activityStartedAt = diagnosticConnectionStartedAt ?? .now
+        hasInitiatedConnection = true
+        projectionRevision &+= 1
+        let admissionRevision = projectionRevision
+        acceptsConnectedTVUpdates = true
+        if let target {
+            await controller.connect(to: target, requestID: requestID, activityStartedAt: activityStartedAt)
+        } else {
+            await controller.connect(
+                to: addressText, requestID: requestID, activityStartedAt: activityStartedAt)
+        }
+        guard stateRequestID == requestID, projectionRevision == admissionRevision else { return false }
+        let ownership = await controller.producerOwnership()
+        guard stateRequestID == requestID, projectionRevision == admissionRevision else { return false }
+        guard ownership.requestID != requestID else { return true }
 
+        // This is the controller's actual producer, not a restamped old consumer value.
+        stateRequestID = ownership.requestID
+        projectionRevision &+= 1
+        let restorationRevision = projectionRevision
+        clearDiagnosticScope()
+        guard await controller.ownsStateUpdate(ownership.snapshot) else { return false }
+        guard stateRequestID == ownership.requestID, projectionRevision == restorationRevision else {
+            return false
+        }
+        project(ownership.snapshot, collection: nil, recordsEvents: false)
+        diagnosticDeviceKey = connectedTV?.stableDeviceKey
+        isAwaitingDiagnosticIdentity = connectedTV == nil
+        return false
+    }
+
+    func connectAndWait(to addressText: String, timeout: Duration) async throws -> ConnectedTV {
+        try await connectAndWait(addressText: addressText, target: nil, timeout: timeout)
+    }
+
+    func connectAndWait(to target: TVConnectionTarget, timeout: Duration) async throws -> ConnectedTV {
+        try await connectAndWait(addressText: target.address.rawValue, target: target, timeout: timeout)
+    }
+
+    /// Old snapshots, including same-TV/ABA snapshots, cannot satisfy a new admission.
+    private func connectAndWait(addressText: String, target: TVConnectionTarget?, timeout: Duration)
+        async throws -> ConnectedTV
+    {
+        let requestID = UUID()
+        let updates = await controller.stateUpdates()
+        let controller = controller
+        let clock = connectionWaitClock
         return try await withThrowingTaskGroup(of: ConnectedTV?.self) { group in
             group.addTask {
-                await self.connect(to: addressText)
+                let adopted = await self.performConnection(
+                    addressText: addressText, target: target, requestID: requestID)
                 try Task.checkCancellation()
+                guard adopted else { throw CancellationError() }
                 return nil
             }
             group.addTask {
-                for await state in states {
+                for await update in updates {
                     try Task.checkCancellation()
-                    if case .connected(let tv) = state {
-                        return tv
+                    guard update.requestID == requestID, await controller.ownsStateUpdate(update),
+                        case .connected(let television) = update.state
+                    else { continue }
+                    if let target {
+                        guard television.brand == target.brand,
+                            target.expectedSavedDeviceID == nil
+                                || television.reportedDeviceID == target.expectedSavedDeviceID
+                        else { continue }
                     }
+                    return television
                 }
                 throw CancellationError()
             }
             group.addTask {
-                try await connectionWaitClock.sleep(for: timeout)
+                try await clock.sleep(for: timeout)
                 try Task.checkCancellation()
                 throw RemoteSessionControllerError.timedOut(.connect)
             }
-
-            while let result = try await group.next() {
-                if let connectedTV = result {
+            while let value = try await group.next() {
+                if let television = value {
                     group.cancelAll()
-                    return connectedTV
+                    return television
                 }
             }
             throw RemoteSessionControllerError.timedOut(.connect)
         }
     }
 
-    /// Connects to a saved brand-scoped target and ignores any stale state from another TV.
-    func connectAndWait(
-        to target: TVConnectionTarget,
-        timeout: Duration,
-        isStillSelected: @escaping @MainActor @Sendable () -> Bool = { true }
-    ) async throws -> ConnectedTV {
-        try Task.checkCancellation()
-        guard isStillSelected() else { throw CancellationError() }
-        let states = await controller.states()
-        try Task.checkCancellation()
-        guard isStillSelected() else { throw CancellationError() }
-        let connectionWaitClock = connectionWaitClock
-        let expectedDeviceKey =
-            "\(target.brand.rawValue):\(target.expectedSavedDeviceID ?? target.reportedDeviceID)"
-
-        return try await withThrowingTaskGroup(of: ConnectedTV?.self) { group in
-            group.addTask {
-                try Task.checkCancellation()
-                guard await isStillSelected() else { throw CancellationError() }
-                await self.connect(to: target)
-                try Task.checkCancellation()
-                return nil
-            }
-            group.addTask {
-                for await state in states {
-                    try Task.checkCancellation()
-                    guard await isStillSelected() else { throw CancellationError() }
-                    if case .connected(let tv) = state, tv.stableDeviceKey == expectedDeviceKey {
-                        return tv
-                    }
-                }
-                throw CancellationError()
-            }
-            group.addTask {
-                try await connectionWaitClock.sleep(for: timeout)
-                try Task.checkCancellation()
-                throw RemoteSessionControllerError.timedOut(.connect)
-            }
-
-            while let result = try await group.next() {
-                if let connectedTV = result {
-                    group.cancelAll()
-                    return connectedTV
-                }
-            }
-            throw RemoteSessionControllerError.timedOut(.connect)
+    private func project(
+        _ update: RemoteSessionStateUpdate, collection: DiagnosticCollectionToken?, recordsEvents: Bool = true
+    ) {
+        guard lastProjectedStateAt.map({ update.producedAt >= $0 }) ?? true else { return }
+        if recordsEvents {
+            recordDiagnosticState(
+                update.state, replacing: state, collection: collection,
+                activityStartedAt: update.activityStartedAt)
+        }
+        lastProjectedStateAt = update.producedAt
+        state = update.state
+        if case .connected(let television) = state, acceptsConnectedTVUpdates {
+            lastConnectedTV = television
+        } else if connectedTV == nil {
+            lastConnectedTV = lastConnectedTV?.forgettingPowerObservation
         }
     }
 
@@ -210,7 +216,7 @@ final class RemoteSessionStore {
         let scope = diagnosticDeviceKey
         let collection = diagnostics.captureCollection()
         do {
-            try await controller.send(command, expectedDeviceKey: expectedDeviceKey)
+            try await controller.send(command, expectedDeviceKey: expectedDeviceKey, activityStartedAt: startedAt)
             recordDiagnosticDelivery(.commandSent, since: startedAt, scope: scope, collection: collection)
         } catch {
             if !(error is CancellationError) {
@@ -226,7 +232,7 @@ final class RemoteSessionStore {
         let scope = diagnosticDeviceKey
         let collection = diagnostics.captureCollection()
         do {
-            try await controller.sendText(input, expectedDeviceKey: expectedDeviceKey)
+            try await controller.sendText(input, expectedDeviceKey: expectedDeviceKey, activityStartedAt: startedAt)
             recordDiagnosticDelivery(.textSent, since: startedAt, scope: scope, collection: collection)
         } catch {
             if !(error is CancellationError) {
@@ -303,13 +309,15 @@ final class RemoteSessionStore {
     }
 
     func applicationDidEnterBackground() async {
+        let startedAt = ContinuousClock.now
         diagnostics.record(.appBackgrounded)
-        await controller.applicationDidEnterBackground()
+        await controller.applicationDidEnterBackground(activityStartedAt: startedAt)
     }
 
     func applicationWillEnterForeground() async {
+        let startedAt = ContinuousClock.now
         diagnostics.record(.appForegrounded)
-        await controller.applicationWillEnterForeground()
+        await controller.applicationWillEnterForeground(activityStartedAt: startedAt)
     }
 
     /// Metadata is taken only from the current authenticated session, never a saved display name.
@@ -353,23 +361,22 @@ final class RemoteSessionStore {
 
     private func recordDiagnosticState(
         _ next: RemoteSessionState, replacing previous: RemoteSessionState,
-        collection: DiagnosticCollectionToken?
+        collection: DiagnosticCollectionToken?, activityStartedAt: ContinuousClock.Instant
     ) {
-        guard next != previous else { return }
         switch next {
         case .connecting:
-            if diagnosticConnectionStartedAt == nil {
-                diagnosticConnectionStartedAt = .now
+            if diagnosticConnectionStartedAt != activityStartedAt {
+                diagnosticConnectionStartedAt = activityStartedAt
                 diagnosticConnectionCollection = collection
                 diagnostics.record(.connectionStarted, collection: collection)
             }
         case .reconnecting:
-            diagnosticConnectionStartedAt = .now
+            diagnosticConnectionStartedAt = activityStartedAt
             diagnosticConnectionCollection = collection
-            diagnostics.record(.reconnectStarted, collection: collection)
+            if next != previous { diagnostics.record(.reconnectStarted, collection: collection) }
         case .pairing:
             diagnosticPairingStarted = true
-            diagnostics.record(.pairingStarted, collection: diagnosticConnectionCollection)
+            diagnostics.record(.pairingStarted, collection: collection)
         case .connected(let television):
             if let expected = diagnosticDeviceKey, expected != television.stableDeviceKey,
                 !isAwaitingDiagnosticIdentity
@@ -382,11 +389,11 @@ final class RemoteSessionStore {
             diagnosticDeviceKey = television.stableDeviceKey
             isAwaitingDiagnosticIdentity = false
             if diagnosticPairingStarted {
-                diagnostics.record(.pairingApproved, collection: diagnosticConnectionCollection)
+                diagnostics.record(.pairingApproved, collection: collection)
             }
             diagnostics.record(
                 .connectionReady, durationSeconds: diagnosticConnectionStartedAt.map(Self.secondsSince),
-                collection: diagnosticConnectionCollection)
+                collection: collection)
             diagnosticConnectionStartedAt = nil
             diagnosticPairingStarted = false
         case .offline:
@@ -422,7 +429,7 @@ final class RemoteSessionStore {
     }
 
     func networkReachabilityChanged(isReachable: Bool) async {
-        await controller.networkReachabilityChanged(isReachable: isReachable)
+        await controller.networkReachabilityChanged(isReachable: isReachable, activityStartedAt: .now)
     }
 }
 

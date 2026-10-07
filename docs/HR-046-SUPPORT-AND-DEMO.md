@@ -56,6 +56,22 @@ readiness, discovery, and wake completions retain the enabled lease from their
 start; old activity cannot repopulate an erased buffer. Queued states produced
 before the current collection epoch likewise cannot reappear as new events.
 
+Connection admission is distinct from provisional UI intent. If a request is
+canceled before the controller adopts it, the store reconciles to the controller's
+actual producer snapshot, guarded by request and projection revision so an older
+canceled call cannot overwrite a newer selection. It never restamps an old state.
+Both connectAndWait paths qualify updates by their newly requested producer and
+current generation; an initial same-TV, raw-address, or ABA snapshot cannot
+satisfy new connection work.
+
+Each asynchronous state outcome carries the initiation time of its causal
+activity separately from its publication time. Terminal connection failures,
+automatic reconnects, health probes, lifecycle handling, network grace, commands,
+and removal outcomes therefore cannot acquire a new collection lease merely by
+completing after Clear or renewed consent. A genuinely new health check or retry
+started afterward can still record, rather than inheriting an erased lifetime
+connection lease.
+
 Model/display-name fallback comparisons normalize both inputs using the same
 control-character removal and whitespace trimming before checking equality.
 Padded or sanitized household names therefore remain omitted.
@@ -77,12 +93,17 @@ simulator build-for-testing compiled the app, unit tests, and UI tests. A Releas
 simulator build verifies the demo remains available outside DEBUG configuration.
 
 An isolated macOS 14 Swift package compiled the unchanged real controller, store,
-and protocol dependencies and ran 19 tests in three suites. All passed, including
+and protocol dependencies and ran 28 tests in six suites. All passed, including
 13 sensitive-metadata cases, four normalized-name cases, held candidate A/B state
 projection, producer-owned snapshots during teardown, command/text completion
 after Clear or consent changes, in-flight connection clearing, and A→B→A wake
 lease invalidation. No dependency stubs, TV traffic, or Keychain operations were
-used by the fixtures. The temporary package was removed. The iPhone UI journeys
+used by the fixtures. The independently supplied provisional-cancellation and
+terminal-failure probes first reproduced three assertions on unchanged4de1dde;
+all passed after repair. New coverage includes newer-request wins, canceled and
+same-TV/raw-address waiters, old versus fresh health activity, lifecycle and
+network-grace completions, and automatic failure after Clear/reconsent. The
+temporary package was removed. The iPhone UI journeys
 compiled and still require execution in the integrated gate. These isolated results do not replace that gate or
 computer-use verification.
 

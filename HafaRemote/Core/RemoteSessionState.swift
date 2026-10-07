@@ -22,6 +22,8 @@ struct RemoteSessionStateUpdate: Equatable, Sendable {
     let requestID: UUID
     let generation: UUID
     let producedAt: ContinuousClock.Instant
+    /// Initiation of the causal operation, not the later publication/completion.
+    let activityStartedAt: ContinuousClock.Instant
 }
 
 enum TVRecoveryAction: Hashable, Sendable {
@@ -76,4 +78,10 @@ enum RemoteSessionFailure: Equatable, Sendable {
             "Hafa Remote could not complete that request. Try again."
         }
     }
+}
+
+/// Explicit controller ownership used when a provisional request was never admitted.
+struct RemoteSessionProducerOwnership: Sendable {
+    let requestID: UUID
+    let snapshot: RemoteSessionStateUpdate
 }

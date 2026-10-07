@@ -202,6 +202,7 @@ actor RemoteSessionController {
     private var publishedStateRequestID: UUID?
     private var publishedStateGeneration: UUID?
     private var publishedStateProducedAt: ContinuousClock.Instant = .now
+    private var publishedActivityStartedAt: ContinuousClock.Instant = .now
     private var stateUpdateContinuations: [UUID: AsyncStream<RemoteSessionStateUpdate>.Continuation] = [:]
     private var stateContinuations: [UUID: AsyncStream<RemoteSessionState>.Continuation] = [:]
 
@@ -248,19 +249,30 @@ actor RemoteSessionController {
         update.requestID == stateRequestID && update.generation == generation
     }
 
+    func producerOwnership() -> RemoteSessionProducerOwnership {
+        RemoteSessionProducerOwnership(requestID: stateRequestID, snapshot: currentStateUpdate())
+    }
+
     private func currentStateUpdate() -> RemoteSessionStateUpdate {
         RemoteSessionStateUpdate(
             state: state, requestID: publishedStateRequestID ?? stateRequestID,
-            generation: publishedStateGeneration ?? generation, producedAt: publishedStateProducedAt)
+            generation: publishedStateGeneration ?? generation, producedAt: publishedStateProducedAt,
+            activityStartedAt: publishedActivityStartedAt)
     }
 
     private func removeStateUpdateContinuation(_ id: UUID) { stateUpdateContinuations[id] = nil }
 
-    func connect(to addressText: String, requestID: UUID = UUID()) async {
-        await beginConnection(to: addressText, target: nil, requestID: requestID)
+    func connect(
+        to addressText: String, requestID: UUID = UUID(), activityStartedAt: ContinuousClock.Instant = .now
+    ) async {
+        await beginConnection(
+            to: addressText, target: nil, requestID: requestID, activityStartedAt: activityStartedAt)
     }
 
-    func connect(to target: TVConnectionTarget, requestID: UUID = UUID()) async {
+    func connect(
+        to target: TVConnectionTarget, requestID: UUID = UUID(),
+        activityStartedAt: ContinuousClock.Instant = .now
+    ) async {
         guard !Task.isCancelled else { return }
         guard driver.supports(target.brand) else {
             stateRequestID = requestID
@@ -270,16 +282,19 @@ actor RemoteSessionController {
             reconnectAttempt = 0
             await cancelInFlightWork()
             await disconnectDriverWithinLimit()
-            transition(to: .unsupported)
+            transition(to: .unsupported, activityStartedAt: activityStartedAt)
             return
         }
-        await beginConnection(to: target.address.rawValue, target: target, requestID: requestID)
+        await beginConnection(
+            to: target.address.rawValue, target: target, requestID: requestID,
+            activityStartedAt: activityStartedAt)
     }
 
     private func beginConnection(
         to addressText: String,
         target: TVConnectionTarget?,
-        requestID: UUID
+        requestID: UUID,
+        activityStartedAt: ContinuousClock.Instant
     ) async {
         do {
             try await waitForPairingRemoval()
@@ -289,7 +304,7 @@ actor RemoteSessionController {
             guard !Task.isCancelled else { return }
             generation = UUID()
             stateRequestID = requestID
-            transition(to: .failed(.timedOut(.forgetPairing)))
+            transition(to: .failed(.timedOut(.forgetPairing)), activityStartedAt: activityStartedAt)
             return
         }
         guard !Task.isCancelled else { return }
@@ -304,11 +319,16 @@ actor RemoteSessionController {
 
         await cancelInFlightWork()
         await disconnectDriverWithinLimit()
-        guard generation == requestedGeneration, isForeground else { return }
-        await attemptConnection(generation: requestedGeneration, isReconnect: false)
+        guard generation == requestedGeneration else { return }
+        guard isForeground else {
+            transition(to: .offline, activityStartedAt: activityStartedAt)
+            return
+        }
+        await attemptConnection(
+            generation: requestedGeneration, isReconnect: false, activityStartedAt: activityStartedAt)
     }
 
-    func send(_ command: RemoteCommand, expectedDeviceKey: String? = nil) async throws {
+    func send(_ command: RemoteCommand, expectedDeviceKey: String? = nil, activityStartedAt: ContinuousClock.Instant = .now) async throws {
         let requestedGeneration = generation
         if let expectedDeviceKey {
             guard case .connected(let tv) = state, tv.stableDeviceKey == expectedDeviceKey else {
@@ -320,7 +340,7 @@ actor RemoteSessionController {
         {
             throw TVDriverError.unsupportedCommand
         }
-        try await performSend(recoverCancelledWrite: true) { [weak self] in
+        try await performSend(recoverCancelledWrite: true, activityStartedAt: activityStartedAt) { [weak self] in
             guard let self else { throw CancellationError() }
             try await self.executeCommand(
                 command, expectedDeviceKey: expectedDeviceKey, generation: requestedGeneration)
@@ -340,9 +360,9 @@ actor RemoteSessionController {
         try await driver.send(command)
     }
 
-    func sendText(_ input: RemoteTextInput, expectedDeviceKey: String? = nil) async throws {
+    func sendText(_ input: RemoteTextInput, expectedDeviceKey: String? = nil, activityStartedAt: ContinuousClock.Instant = .now) async throws {
         let requestedGeneration = generation
-        try await performSend(recoverCancelledWrite: true) { [weak self] in
+        try await performSend(recoverCancelledWrite: true, activityStartedAt: activityStartedAt) { [weak self] in
             guard let self else { throw CancellationError() }
             try await self.executeText(
                 input, expectedDeviceKey: expectedDeviceKey, generation: requestedGeneration)
@@ -426,6 +446,7 @@ actor RemoteSessionController {
         isConvenienceRequest: Bool = false,
         recoverCancelledWrite: Bool = false,
         timeout requestedTimeout: Duration? = nil,
+        activityStartedAt: ContinuousClock.Instant = .now,
         _ operation: @escaping @Sendable () async throws -> Void
     ) async throws {
         guard case .connected = state else {
@@ -513,13 +534,14 @@ actor RemoteSessionController {
                 }
                 let shouldReconnect: Bool
                 if let timeoutError = error as? RemoteSessionControllerError {
-                    transition(to: .failed(.timedOut(timeoutError.operation)))
+                    transition(
+                        to: .failed(.timedOut(timeoutError.operation)), activityStartedAt: activityStartedAt)
                     shouldReconnect = true
                 } else if Self.isOfflineError(error) {
-                    transition(to: .offline)
+                    transition(to: .offline, activityStartedAt: activityStartedAt)
                     shouldReconnect = true
                 } else {
-                    transition(to: .failed(.unexpected))
+                    transition(to: .failed(.unexpected), activityStartedAt: activityStartedAt)
                     shouldReconnect = false
                 }
                 if shouldReconnect {
@@ -556,12 +578,13 @@ actor RemoteSessionController {
     }
 
     func disconnect() async {
+        let activityStartedAt = ContinuousClock.now
         generation = UUID()
         targetAddressText = nil
         connectionTarget = nil
         reconnectAttempt = 0
         await cancelInFlightWork()
-        transition(to: .idle)
+        transition(to: .idle, activityStartedAt: activityStartedAt)
         await disconnectDriverWithinLimit()
     }
 
@@ -570,6 +593,7 @@ actor RemoteSessionController {
         reportedDeviceID: String? = nil,
         brand: TVBrand = .samsung
     ) async throws {
+        let activityStartedAt = ContinuousClock.now
         try await waitForPairingRemoval()
         try Task.checkCancellation()
         let removalID = UUID()
@@ -580,7 +604,7 @@ actor RemoteSessionController {
         targetAddressText = nil
         connectionTarget = nil
         reconnectAttempt = 0
-        transition(to: .idle)
+        transition(to: .idle, activityStartedAt: activityStartedAt)
         await cancelInFlightWork()
         let didFinishTeardown = await disconnectDriverWithinLimit()
         if Task.isCancelled {
@@ -590,7 +614,7 @@ actor RemoteSessionController {
         guard didFinishTeardown else {
             finishPairingRemoval(id: removalID)
             if generation == removalGeneration {
-                transition(to: .failed(.timedOut(.disconnect)))
+                transition(to: .failed(.timedOut(.disconnect)), activityStartedAt: activityStartedAt)
             }
             throw RemoteSessionControllerError.timedOut(.disconnect)
         }
@@ -637,9 +661,10 @@ actor RemoteSessionController {
                 !(error is CancellationError)
             {
                 if let timeoutError = error as? RemoteSessionControllerError {
-                    transition(to: .failed(.timedOut(timeoutError.operation)))
+                    transition(
+                        to: .failed(.timedOut(timeoutError.operation)), activityStartedAt: activityStartedAt)
                 } else {
-                    transition(to: .failed(.unexpected))
+                    transition(to: .failed(.unexpected), activityStartedAt: activityStartedAt)
                 }
             }
             if Task.isCancelled || error is CancellationError {
@@ -751,30 +776,33 @@ actor RemoteSessionController {
         }
     }
 
-    func applicationDidEnterBackground() async {
+    func applicationDidEnterBackground(activityStartedAt: ContinuousClock.Instant = .now) async {
         guard isForeground else { return }
         isForeground = false
         generation = UUID()
         let hasTarget = targetAddressText != nil
         await cancelInFlightWork()
-        transition(to: hasTarget ? .offline : .idle)
+        transition(to: hasTarget ? .offline : .idle, activityStartedAt: activityStartedAt)
         beginDriverTeardownIfNeeded()
     }
 
-    func applicationWillEnterForeground() async {
+    func applicationWillEnterForeground(activityStartedAt: ContinuousClock.Instant = .now) async {
         guard !isForeground else { return }
         isForeground = true
         guard targetAddressText != nil else { return }
         generation = UUID()
         let requestedGeneration = generation
         reconnectAttempt = 0
-        transition(to: .reconnecting(attempt: 1))
+        transition(to: .reconnecting(attempt: 1), activityStartedAt: activityStartedAt)
         await cancelInFlightWork()
         guard generation == requestedGeneration, isForeground else { return }
-        await attemptConnection(generation: requestedGeneration, isReconnect: true)
+        await attemptConnection(
+            generation: requestedGeneration, isReconnect: true, activityStartedAt: activityStartedAt)
     }
 
-    func networkReachabilityChanged(isReachable: Bool) async {
+    func networkReachabilityChanged(isReachable: Bool, activityStartedAt: ContinuousClock.Instant = .now)
+        async
+    {
         let previous = lastNetworkReachability
         lastNetworkReachability = isReachable
         guard previous != isReachable else { return }
@@ -782,12 +810,12 @@ actor RemoteSessionController {
         if !isReachable {
             guard targetAddressText != nil else { return }
             if case .connected = state {
-                scheduleNetworkLossConfirmation(generation: generation)
+                scheduleNetworkLossConfirmation(generation: generation, activityStartedAt: activityStartedAt)
                 return
             }
             generation = UUID()
             await cancelInFlightWork()
-            transition(to: .offline)
+            transition(to: .offline, activityStartedAt: activityStartedAt)
             await disconnectDriverWithinLimit()
             return
         }
@@ -804,16 +832,20 @@ actor RemoteSessionController {
         let requestedGeneration = generation
         reconnectAttempt = 0
         await cancelInFlightWork()
-        await attemptConnection(generation: requestedGeneration, isReconnect: true)
+        await attemptConnection(
+            generation: requestedGeneration, isReconnect: true, activityStartedAt: activityStartedAt)
     }
 
-    private func attemptConnection(generation requestedGeneration: UUID, isReconnect: Bool) async {
+    private func attemptConnection(
+        generation requestedGeneration: UUID, isReconnect: Bool,
+        activityStartedAt: ContinuousClock.Instant = .now
+    ) async {
         guard await waitForDriverTeardownWithinLimit() else {
             if generation == requestedGeneration {
                 if isReconnect, isForeground, targetAddressText != nil {
                     recoveryAfterDriverTeardownGeneration = requestedGeneration
                 }
-                transition(to: .failed(.timedOut(.disconnect)))
+                transition(to: .failed(.timedOut(.disconnect)), activityStartedAt: activityStartedAt)
                 if recoveryAfterDriverTeardownGeneration == requestedGeneration,
                     driverTeardownTask == nil
                 {
@@ -830,7 +862,9 @@ actor RemoteSessionController {
         else { return }
 
         let attemptNumber = max(1, reconnectAttempt)
-        transition(to: isReconnect ? .reconnecting(attempt: attemptNumber) : .connecting)
+        transition(
+            to: isReconnect ? .reconnecting(attempt: attemptNumber) : .connecting,
+            activityStartedAt: activityStartedAt)
 
         let id = UUID()
         connectionID = id
@@ -849,7 +883,8 @@ actor RemoteSessionController {
                     extendDeadline(pairingTimeout)
                     await self?.setPairingState(
                         generation: requestedGeneration,
-                        connectionID: id
+                        connectionID: id,
+                        activityStartedAt: activityStartedAt
                     )
                 }
                 if let connectionTarget {
@@ -882,7 +917,7 @@ actor RemoteSessionController {
             // A successful first pairing turns a candidate into a remembered,
             // authenticated identity before any automatic reconnect can occur.
             self.connectionTarget = tv.connectionTarget
-            transition(to: .connected(tv))
+            transition(to: .connected(tv), activityStartedAt: activityStartedAt)
             startObservations(generation: requestedGeneration)
             startHealthChecks(generation: requestedGeneration)
         } catch {
@@ -890,70 +925,75 @@ actor RemoteSessionController {
             connectionTask = nil
             connectionID = nil
             if Task.isCancelled || error is CancellationError {
-                transition(to: .offline)
+                transition(to: .offline, activityStartedAt: activityStartedAt)
                 return
             }
-            handleConnectionFailure(error, generation: requestedGeneration)
+            handleConnectionFailure(
+                error, generation: requestedGeneration, activityStartedAt: activityStartedAt)
         }
     }
 
-    private func setPairingState(generation requestedGeneration: UUID, connectionID: UUID) {
+    private func setPairingState(
+        generation requestedGeneration: UUID, connectionID: UUID, activityStartedAt: ContinuousClock.Instant
+    ) {
         guard generation == requestedGeneration, self.connectionID == connectionID else { return }
-        transition(to: .pairing)
+        transition(to: .pairing, activityStartedAt: activityStartedAt)
     }
 
-    private func handleConnectionFailure(_ error: Error, generation requestedGeneration: UUID) {
+    private func handleConnectionFailure(
+        _ error: Error, generation requestedGeneration: UUID, activityStartedAt: ContinuousClock.Instant
+    ) {
         if let timeoutError = error as? RemoteSessionControllerError {
-            transition(to: .failed(.timedOut(timeoutError.operation)))
+            transition(to: .failed(.timedOut(timeoutError.operation)), activityStartedAt: activityStartedAt)
             scheduleReconnect(generation: requestedGeneration)
         } else if error as? SamsungConnectionError == .pairingTimedOut {
-            transition(to: .failed(.timedOut(.connect)))
+            transition(to: .failed(.timedOut(.connect)), activityStartedAt: activityStartedAt)
             scheduleReconnect(generation: requestedGeneration)
         } else if error as? SonyPairingCoordinatorError == .pairingTimedOut
             || error as? SonyPairingCoordinatorError == .remoteHandshakeTimedOut
         {
-            transition(to: .failed(.timedOut(.connect)))
+            transition(to: .failed(.timedOut(.connect)), activityStartedAt: activityStartedAt)
             scheduleReconnect(generation: requestedGeneration)
         } else if error as? TVDriverError == .savedDeviceIdentityMismatch {
-            transition(to: .failed(.savedDeviceIdentityMismatch))
+            transition(to: .failed(.savedDeviceIdentityMismatch), activityStartedAt: activityStartedAt)
         } else if error as? SamsungConnectionError == .denied {
-            transition(to: .denied)
+            transition(to: .denied, activityStartedAt: activityStartedAt)
         } else if error as? SamsungPairingCoordinatorError == .savedPairingRejected {
-            transition(to: .savedPairingRejected)
+            transition(to: .savedPairingRejected, activityStartedAt: activityStartedAt)
         } else if error as? SamsungPairingCoordinatorError == .certificateChanged {
-            transition(to: .certificateChanged)
+            transition(to: .certificateChanged, activityStartedAt: activityStartedAt)
         } else if error as? SonyPairingCoordinatorError == .certificateChanged
             || error as? SonyTLSChannelError == .certificateChanged
         {
-            transition(to: .certificateChanged)
+            transition(to: .certificateChanged, activityStartedAt: activityStartedAt)
         } else if error as? SonyPairingCoordinatorError == .pairingRejected,
             connectionTarget?.brand == .sony,
             connectionTarget?.expectedSavedDeviceID != nil
         {
             // A rejected saved credential requires deliberate record-scoped repair.
             // Keep its expected identity out of the fresh-pairing manual fallback.
-            transition(to: .savedPairingRejected)
+            transition(to: .savedPairingRejected, activityStartedAt: activityStartedAt)
         } else if error as? SonyPairingCoordinatorError == .invalidPairingCode
             || error as? SonyPairingCoordinatorError == .pairingRejected
             || error as? VizioPairingCoordinatorError == .pinRejected
         {
-            transition(to: .denied)
+            transition(to: .denied, activityStartedAt: activityStartedAt)
         } else if error as? VizioPairingCoordinatorError == .savedPairingRejected {
-            transition(to: .savedPairingRejected)
+            transition(to: .savedPairingRejected, activityStartedAt: activityStartedAt)
         } else if error as? VizioPairingCoordinatorError == .unrecognizedDeviceInfo {
-            transition(to: .failed(.unrecognizedDeviceInfo(.vizio)))
+            transition(to: .failed(.unrecognizedDeviceInfo(.vizio)), activityStartedAt: activityStartedAt)
         } else if error as? VizioPairingCoordinatorError == .certificateChanged
             || error as? VizioPairingCoordinatorError == .deviceIdentityChanged
             || error as? VizioHTTPSClientError == .certificateChanged
         {
-            transition(to: .certificateChanged)
+            transition(to: .certificateChanged, activityStartedAt: activityStartedAt)
         } else if Self.isUnsupportedError(error) {
-            transition(to: .unsupported)
+            transition(to: .unsupported, activityStartedAt: activityStartedAt)
         } else if Self.isOfflineError(error) {
-            transition(to: .offline)
+            transition(to: .offline, activityStartedAt: activityStartedAt)
             scheduleReconnect(generation: requestedGeneration)
         } else {
-            transition(to: .failed(.unexpected))
+            transition(to: .failed(.unexpected), activityStartedAt: activityStartedAt)
         }
     }
 
@@ -1108,6 +1148,7 @@ actor RemoteSessionController {
     }
 
     private func beginHealthCheck(generation requestedGeneration: UUID) async {
+        let activityStartedAt = ContinuousClock.now
         guard generation == requestedGeneration, isForeground, case .connected = state else {
             return
         }
@@ -1153,7 +1194,8 @@ actor RemoteSessionController {
             }
             if Self.isDefinitiveOfflineError(error) {
                 Self.logger.notice("Health check confirmed a closed transport")
-                await confirmConnectionLoss(generation: requestedGeneration)
+                await confirmConnectionLoss(
+                    generation: requestedGeneration, activityStartedAt: activityStartedAt)
                 return
             }
             consecutiveHealthFailures += 1
@@ -1168,11 +1210,13 @@ actor RemoteSessionController {
                 return
             }
             Self.logger.notice("Repeated health failures confirmed connection loss")
-            await confirmConnectionLoss(generation: requestedGeneration)
+            await confirmConnectionLoss(generation: requestedGeneration, activityStartedAt: activityStartedAt)
         }
     }
 
-    private func confirmConnectionLoss(generation requestedGeneration: UUID) async {
+    private func confirmConnectionLoss(
+        generation requestedGeneration: UUID, activityStartedAt: ContinuousClock.Instant
+    ) async {
         guard generation == requestedGeneration, isForeground else { return }
         consecutiveHealthFailures = 0
         healthScheduleTask?.cancel()
@@ -1182,7 +1226,7 @@ actor RemoteSessionController {
             healthProbeTask = nil
             healthProbeID = nil
         }
-        transition(to: .offline)
+        transition(to: .offline, activityStartedAt: activityStartedAt)
         transitionToPendingReconnectIfAvailable(generation: requestedGeneration)
         await disconnectDriverWithinLimit()
         guard generation == requestedGeneration, isForeground else { return }
@@ -1209,7 +1253,9 @@ actor RemoteSessionController {
         startHealthChecks(generation: generation)
     }
 
-    private func scheduleNetworkLossConfirmation(generation requestedGeneration: UUID) {
+    private func scheduleNetworkLossConfirmation(
+        generation requestedGeneration: UUID, activityStartedAt: ContinuousClock.Instant
+    ) {
         networkLossTask?.cancel()
         let clock = clock
         let delay = configuration.networkLossGracePeriod
@@ -1217,14 +1263,17 @@ actor RemoteSessionController {
             do {
                 try await clock.sleep(for: delay)
                 try Task.checkCancellation()
-                await self?.confirmNetworkLoss(generation: requestedGeneration)
+                await self?.confirmNetworkLoss(
+                    generation: requestedGeneration, activityStartedAt: activityStartedAt)
             } catch {
                 return
             }
         }
     }
 
-    private func confirmNetworkLoss(generation requestedGeneration: UUID) async {
+    private func confirmNetworkLoss(
+        generation requestedGeneration: UUID, activityStartedAt: ContinuousClock.Instant
+    ) async {
         networkLossTask = nil
         guard generation == requestedGeneration,
             lastNetworkReachability == false,
@@ -1234,7 +1283,7 @@ actor RemoteSessionController {
         Self.logger.notice("Sustained Wi-Fi path loss confirmed connection loss")
         generation = UUID()
         await cancelInFlightWork()
-        transition(to: .offline)
+        transition(to: .offline, activityStartedAt: activityStartedAt)
         await disconnectDriverWithinLimit()
     }
 
@@ -1322,16 +1371,19 @@ actor RemoteSessionController {
         scheduleReconnect(generation: generation)
     }
 
-    private func transition(to newState: RemoteSessionState) {
+    private func transition(
+        to newState: RemoteSessionState, activityStartedAt: ContinuousClock.Instant = .now
+    ) {
         let didChangeState = state != newState
         guard
             didChangeState || publishedStateRequestID != stateRequestID
-                || publishedStateGeneration != generation
+                || publishedStateGeneration != generation || publishedActivityStartedAt != activityStartedAt
         else { return }
         state = newState
         publishedStateRequestID = stateRequestID
         publishedStateGeneration = generation
         publishedStateProducedAt = .now
+        publishedActivityStartedAt = activityStartedAt
         if didChangeState {
             for continuation in stateContinuations.values { continuation.yield(newState) }
         }
