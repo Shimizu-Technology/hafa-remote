@@ -576,10 +576,16 @@ final class HafaRemoteUITests: XCTestCase {
                     "Expected either first-run setup or an already paired Q70AA."
                 )
                 XCTAssertTrue(
-                    ["Connected", "Connected • TV power unknown"].contains(existingConnection.label))
-                let changeTV = app.buttons["changeTVButton"]
-                XCTAssertTrue(changeTV.waitForExistence(timeout: 5))
-                changeTV.tap()
+                    ["Connected", "Connected • TV power unknown"].contains(existingConnection.label),
+                    "Expected a connected session; protocol power evidence may be unavailable."
+                )
+                let myTVs = app.buttons["myTVsButton"]
+                XCTAssertTrue(myTVs.waitForExistence(timeout: 5))
+                myTVs.tap()
+                XCTAssertTrue(app.navigationBars["My TVs"].waitForExistence(timeout: 2))
+                let addFromLibrary = app.buttons["addTVFromLibraryButton"]
+                XCTAssertTrue(addFromLibrary.waitForExistence(timeout: 5))
+                addFromLibrary.tap()
             }
 
             // XCTest invokes interruption monitors on the next interaction if iOS presents a prompt.
@@ -608,7 +614,10 @@ final class HafaRemoteUITests: XCTestCase {
                 connectionStatus.waitForExistence(timeout: 60),
                 "Expected physical approval to open the connected remote."
             )
-            XCTAssertTrue(["Connected", "Connected • TV power unknown"].contains(connectionStatus.label))
+            XCTAssertTrue(
+                ["Connected", "Connected • TV power unknown"].contains(connectionStatus.label),
+                "Expected a connected session; protocol power evidence may be unavailable."
+            )
 
             let select = app.buttons["remote-select"]
             XCTAssertTrue(select.waitForExistence(timeout: 5))

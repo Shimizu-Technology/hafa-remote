@@ -30,9 +30,18 @@ Previews render directly from the vector source at 20, 40, 60, 120, and 180 pixe
 - [x] Validate the export as 1024 × 1024 with no alpha channel.
 - [x] Inspect the full-size image and 20- and 60-pixel previews for silhouette and directional-pad legibility.
 - [x] Verify repeated rendering produces identical SHA-256 output on this machine.
-- [ ] Inspect the icon in native SpringBoard and Settings after root integrates the ticket.
+- [x] Inspect the built icon in native SpringBoard and Settings on an owned iPhone 16 Pro iOS 18.5 simulator.
 - [ ] Run the full repository gate and current-head code review before merge.
 
 The validated PNG SHA-256 is `22feaff50af5677b7a6b96a1743f2c14aa86a4bf87429a6b9029dd6d59b6c2ec`.
 
-No protocol, UI, capability, hardware-support, or marketing claims change. No persistent runtime resources were started by the implementation agent.
+The original artwork and generator remain unchanged during the release-QA phase.
+Signed build-for-testing, bundle-seal verification, release preflight, and static
+checks passed. Computer use verified the installed icon's silhouette and contrast
+on SpringBoard and in Settings → Apps. Native screenshots are preserved at
+`/tmp/hafa-hr047-validation/springboard-icon.png` and
+`/tmp/hafa-hr047-validation/settings-apps-icon.png`.
+
+No protocol or hardware-support behavior changes. Updated internal-candidate
+notes and privacy/tooling evidence are in [release QA](HR-047-RELEASE-QA.md).
+The integrated full gate and current-head review remain with the release owner.
