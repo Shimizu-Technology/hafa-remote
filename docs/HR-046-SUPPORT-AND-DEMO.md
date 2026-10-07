@@ -79,8 +79,11 @@ controller generations, cancellation recovery, optional-feature errors, and
 selection guards. State-changing conveniences retain the device scope and
 collection lease captured before delivery. Their failures, optional-query
 failures, canceled writes, and selected-TV power teardown carry the originating
-activity time into later recovery. Query payloads and launch descriptors never
-enter diagnostics. The saved-target waiter combines its producer ownership with
+activity time into later recovery. Recovery follows each driver's declared
+cancellation effect: cooperative cancellation preserves a healthy session, while
+transport-invalidating writes enter truthful recovery. The active router forwards
+that effect, and the controller rechecks its generation after awaiting it.
+Query payloads and launch descriptors never enter diagnostics. The saved-target waiter combines its producer ownership with
 the caller's current-selection predicate.
 
 Home's native Help button opens support, with TV Help & About available inside
@@ -140,6 +143,15 @@ compiler-probe regressions passed. The macOS harness omits the full controller
 test file because its restoration test depends on the SwiftUI Home coordinator;
 the signed iPhone test build compiles it. The complete iPhone gate remains
 required after final integration.
+
+The next interim integration onto HR-045 `eabc2c09` passed 120 real-source tests
+in nineteen suites, including current Samsung/Vizio codec and Sony ownership
+regressions. The diagnostic cancellation fixtures explicitly declare their
+transport effect: invalidating cases enter recovery with the original collection
+origin; cooperative cases stay connected and schedule no retry after Clear or
+renewed consent. The parent driver's default, Sony override, active-router
+forwarding, Vizio optional-rejection handling, and favorites behavior are retained.
+This interim parent still requires its final review/merge and a final rebase.
 
 Root integration must run the complete gate on the integrated current head and
 exercise these flows with computer use: first launch → demo → navigate/volume/

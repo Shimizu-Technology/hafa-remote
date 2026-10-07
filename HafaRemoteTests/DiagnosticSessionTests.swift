@@ -808,7 +808,7 @@ private struct DiagnosticPendingRetryTests {
     func pendingRetryRetainsCause(boundary: DiagnosticRetryBoundary, togglesConsent: Bool) async throws {
         let clock = DiagnosticActivityClock()
         let gate = DiagnosticOwnershipGate()
-        let driver = DiagnosticRetryDriver(boundary: boundary, gate: gate)
+        let driver = DiagnosticRetryDriver(boundary: boundary, gate: gate, invalidatesConnection: true)
         let recorder = DiagnosticRecorder()
         recorder.setEnabled(true)
         let store = RemoteSessionStore(
@@ -863,6 +863,36 @@ private struct DiagnosticPendingRetryTests {
             !recorder.events.contains {
                 $0.kind == .commandDeliveryFailed || $0.kind == .connectionUnavailable
             })
+        await store.disconnect()
+    }
+
+    @Test(
+        "Cooperative write cancellation preserves the current session after Clear", arguments: [false, true])
+    func cooperativeCancellationRetainsSession(togglesConsent: Bool) async throws {
+        let clock = DiagnosticActivityClock()
+        let gate = DiagnosticOwnershipGate()
+        let driver = DiagnosticRetryDriver(
+            boundary: .cancelledCommand, gate: gate, invalidatesConnection: false)
+        let recorder = DiagnosticRecorder()
+        recorder.setEnabled(true)
+        let controller = RemoteSessionController(driver: driver, clock: clock, configuration: configuration())
+        let store = RemoteSessionStore(controller: controller, diagnostics: recorder)
+        await store.connect(to: try target())
+        await settle { store.connectedTV != nil }
+        let delivery = Task { try await store.send(.home, expectedDeviceKey: "samsung:synthetic-retry") }
+        await gate.waitUntilStarted()
+        reset(recorder, togglesConsent)
+        delivery.cancel()
+        await gate.release()
+        await #expect(throws: CancellationError.self) { try await delivery.value }
+        if case .connected = await controller.state {
+        } else {
+            Issue.record("Cooperative cancellation cannot invalidate the active transport")
+        }
+        #expect(store.connectedTV?.reportedDeviceID == "synthetic-retry")
+        #expect(await driver.connectionCount == 1)
+        #expect(!(await clock.fire(.seconds(23))))
+        #expect(recorder.events.isEmpty)
         await store.disconnect()
     }
 
@@ -947,12 +977,17 @@ private enum DiagnosticRetryBoundary: CaseIterable, Sendable {
 }
 
 private actor DiagnosticRetryDriver: RemoteSessionDriving {
+    // Recovery cases explicitly model an invalidated transport; the cooperative case does not.
+    func cancellationInvalidatesConnection() async -> Bool { invalidatesConnection }
+
+    let invalidatesConnection: Bool
     let boundary: DiagnosticRetryBoundary
     let gate: DiagnosticOwnershipGate
     private(set) var connectionCount = 0
-    init(boundary: DiagnosticRetryBoundary, gate: DiagnosticOwnershipGate) {
+    init(boundary: DiagnosticRetryBoundary, gate: DiagnosticOwnershipGate, invalidatesConnection: Bool) {
         self.boundary = boundary
         self.gate = gate
+        self.invalidatesConnection = invalidatesConnection
     }
     func connect(
         to target: TVConnectionTarget,

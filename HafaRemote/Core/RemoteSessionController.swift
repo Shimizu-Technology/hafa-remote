@@ -533,7 +533,8 @@ actor RemoteSessionController {
                 // This driver can close its connection when a write is cancelled.
                 // Preserve no connected claim for that generation's uncertain transport.
                 transition(to: .offline, activityStartedAt: activityStartedAt)
-                transitionToPendingReconnectIfAvailable(generation: commandGeneration, activityStartedAt: activityStartedAt)
+                transitionToPendingReconnectIfAvailable(
+                    generation: commandGeneration, activityStartedAt: activityStartedAt)
                 await disconnectDriverWithinLimit()
                 if generation == commandGeneration {
                     scheduleReconnect(generation: commandGeneration, activityStartedAt: activityStartedAt)
