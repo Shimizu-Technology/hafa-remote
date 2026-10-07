@@ -235,7 +235,7 @@ final class HafaRemoteUITests: XCTestCase {
 
         codeField.tap()
         codeField.typeText("A1B2C3")
-        XCTAssertTrue(submit.isEnabled)
+        waitForPairingEntry(codeField, value: "A1B2C3", submit: submit)
         submit.tap()
 
         let connectionStatus = app.staticTexts["remoteConnectionStatus"]
@@ -268,7 +268,7 @@ final class HafaRemoteUITests: XCTestCase {
 
         codeField.tap()
         codeField.typeText("1234")
-        XCTAssertTrue(submit.isEnabled)
+        waitForPairingEntry(codeField, value: "1234", submit: submit)
         submit.tap()
 
         let connectionStatus = app.staticTexts["remoteConnectionStatus"]
@@ -303,7 +303,7 @@ final class HafaRemoteUITests: XCTestCase {
 
         let submit = app.buttons["submitVizioPairingCodeButton"]
         XCTAssertTrue(submit.waitForExistence(timeout: 2))
-        XCTAssertTrue(submit.isEnabled)
+        waitForPairingEntry(codeField, value: "0000", submit: submit)
         submit.tap()
 
         let error = app.staticTexts["setupErrorMessage"]
@@ -955,6 +955,18 @@ final class HafaRemoteUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments.append("-ui-testing-in-memory-store")
         return app
+    }
+
+    /// Waits for the validated text and its corresponding asynchronous accessibility state.
+    @MainActor
+    private func waitForPairingEntry(_ field: XCUIElement, value: String, submit: XCUIElement) {
+        let enteredValue = expectation(
+            for: NSPredicate(format: "value == %@", value), evaluatedWith: field)
+        let enabledSubmit = expectation(
+            for: NSPredicate(format: "enabled == true"), evaluatedWith: submit)
+        wait(for: [enteredValue, enabledSubmit], timeout: 2)
+        XCTAssertEqual(field.value as? String, value)
+        XCTAssertTrue(submit.isEnabled)
     }
 
     /// Replaces a text field's full value through the same edit menu available to users.
