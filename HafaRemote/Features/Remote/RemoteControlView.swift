@@ -53,10 +53,12 @@ struct RemoteControlView: View {
                     }
                     if capabilities.contains(.navigation) {
                         navigationControls
-                        utilityControls
                     }
                     if capabilities.contains(.volume) || capabilities.contains(.mute) {
                         volumeControls
+                    }
+                    if capabilities.contains(.navigation) {
+                        utilityControls
                     }
                     if capabilities.contains(.playback) {
                         playbackControls
@@ -71,6 +73,7 @@ struct RemoteControlView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         }
+        .tint(HafaTheme.accent)
         .navigationTitle("Remote")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: isConnected) { wasConnected, isConnected in
@@ -175,7 +178,7 @@ struct RemoteControlView: View {
                     }
                     .frame(width: 46, height: 46)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(RemoteControlButtonStyle(role: offersPowerOff ? .destructive : nil))
                 .tint(offersPowerOff ? .red : HafaTheme.accent)
                 .disabled(
                     isPoweringOnTV || isPoweringOffTV || isAwaitingApproval
@@ -219,6 +222,7 @@ struct RemoteControlView: View {
                 accessibilityLabel: "Navigate up",
                 accessibilityHint: "Moves focus up. Hold to repeat.",
                 isEnabled: canControlTV,
+                size: dynamicTypeSize.isAccessibilitySize ? 64 : 56,
                 repeatsWhileHeld: true,
                 action: action
             )
@@ -230,6 +234,7 @@ struct RemoteControlView: View {
                     accessibilityLabel: "Navigate left",
                     accessibilityHint: "Moves focus left. Hold to repeat.",
                     isEnabled: canControlTV,
+                    size: dynamicTypeSize.isAccessibilitySize ? 64 : 56,
                     repeatsWhileHeld: true,
                     action: action
                 )
@@ -240,7 +245,7 @@ struct RemoteControlView: View {
                     accessibilityLabel: "Select",
                     accessibilityHint: "Activates the focused item.",
                     isEnabled: canControlTV,
-                    size: 76,
+                    size: dynamicTypeSize.isAccessibilitySize ? 76 : 72,
                     title: "OK",
                     isPrimary: true,
                     action: action
@@ -252,6 +257,7 @@ struct RemoteControlView: View {
                     accessibilityLabel: "Navigate right",
                     accessibilityHint: "Moves focus right. Hold to repeat.",
                     isEnabled: canControlTV,
+                    size: dynamicTypeSize.isAccessibilitySize ? 64 : 56,
                     repeatsWhileHeld: true,
                     action: action
                 )
@@ -263,6 +269,7 @@ struct RemoteControlView: View {
                 accessibilityLabel: "Navigate down",
                 accessibilityHint: "Moves focus down. Hold to repeat.",
                 isEnabled: canControlTV,
+                size: dynamicTypeSize.isAccessibilitySize ? 64 : 56,
                 repeatsWhileHeld: true,
                 action: action
             )
@@ -829,6 +836,8 @@ private struct SamsungTextInputSheet: View {
                     .accessibilityIdentifier("sendRemoteTextButton")
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(HafaTheme.canvas)
             .navigationTitle("TV Keyboard")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -843,6 +852,7 @@ private struct SamsungTextInputSheet: View {
                 isTextFieldFocused = true
             }
         }
+        .tint(HafaTheme.accent)
         .presentationDetents([.medium, .large])
         .onChange(of: delivery.result) { _, result in
             guard let result else { return }

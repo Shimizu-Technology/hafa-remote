@@ -59,7 +59,9 @@ final class HafaRemoteUITests: XCTestCase {
                 "Connect this iPhone to home Wi-Fi. Your TV can use Wi-Fi or Ethernet on the same network."
             ].exists
         )
-        let sonyGuidance = app.staticTexts["Enter the six-character code shown on the TV."]
+        let sonyGuidance = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Enter the six-character code shown on the TV.")
+        ).firstMatch
         for _ in 0..<4 where !sonyGuidance.exists {
             app.swipeUp()
         }
@@ -634,6 +636,9 @@ final class HafaRemoteUITests: XCTestCase {
             XCTAssertTrue(button.waitForExistence(timeout: 2), "Missing \(command) control")
             for _ in 0..<6 where !button.isHittable {
                 app.swipeUp()
+            }
+            for _ in 0..<6 where !button.isHittable {
+                app.swipeDown()
             }
             XCTAssertTrue(button.isHittable, "Unreachable \(command) control")
             XCTAssertTrue(button.isEnabled, "Disabled \(command) control")

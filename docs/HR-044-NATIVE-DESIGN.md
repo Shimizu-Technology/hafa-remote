@@ -6,7 +6,7 @@ Hafa Remote should feel welcoming on first launch and immediate during everyday 
 
 - Semantic ivory/teal colors in light appearance and graphite/mint colors in dark appearance, including stronger Increased Contrast values.
 - Rounded remote controls with quick press feedback that respects Reduce Motion, a coherent navigation pad, and a distinct OK control.
-- A clear TV heading, nearby volume and utility groups, separate Play and Pause commands, and a keyboard row with truthful focus guidance.
+- A clear TV heading, volume immediately below navigation on compact screens, utility controls below volume, separate Play and Pause commands, and a keyboard row with truthful focus guidance.
 - A welcoming first-launch screen and Help accessible before pairing and during Add TV.
 - Home-network, Ethernet, guest-network, Samsung approval, Sony code, Vizio PIN, and conditional wake guidance.
 
@@ -22,11 +22,28 @@ Existing command dispatch, repeat behavior, capabilities, credential handling, d
 - [x] Add UI coverage for Help, independent playback dispatch, and target sizes.
 - [ ] Pass the full gate on the reviewed commit.
 - [ ] Exercise first launch, setup/Help, saved-TV switching, remote control, keyboard, recovery, and power confirmation with computer use.
-- [ ] Inspect light/dark, largest accessibility text, Increased Contrast, and Reduce Motion on native simulator screens; repair any issues found.
+- [x] Inspect light/dark, largest accessibility text, and Increased Contrast on native simulator screens; repair issues found.
+- [ ] Complete the physical VoiceOver and Reduce Motion journeys during the internal beta.
 - [ ] Complete current-head reviewer coverage before merge.
 
-## Verification at implementation handoff
+## Verification
 
 Swift syntax parsing, strict formatting across all targets, credential scanning, release preflight fixtures, release preflight, and diff whitespace checks passed. Palette contrast was calculated from sRGB values: light primary text 13.88:1, secondary text 6.02:1, action label 6.64:1, and control border 3.66:1; dark values 15.59:1, 7.84:1, 8.75:1, and 4.20:1 respectively.
 
-Native UI tests and the full gate remain pending coordinated Xcode verification. Static parsing does not prove type checking or runtime behavior. No simulator, browser, server, or other persistent development resource was started by this ticket's implementation agent.
+Signed generic simulator build-for-testing compiled the app, extension, and test targets, and deep/strict codesign verification passed. Computer use on an isolated iPhone SE (3rd generation), iOS 18.5, exercised first launch, Help, setup presentation, Select and volume dispatch, and power confirmation. Native inspection covered light/dark appearance, Increased Contrast, and the largest accessibility text size. UI QA caught and repaired missing first-launch Help, sheet tint scope, and volume initially below the compact viewport.
+
+The primary pressed state uses an opaque semantic color. Its action-label contrast is 7.75:1 in light appearance and 7.49:1 in dark appearance; Increased Contrast variants reach 11.82:1 and 9.84:1. Accessibility-sized controls retain larger targets. The largest text size uses the scrollable layout without truncating the selected TV or truthful power status.
+
+Ten focused native UI tests passed with zero failures or skips, including Add TV, pre-pairing Help, separate Play/Pause dispatch, every remote control's minimum target size and Select dispatch, largest Dynamic Type reachability, keyboard delivery, power confirmation, standby power on, automatic recovery/wake, and My TVs Help. The computer-use tool did not scroll the simulator viewport; the passing XCUI touch-swipe journeys independently verified lower remote/keyboard and large-type reachability. Physical-TV behavior is not inferred from any synthetic UI journey. Root will perform the full integrated gate and reviewer loop before merge.
+
+The initial focused run was interrupted during stalled verbose diagnostic collection and supplied no usable result. The definitive rerun used Xcode's documented `-collect-test-diagnostics never` option and finalized a passing result bundle. This skips sysdiagnose collection and does not suppress assertions or test results. The final integrated full gate remains the parent's responsibility.
+
+The owned simulator was shut down, and build/test process ownership was released. Borrowed simulators and shared services were left running.
+
+## Visual evidence
+
+These app-only captures show synthetic UI test data, not hardware acceptance or App Store marketing claims:
+
+- [Compact light remote](evidence/HR-044/compact-light.png)
+- [Compact dark with Increased Contrast](evidence/HR-044/compact-dark-increased-contrast.png)
+- [Largest accessibility text in dark appearance](evidence/HR-044/largest-type-dark.png)

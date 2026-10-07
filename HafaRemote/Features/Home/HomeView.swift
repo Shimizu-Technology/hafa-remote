@@ -80,6 +80,7 @@ struct HomeView: View {
                     isShowingSetup = true
                 }
                 .toolbar {
+                    ToolbarItem(placement: .topBarLeading) { helpButton }
                     ToolbarItem(placement: .topBarTrailing) {
                         myTVsButton
                     }
@@ -91,15 +92,6 @@ struct HomeView: View {
             }
         }
         .tint(HafaTheme.accent)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Help", systemImage: "questionmark.circle") {
-                    isShowingHelp = true
-                }
-                .frame(minWidth: 44, minHeight: 44)
-                .accessibilityIdentifier("homeHelpButton")
-            }
-        }
         .sheet(isPresented: $isShowingHelp) {
             HafaRemoteHelpView()
         }
@@ -218,6 +210,14 @@ struct HomeView: View {
         }
     }
 
+    private var helpButton: some View {
+        Button("Help", systemImage: "questionmark.circle") {
+            isShowingHelp = true
+        }
+        .frame(minWidth: 44, minHeight: 44)
+        .accessibilityIdentifier("homeHelpButton")
+    }
+
     private var emptyState: some View {
         ZStack {
             HafaTheme.canvas
@@ -278,6 +278,7 @@ struct HomeView: View {
         }
         .navigationTitle("Hafa Remote")
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) { helpButton }
             if !savedTVs.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
                     myTVsButton
@@ -320,6 +321,9 @@ struct HomeView: View {
             .accessibilityIdentifier("restoringSavedTVState")
         }
         .navigationTitle("Hafa Remote")
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) { helpButton }
+        }
     }
 
     private var statusLabel: String {
@@ -1028,6 +1032,7 @@ struct HafaRemoteHelpView: View {
                 }
             }
         }
+        .tint(HafaTheme.accent)
     }
 
     private var pairingHelp: some View {

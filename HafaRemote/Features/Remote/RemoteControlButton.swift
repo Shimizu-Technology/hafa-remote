@@ -75,7 +75,7 @@ struct RemoteControlButtonStyle: ButtonStyle {
         if role == .destructive {
             return Color.red.opacity(isPressed ? 0.28 : 0.14)
         }
-        if isPrimary { return HafaTheme.accent.opacity(isPressed ? 0.8 : 1) }
+        if isPrimary { return isPressed ? HafaTheme.accentPressed : HafaTheme.accent }
         return isPressed ? HafaTheme.accent.opacity(0.18) : HafaTheme.surface
     }
 }

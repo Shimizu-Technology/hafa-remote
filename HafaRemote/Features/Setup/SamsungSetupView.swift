@@ -152,6 +152,7 @@ struct TVSetupView: View {
                 }
             }
         }
+        .tint(HafaTheme.accent)
     }
 
     @ViewBuilder

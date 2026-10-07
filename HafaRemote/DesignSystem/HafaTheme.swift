@@ -12,6 +12,9 @@ enum HafaTheme {
     static let accent = adaptive(
         light: 0x12685D, dark: 0x78D5BF,
         highContrastLight: 0x0B5148, highContrastDark: 0x9AE8D5)
+    static let accentPressed = adaptive(
+        light: 0x0F5D53, dark: 0x65C7AE,
+        highContrastLight: 0x083F37, highContrastDark: 0x89E0C9)
     static let onAccent = adaptive(light: 0xFFFFFF, dark: 0x112A23)
     static let controlBorder = adaptive(
         light: 0x7B8982, dark: 0x748D85,
