@@ -24,7 +24,10 @@ struct SonyProtocolCodecTests {
         let active = SonyRemoteProtocolCodec.activeResponse(negotiatedFeatures: 2 | 128)
         let activeBody = try #require(try SonyProtobuf.fields(in: active).first?.bytes)
         #expect(try SonyProtobuf.fields(in: activeBody).first?.varint == 2)
-        #expect(SonyRemoteDevice.capabilities(for: 2) == [.navigation, .playback])
+        #expect(
+            SonyRemoteDevice.capabilities(for: 2) == [
+                .navigation, .playback, .sourceMenu, .channels, .guide, .numberPad,
+            ])
         #expect(!SonyRemoteDevice.capabilities(for: 2).contains(.powerOn))
     }
 
@@ -182,6 +185,12 @@ struct SonyProtocolCodecTests {
         case .volumeUp: 24
         case .volumeDown: 25
         case .mute: 164
+        case .inputSource: 178
+        case .channelUp: 166
+        case .channelDown: 167
+        case .guide: 172
+        case .digit0, .digit1, .digit2, .digit3, .digit4, .digit5, .digit6, .digit7, .digit8, .digit9:
+            UInt64(7 + (command.digit ?? 0))
         }
     }
 }

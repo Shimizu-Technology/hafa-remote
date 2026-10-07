@@ -19,6 +19,7 @@ struct RemoteControlView: View {
     let powerOnHelpText: String
     let powerOnFailureText: String
     let powerOffFailureText: String
+    var convenienceContext: RemoteConvenienceContext? = nil
     let action: @MainActor @Sendable (RemoteCommand) async -> Void
     let textAction: @MainActor @Sendable (RemoteTextInput) async throws -> Void
     let powerOnAction: @MainActor @Sendable () async throws -> Void
@@ -26,6 +27,7 @@ struct RemoteControlView: View {
     let retry: @MainActor @Sendable () async -> Void
     let showTVSetup: @MainActor @Sendable () -> Void
 
+    @State private var usesSwipeNavigation = false
     @State private var isConfirmingPowerOff = false
     @State private var isShowingKeyboard = false
     @State private var isPoweringOnTV = false
@@ -52,12 +54,24 @@ struct RemoteControlView: View {
                         if !isAwaitingApproval { recoveryControls }
                     }
                     if capabilities.contains(.navigation) {
-                        navigationControls
+                        if usesSwipeNavigation {
+                            RemoteSwipeControl(isEnabled: canControlTV, action: action)
+                                .id(convenienceContext?.stableDeviceKey ?? tvName)
+                        } else {
+                            navigationControls
+                        }
                     }
                     if capabilities.contains(.volume) || capabilities.contains(.mute) {
                         volumeControls
                     }
                     if capabilities.contains(.navigation) {
+                        Picker("Navigation mode", selection: $usesSwipeNavigation) {
+                            Text("Buttons").tag(false)
+                            Text("Swipe").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("navigationModePicker")
                         utilityControls
                     }
                     if capabilities.contains(.playback) {
@@ -65,6 +79,20 @@ struct RemoteControlView: View {
                     }
                     if capabilities.contains(.textInput) {
                         textControls
+                    }
+                    if let convenienceContext {
+                        NavigationLink {
+                            RemoteConveniencesView(
+                                context: convenienceContext, capabilities: capabilities,
+                                isConnected: canControlTV, send: action
+                            )
+                            .id(convenienceContext.stableDeviceKey)
+                        } label: {
+                            Label("More Controls & Favorites", systemImage: "slider.horizontal.3")
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("remoteMoreControls")
                     }
                 }
                 .padding(.horizontal, 20)
@@ -922,11 +950,14 @@ private struct SamsungTextInputSheet: View {
 enum SamsungTextDeliveryResult: Equatable {
     case sent
     case failed
+    case requiresFocus
 
     var message: String {
         switch self {
         case .sent:
             "Sent to the TV. If nothing appeared, that TV screen does not accept remote text."
+        case .requiresFocus:
+            "Focus a text field on the TV, then send again. Remote text is unavailable on some secure screens."
         case .failed:
             "Text was not sent. Check the TV connection and try again."
         }
@@ -935,7 +966,7 @@ enum SamsungTextDeliveryResult: Equatable {
     var feedbackType: UINotificationFeedbackGenerator.FeedbackType {
         switch self {
         case .sent: .success
-        case .failed: .error
+        case .failed, .requiresFocus: .error
         }
     }
 }
@@ -966,6 +997,8 @@ final class SamsungTextDeliveryController {
                 self?.finish(deliveryID, with: .sent)
             } catch is CancellationError {
                 self?.finish(deliveryID, with: nil)
+            } catch TVConvenienceError.textFieldNotFocused {
+                self?.finish(deliveryID, with: .requiresFocus)
             } catch {
                 self?.finish(deliveryID, with: .failed)
             }

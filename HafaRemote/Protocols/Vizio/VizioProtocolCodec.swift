@@ -125,6 +125,11 @@ enum VizioProtocolCodec {
             key = VizioRemoteKey(codeSet: 5, code: 0)
         case .mute:
             key = VizioRemoteKey(codeSet: 5, code: 4)
+        case .inputSource: key = VizioRemoteKey(codeSet: 7, code: 1)
+        case .channelUp: key = VizioRemoteKey(codeSet: 8, code: 1)
+        case .channelDown: key = VizioRemoteKey(codeSet: 8, code: 0)
+        case .guide, .digit0, .digit1, .digit2, .digit3, .digit4, .digit5, .digit6, .digit7, .digit8, .digit9:
+            throw VizioProtocolError.unsupportedCommand
         }
         return try encode(
             VizioKeyCommandRequest(

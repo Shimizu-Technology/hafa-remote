@@ -31,16 +31,24 @@ enum TVCapability: String, Codable, CaseIterable, Hashable, Sendable {
     case textInput
     case powerOff
     case powerOn
+    case sourceMenu
+    case channels
+    case guide
+    case numberPad
+    case favoriteApps
+    case inputSelection
 
     static func implemented(for brand: TVBrand) -> Set<TVCapability> {
         var capabilities: Set<TVCapability> = [
-            .navigation, .volume, .mute, .playback, .powerOff,
+            .navigation, .volume, .mute, .playback, .powerOff, .sourceMenu, .channels, .favoriteApps,
         ]
         switch brand {
         case .samsung:
-            capabilities.insert(.textInput)
-        case .sony, .vizio:
-            capabilities.insert(.powerOn)
+            capabilities.formUnion([.textInput, .guide, .numberPad])
+        case .sony:
+            capabilities.formUnion([.powerOn, .textInput, .guide, .numberPad])
+        case .vizio:
+            capabilities.formUnion([.powerOn, .inputSelection])
         }
         return capabilities
     }
@@ -151,6 +159,11 @@ extension RemoteCommand {
         case .volumeUp, .volumeDown: .volume
         case .mute: .mute
         case .play, .pause, .rewind, .fastForward: .playback
+        case .inputSource: .sourceMenu
+        case .channelUp, .channelDown: .channels
+        case .guide: .guide
+        case .digit0, .digit1, .digit2, .digit3, .digit4, .digit5, .digit6, .digit7, .digit8, .digit9:
+            .numberPad
         }
     }
 }
@@ -396,6 +409,9 @@ typealias PairedSamsungTV = ConnectedTV
 
 /// The command boundary between product features and a television-specific protocol.
 protocol TVDriver: Sendable {
+    /// Whether cancelling an in-flight write can close this driver's active transport.
+    func cancellationInvalidatesConnection() async -> Bool
+
     /// Verifies that the active control session is still usable without changing TV state.
     func checkConnection() async throws
 
@@ -409,11 +425,19 @@ protocol TVDriver: Sendable {
     /// Sends text to the text field currently focused on the television.
     func sendText(_ input: RemoteTextInput) async throws
 
+    func convenience(_ request: TVConvenienceRequest) async throws -> TVConvenienceResponse
+
     /// Ends the active connection and releases its network resources.
     func disconnect() async
 }
 
 extension TVDriver {
+    func cancellationInvalidatesConnection() async -> Bool { false }
+
+    func convenience(_ request: TVConvenienceRequest) async throws -> TVConvenienceResponse {
+        throw TVConvenienceError.unavailable
+    }
+
     func sessionObservation() async throws -> TVSessionObservation? { nil }
     func observations() async -> AsyncStream<TVSessionObservation> {
         AsyncStream { $0.finish() }

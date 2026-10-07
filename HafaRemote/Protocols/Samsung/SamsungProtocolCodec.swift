@@ -39,6 +39,13 @@ enum SamsungProtocolCodec {
             key = "KEY_VOLDOWN"
         case .mute:
             key = "KEY_MUTE"
+        case .inputSource: key = "KEY_SOURCE"
+        case .channelUp: key = "KEY_CHUP"
+        case .channelDown: key = "KEY_CHDOWN"
+        case .guide: key = "KEY_GUIDE"
+        case .digit0, .digit1, .digit2, .digit3, .digit4, .digit5, .digit6, .digit7, .digit8, .digit9:
+            guard let digit = command.digit else { throw SamsungProtocolError.unsupportedCommand }
+            key = "KEY_\(digit)"
         }
 
         let request = SamsungRemoteControlRequest(

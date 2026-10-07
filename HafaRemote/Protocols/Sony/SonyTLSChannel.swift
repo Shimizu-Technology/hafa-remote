@@ -125,6 +125,26 @@ enum SonyTLSConnectionDeadline {
     }
 }
 
+/// An attempt's admission lease is revoked before replacement work can enter a channel actor.
+final class SonyTLSChannelOwnership: @unchecked Sendable {
+    private let lock = NSLock()
+    private var valid = true
+
+    func invalidate() {
+        lock.lock()
+        valid = false
+        lock.unlock()
+    }
+
+    func requireCurrent() throws {
+        try Task.checkCancellation()
+        lock.lock()
+        let isValid = valid
+        lock.unlock()
+        guard isValid else { throw CancellationError() }
+    }
+}
+
 protocol SonyTLSChanneling: Sendable {
     func connect(
         address: PrivateIPv4Address,
@@ -136,18 +156,80 @@ protocol SonyTLSChanneling: Sendable {
     func receive() async throws -> Data
     func checkConnection() async throws
     func disconnect() async
+    func connect(
+        address: PrivateIPv4Address, port: UInt16, identity: SonyClientIdentityReference,
+        trustMode: SonyTLSTrustMode, ownership: SonyTLSChannelOwnership
+    ) async throws -> SonyTLSPeer
+    func send(_ message: Data, ownership: SonyTLSChannelOwnership) async throws
+    func receive(ownership: SonyTLSChannelOwnership) async throws -> Data
+    func checkConnection(ownership: SonyTLSChannelOwnership) async throws
+    func disconnect(ownership: SonyTLSChannelOwnership) async
 }
 
 extension SonyTLSChanneling {
     func checkConnection() async throws {}
+
+    // Compatibility for injected legacy channels. The production channel additionally
+    // checks connection-owner identity at its actor boundary before any socket effect.
+    func connect(
+        address: PrivateIPv4Address, port: UInt16, identity: SonyClientIdentityReference,
+        trustMode: SonyTLSTrustMode, ownership: SonyTLSChannelOwnership
+    ) async throws -> SonyTLSPeer {
+        try ownership.requireCurrent()
+        let peer = try await connect(address: address, port: port, identity: identity, trustMode: trustMode)
+        try ownership.requireCurrent()
+        return peer
+    }
+    func send(_ message: Data, ownership: SonyTLSChannelOwnership) async throws {
+        try ownership.requireCurrent()
+        try await send(message)
+        try ownership.requireCurrent()
+    }
+    func receive(ownership: SonyTLSChannelOwnership) async throws -> Data {
+        try ownership.requireCurrent()
+        let message = try await receive()
+        try ownership.requireCurrent()
+        return message
+    }
+    func checkConnection(ownership: SonyTLSChannelOwnership) async throws {
+        try ownership.requireCurrent()
+        try await checkConnection()
+        try ownership.requireCurrent()
+    }
+    func disconnect(ownership: SonyTLSChannelOwnership) async { await disconnect() }
 }
 
 /// Makes the non-Sendable Security identity safe to pass only as an immutable reference.
 final class SonyClientIdentityReference: @unchecked Sendable {
-    let value: SecIdentity
+    let value: SecIdentity?
+    #if DEBUG
+        private let syntheticCertificate: SecCertificate?
+    #endif
 
     init(_ value: SecIdentity) {
         self.value = value
+        #if DEBUG
+            syntheticCertificate = nil
+        #endif
+    }
+
+    #if DEBUG
+        /// In-memory certificate seam for real pairing exchanges on injected, non-network channels.
+        init(syntheticCertificate: SecCertificate) {
+            value = nil
+            self.syntheticCertificate = syntheticCertificate
+        }
+    #endif
+
+    func certificate() throws -> SecCertificate {
+        #if DEBUG
+            if let syntheticCertificate { return syntheticCertificate }
+        #endif
+        var certificate: SecCertificate?
+        guard let value, SecIdentityCopyCertificate(value, &certificate) == errSecSuccess,
+            let certificate
+        else { throw SonyPairingCoordinatorError.invalidPairingResponse }
+        return certificate
     }
 }
 
@@ -157,7 +239,18 @@ actor SonyTLSChannel: SonyTLSChanneling {
 
     private let queue = DispatchQueue(label: "com.shimizutechnology.hafaremote.sony-tls")
     private var connection: NWConnection?
+    private var connectionOwnership: SonyTLSChannelOwnership?
     private var messageBuffer = SonyTLSMessageBuffer()
+
+    #if DEBUG
+        /// Socket-free admission/retirement fixture; buffers only synthetic test bytes.
+        func seedBufferedOwnershipForTesting(_ ownership: SonyTLSChannelOwnership, message: Data) throws {
+            guard connection == nil, connectionOwnership == nil else { throw SonyTLSChannelError.unavailable }
+            connectionOwnership = ownership
+            _ = try messageBuffer.append(SonyProtobuf.framed(Data([0])) + SonyProtobuf.framed(message))
+        }
+        func syntheticOwnershipForTesting() -> SonyTLSChannelOwnership? { connectionOwnership }
+    #endif
 
     func connect(
         address: PrivateIPv4Address,
@@ -165,11 +258,23 @@ actor SonyTLSChannel: SonyTLSChanneling {
         identity: SonyClientIdentityReference,
         trustMode: SonyTLSTrustMode
     ) async throws -> SonyTLSPeer {
-        disconnect()
+        try await connect(
+            address: address, port: port, identity: identity, trustMode: trustMode,
+            ownership: SonyTLSChannelOwnership())
+    }
+
+    func connect(
+        address: PrivateIPv4Address, port: UInt16, identity: SonyClientIdentityReference,
+        trustMode: SonyTLSTrustMode, ownership: SonyTLSChannelOwnership
+    ) async throws -> SonyTLSPeer {
+        try ownership.requireCurrent()
+        resetConnection()
         messageBuffer.reset()
 
         let tlsOptions = NWProtocolTLS.Options()
-        guard let localIdentity = sec_identity_create(identity.value) else {
+        guard let securityIdentity = identity.value,
+            let localIdentity = sec_identity_create(securityIdentity)
+        else {
             throw SonyTLSChannelError.invalidIdentity
         }
         sec_protocol_options_set_local_identity(
@@ -207,11 +312,13 @@ actor SonyTLSChannel: SonyTLSChanneling {
             using: parameters
         )
         self.connection = connection
+        connectionOwnership = ownership
 
         do {
             try await SonyTLSConnectionDeadline.run(timeout: Self.connectionTimeout) {
-                try await self.waitUntilReady(connection)
+                try await self.waitUntilReady(connection, ownership: ownership)
             }
+            try validateOwnership(ownership)
             guard self.connection === connection else {
                 throw SonyTLSChannelError.connectionClosed
             }
@@ -221,7 +328,7 @@ actor SonyTLSChannel: SonyTLSChanneling {
             return peer
         } catch {
             if self.connection === connection {
-                disconnect()
+                resetConnection()
             } else {
                 connection.cancel()
             }
@@ -236,6 +343,16 @@ actor SonyTLSChannel: SonyTLSChanneling {
     }
 
     func send(_ message: Data) async throws {
+        try await sendMessage(message, ownership: connectionOwnership)
+    }
+
+    func send(_ message: Data, ownership: SonyTLSChannelOwnership) async throws {
+        try await sendMessage(message, ownership: ownership)
+    }
+
+    private func sendMessage(_ message: Data, ownership: SonyTLSChannelOwnership?) async throws {
+        try Task.checkCancellation()
+        if let ownership { try validateOwnership(ownership) }
         guard let connection else { throw SonyTLSChannelError.connectionClosed }
         let framed = try SonyProtobuf.framed(message)
         try await withTaskCancellationHandler {
@@ -253,14 +370,29 @@ actor SonyTLSChannel: SonyTLSChanneling {
         } onCancel: {
             connection.cancel()
         }
+        try Task.checkCancellation()
+        if let ownership { try validateOwnership(ownership) }
+        guard self.connection === connection else { throw SonyTLSChannelError.connectionClosed }
     }
 
     func receive() async throws -> Data {
+        try await receiveMessage(ownership: connectionOwnership)
+    }
+
+    func receive(ownership: SonyTLSChannelOwnership) async throws -> Data {
+        try await receiveMessage(ownership: ownership)
+    }
+
+    private func receiveMessage(ownership: SonyTLSChannelOwnership?) async throws -> Data {
+        try Task.checkCancellation()
+        if let ownership { try validateOwnership(ownership) }
         if let queued = messageBuffer.next() { return queued }
         guard let connection else { throw SonyTLSChannelError.connectionClosed }
 
         while true {
             let chunk = try await receiveChunk(on: connection)
+            try Task.checkCancellation()
+            if let ownership { try validateOwnership(ownership) }
             if let message = try SonyTLSReceivedChunkIsolation.append(
                 chunk,
                 expectedConnection: connection,
@@ -272,7 +404,12 @@ actor SonyTLSChannel: SonyTLSChanneling {
         }
     }
 
-    func checkConnection() throws {
+    func checkConnection() async throws {
+        if let ownership = connectionOwnership { try validateOwnership(ownership) }
+        try checkConnectionState()
+    }
+
+    private func checkConnectionState() throws {
         guard let connection else { throw SonyTLSChannelError.connectionClosed }
         switch connection.state {
         case .ready:
@@ -288,14 +425,39 @@ actor SonyTLSChannel: SonyTLSChanneling {
         }
     }
 
-    func disconnect() {
-        connection?.stateUpdateHandler = nil
+    func checkConnection(ownership: SonyTLSChannelOwnership) async throws {
+        try validateOwnership(ownership)
+        try checkConnectionState()
+    }
+
+    private func validateOwnership(_ ownership: SonyTLSChannelOwnership) throws {
+        try ownership.requireCurrent()
+        guard connectionOwnership === ownership else { throw CancellationError() }
+    }
+
+    func disconnect(ownership: SonyTLSChannelOwnership) async {
+        // Revoked owners still close their own connection, never a replacement's.
+        guard connectionOwnership === ownership else { return }
+        resetConnection()
+    }
+
+    func disconnect() async { resetConnection() }
+
+    private func resetConnection() {
+        // The captured, one-shot readiness handler belongs only to this connection.
+        // Keep it installed so cancellation can finish a suspended readiness wait;
+        // removing it first can discard the terminal callback.
         connection?.cancel()
         connection = nil
+        connectionOwnership = nil
         messageBuffer.reset()
     }
 
-    private func waitUntilReady(_ connection: NWConnection) async throws {
+    private func waitUntilReady(
+        _ connection: NWConnection, ownership: SonyTLSChannelOwnership
+    ) async throws {
+        try validateOwnership(ownership)
+        guard self.connection === connection else { throw CancellationError() }
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 let gate = SonyConnectionContinuationGate(continuation)

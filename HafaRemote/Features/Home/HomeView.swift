@@ -52,11 +52,17 @@ struct HomeView: View {
                     powerOnWasVerified: savedTV?.hardwareVerifiedCapabilities.contains(.powerOn) == true,
                     powerOnHelpText: powerOnHelpText(for: tv.brand),
                     powerOnFailureText: powerOnFailureText(for: tv.brand),
-                    powerOffFailureText: powerOffFailureText(for: tv.brand)
+                    powerOffFailureText: powerOffFailureText(for: tv.brand),
+                    convenienceContext: RemoteConvenienceContext(
+                        stableDeviceKey: tv.stableDeviceKey, brand: tv.brand
+                    ) { request in
+                        try await session.convenience(request, expectedDeviceKey: tv.stableDeviceKey)
+                    }
                 ) { command in
-                    guard isPresentedTVConnected else { return }
+                    guard isPresentedTVConnected, session.connectedTV?.stableDeviceKey == tv.stableDeviceKey
+                    else { return }
                     do {
-                        try await session.send(command)
+                        try await session.send(command, expectedDeviceKey: tv.stableDeviceKey)
                     } catch {
                         // The session projects the protocol failure and reconnect state.
                     }
@@ -64,21 +70,20 @@ struct HomeView: View {
                     guard isPresentedTVConnected else {
                         throw TVSelectionError.notConnected
                     }
-                    try await session.sendText(input)
+                    try await session.sendText(input, expectedDeviceKey: tv.stableDeviceKey)
                 } powerOnAction: {
                     try await powerOn(tv, savedTV: savedTV)
                 } powerOffAction: {
                     guard isPresentedTVConnected else {
                         throw TVSelectionError.notConnected
                     }
-                    try await session.send(.powerOff)
-                    try Task.checkCancellation()
-                    await session.disconnect(clearRememberedTV: false)
+                    try await session.powerOffSelectedTV(expectedDeviceKey: tv.stableDeviceKey)
                 } retry: {
                     await session.connect(to: tv.connectionTarget)
                 } showTVSetup: {
                     isShowingSetup = true
                 }
+                .id(tv.stableDeviceKey)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) { helpButton }
                     ToolbarItem(placement: .topBarTrailing) {
@@ -499,6 +504,7 @@ struct HomeView: View {
             throw error
         }
 
+        TVConveniencePreferences.shared.forget(stableDeviceKey: removedKey)
         if affectsActiveSession {
             await session.disconnect()
         }
@@ -568,6 +574,8 @@ struct HomeView: View {
     }
 
     private func powerOn(_ tv: ConnectedTV, savedTV: SavedTV?) async throws {
+        let ownershipRevision = selection.revision
+        try verifyPowerOwnership(tv, revision: ownershipRevision)
         switch tv.brand {
         case .samsung:
             try await wake(tv, savedTV: savedTV)
@@ -576,14 +584,21 @@ struct HomeView: View {
                 throw TVSelectionError.notConnected
             }
             if !isPresentedTVConnected {
-                _ = try await session.connectAndWait(to: target, timeout: .seconds(30))
+                let key = tv.stableDeviceKey
+                _ = try await session.connectAndWait(to: target, timeout: .seconds(30)) { [selection] in
+                    selection.selectedDeviceKey == key && selection.revision == ownershipRevision
+                }
             }
-            try await session.send(.powerOn)
+            try verifyPowerOwnership(tv, revision: ownershipRevision)
+            try await session.send(.powerOn, expectedDeviceKey: tv.stableDeviceKey)
+            try verifyPowerOwnership(tv, revision: ownershipRevision)
             await session.refreshObservation()
         }
     }
 
     private func wake(_ tv: ConnectedTV, savedTV: SavedTV?) async throws {
+        let ownershipRevision = selection.revision
+        try verifyPowerOwnership(tv, revision: ownershipRevision)
         guard let macAddress = wakeMACAddress(for: tv, savedTV: savedTV) else {
             throw TVMACAddressError.invalid
         }
@@ -600,11 +615,17 @@ struct HomeView: View {
         do {
             try await withThrowingTaskGroup(of: Void.self) { group in
                 group.addTask {
+                    try await verifyPowerOwnership(tv, revision: ownershipRevision)
                     try await wakeService.wake(macAddress, at: tv.address)
                     try await Task.sleep(for: .seconds(2))
+                    try await verifyPowerOwnership(tv, revision: ownershipRevision)
                     _ = try await session.connectAndWait(
                         to: target,
-                        timeout: .seconds(30)
+                        timeout: .seconds(30),
+                        isStillSelected: { [selection] in
+                            selection.selectedDeviceKey == tv.stableDeviceKey
+                                && selection.revision == ownershipRevision
+                        }
                     )
                 }
                 group.addTask {
@@ -621,6 +642,14 @@ struct HomeView: View {
             }
             throw error
         }
+    }
+
+    private func verifyPowerOwnership(_ television: ConnectedTV, revision: Int) throws {
+        try Task.checkCancellation()
+        guard scenePhase == .active, selection.revision == revision,
+            selection.selectedDeviceKey == television.stableDeviceKey,
+            session.connectedTV == nil || session.connectedTV?.stableDeviceKey == television.stableDeviceKey
+        else { throw CancellationError() }
     }
 
     private func saveConnectedTV(_ tv: ConnectedTV) {
@@ -1250,15 +1279,18 @@ enum TVSelectionError: Error {
 final class SavedTVSelectionCoordinator {
     private(set) var selectedDeviceKey: String?
     private(set) var isSwitching = false
+    private(set) var revision = 0
     private var operationID: UUID?
     private nonisolated let taskHolder = SavedTVSelectionTaskHolder()
 
     func selectWithoutConnecting(_ deviceKey: String?) {
         guard selectedDeviceKey == nil else { return }
+        revision &+= 1
         selectedDeviceKey = deviceKey
     }
 
     func markConnected(_ deviceKey: String) {
+        if selectedDeviceKey != deviceKey { revision &+= 1 }
         selectedDeviceKey = deviceKey
         isSwitching = false
         operationID = nil
@@ -1268,6 +1300,7 @@ final class SavedTVSelectionCoordinator {
     /// Clears a removed selection and optionally promotes a remaining saved TV.
     func removeSelection(for deviceKey: String, replacementDeviceKey: String?) {
         guard selectedDeviceKey == deviceKey else { return }
+        revision &+= 1
         taskHolder.cancel()
         selectedDeviceKey = replacementDeviceKey
         isSwitching = false
@@ -1283,6 +1316,7 @@ final class SavedTVSelectionCoordinator {
         taskHolder.cancel()
         let operationID = UUID()
         self.operationID = operationID
+        revision &+= 1
         selectedDeviceKey = deviceKey
         isSwitching = true
         taskHolder.install(

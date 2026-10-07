@@ -4,6 +4,62 @@ import Testing
 @testable import HafaRemote
 
 struct SamsungProtocolCodecTests {
+    @Test("Samsung app socket write failures retain typed reconnect behavior")
+    func appWriteFailureRecovers() async {
+        await #expect(throws: SamsungConnectionError.unavailable) {
+            try await SamsungCommandTransport.performAppWrite { throw URLError(.networkConnectionLost) }
+        }
+        await #expect(throws: CancellationError.self) {
+            try await SamsungCommandTransport.performAppWrite { throw CancellationError() }
+        }
+    }
+
+    @Test("A successful Samsung socket catalog remains usable for launch after query timeout")
+    func cachedCatalogSurvivesTimeout() async throws {
+        let query = SamsungAppListQuery()
+        let original = try TVAppShortcut(
+            name: "Synthetic App A", target: .samsung(appID: "synthetic-a", deepLink: true))
+        let late = try TVAppShortcut(
+            name: "Synthetic App B", target: .samsung(appID: "synthetic-b", deepLink: false))
+        _ = try await query.query(send: { await query.receive(.success([original])) })
+        await #expect(throws: TVConvenienceError.timedOut) {
+            try await query.query(timeout: .milliseconds(1), send: {})
+        }
+        await query.receive(.success([late]))
+        do {
+            let catalog = try await query.catalogForLaunch(send: {
+                Issue.record("A cached launch must not reopen an uncorrelated timed-out query")
+            })
+            #expect(catalog == [original])
+            _ = try SamsungAppCodec.launch(original)
+        } catch {
+            Issue.record("A prior successful socket catalog must remain usable")
+        }
+        await #expect(throws: TVConvenienceError.unavailable) {
+            try await query.query(send: {})
+        }
+        await query.reset()
+        let refreshed = try await query.catalogForLaunch(send: { await query.receive(.success([late])) })
+        #expect(refreshed == [late])
+        #expect(!refreshed.contains(original))
+    }
+
+    @Test("A new Samsung socket cannot inherit or be completed by an old catalog response")
+    func catalogGenerationIsolation() async throws {
+        let old = SamsungAppListQuery()
+        let original = try TVAppShortcut(
+            name: "Synthetic Old", target: .samsung(appID: "synthetic-old", deepLink: true))
+        let current = try TVAppShortcut(
+            name: "Synthetic Current", target: .samsung(appID: "synthetic-current", deepLink: true))
+        _ = try await old.query(send: { await old.receive(.success([original])) })
+        let replacement = SamsungAppListQuery()
+        let result = try await replacement.catalogForLaunch(send: {
+            await old.receive(.success([original]))
+            await replacement.receive(.success([current]))
+        })
+        #expect(result == [current])
+    }
+
     @Test("Samsung PowerState is explicit and unknown when missing or unrecognized")
     func readsReportedSamsungPowerState() throws {
         for (value, expected) in [
@@ -83,12 +139,26 @@ struct SamsungProtocolCodecTests {
             (.volumeUp, "KEY_VOLUP"),
             (.volumeDown, "KEY_VOLDOWN"),
             (.mute, "KEY_MUTE"),
+            (.inputSource, "KEY_SOURCE"),
+            (.channelUp, "KEY_CHUP"),
+            (.channelDown, "KEY_CHDOWN"),
+            (.guide, "KEY_GUIDE"),
+            (.digit0, "KEY_0"),
+            (.digit1, "KEY_1"),
+            (.digit2, "KEY_2"),
+            (.digit3, "KEY_3"),
+            (.digit4, "KEY_4"),
+            (.digit5, "KEY_5"),
+            (.digit6, "KEY_6"),
+            (.digit7, "KEY_7"),
+            (.digit8, "KEY_8"),
+            (.digit9, "KEY_9"),
         ]
 
         #expect(mappings.map(\.0) == RemoteCommand.allCases.filter { $0 != .powerOn })
         #expect(Set(mappings.map(\.1)).count == mappings.count)
         let repeatable: Set<RemoteCommand> = [
-            .up, .down, .left, .right, .volumeUp, .volumeDown,
+            .up, .down, .left, .right, .volumeUp, .volumeDown, .channelUp, .channelDown,
         ]
         for command in RemoteCommand.allCases {
             #expect(command.supportsRepeat == repeatable.contains(command))

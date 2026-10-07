@@ -165,7 +165,7 @@ if plutil -extract UIBackgroundModes raw "$info_plist" >/dev/null 2>&1; then
 fi
 
 "$repo_root/scripts/validate-privacy-manifest.sh" "$privacy_manifest"
-"$repo_root/scripts/validate-privacy-manifest.sh" "$control_privacy_manifest"
+"$repo_root/scripts/validate-privacy-manifest.sh" "$control_privacy_manifest" extension
 
 entitlement_count="$(plutil -convert json -o - "$entitlements" | ruby -rjson -e 'puts JSON.parse(STDIN.read).length')"
 if [[ "$entitlement_count" != "0" ]]; then
@@ -262,7 +262,7 @@ if [[ -n "$archive_path" ]]; then
   [[ -d "$archived_control" ]] || { echo "Archived Control Center extension is missing." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleIdentifier raw "$archived_control/Info.plist")" == "com.shimizutechnology.hafaremote.controls" ]] || { echo "Archived control bundle ID does not match." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleVersion raw "$archived_control/Info.plist")" == "$(setting CURRENT_PROJECT_VERSION)" ]] || { echo "Archived control build number does not match." >&2; exit 1; }
-  "$repo_root/scripts/validate-privacy-manifest.sh" "$archived_control/PrivacyInfo.xcprivacy"
+  "$repo_root/scripts/validate-privacy-manifest.sh" "$archived_control/PrivacyInfo.xcprivacy" extension
 
   preflight_tmp="$(mktemp -d "${TMPDIR:-/tmp}/hafa-release-preflight.XXXXXX")"
   cleanup_preflight() { rm -rf -- "$preflight_tmp"; }
@@ -307,7 +307,7 @@ if [[ -n "$export_path" ]]; then
   [[ -d "$exported_control" ]] || { echo "Exported Control Center extension is missing." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleIdentifier raw "$exported_control/Info.plist")" == "com.shimizutechnology.hafaremote.controls" ]] || { echo "Exported control bundle ID does not match." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleVersion raw "$exported_control/Info.plist")" == "$(setting CURRENT_PROJECT_VERSION)" ]] || { echo "Exported control build number does not match." >&2; exit 1; }
-  "$repo_root/scripts/validate-privacy-manifest.sh" "$exported_control/PrivacyInfo.xcprivacy"
+  "$repo_root/scripts/validate-privacy-manifest.sh" "$exported_control/PrivacyInfo.xcprivacy" extension
   codesign --verify --deep --strict "$exported_app"
   codesign -d --entitlements :- "$exported_app" >"$export_tmp/entitlements.plist" 2>/dev/null
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' "$export_tmp/entitlements.plist")" == "4T358A5S74.com.shimizutechnology.hafaremote" ]] || { echo "Exported application identifier does not match." >&2; exit 1; }

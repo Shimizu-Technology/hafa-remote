@@ -18,7 +18,10 @@ struct SonyTLSChannelTests {
         )
         #expect(device.powerState == (isOn ? .on : .standby))
         #expect(device.negotiatedFeatures == 2 | 32)
-        #expect(device.capabilities == [.navigation, .playback, .powerOff, .powerOn])
+        #expect(
+            device.capabilities == [
+                .navigation, .playback, .powerOff, .powerOn, .sourceMenu, .channels, .guide, .numberPad,
+            ])
         let response = try #require(await channel.sentMessages.first)
         let configureBody = try #require(try SonyProtobuf.fields(in: response).first?.bytes)
         #expect(try SonyProtobuf.fields(in: configureBody).first?.varint == 2 | 32)

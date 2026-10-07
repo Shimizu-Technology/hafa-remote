@@ -61,7 +61,7 @@ struct HafaRemoteTests {
         let vizio = TVCapability.implemented(for: .vizio)
 
         #expect(samsung.contains(.textInput))
-        #expect(!sony.contains(.textInput))
+        #expect(sony.contains(.textInput))
         #expect(!vizio.contains(.textInput))
         #expect(!samsung.contains(.powerOn))
         #expect(sony.contains(.powerOn))

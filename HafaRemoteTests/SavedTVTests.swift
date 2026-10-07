@@ -167,6 +167,7 @@ struct SavedTVTests {
             discoveryIdentifier: "synthetic-discovery-alias",
             macAddress: "02:00:5E:10:00:01",
             wakeWasVerified: true,
+            capabilities: [.navigation, .volume, .mute, .playback, .powerOff, .powerOn],
             lastSeenAt: Date(timeIntervalSince1970: 100),
             lastUsedAt: Date(timeIntervalSince1970: 200)
         )

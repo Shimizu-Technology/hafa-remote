@@ -105,8 +105,23 @@ if output="$("$privacy_validator" "$accessed_api_privacy" 2>&1)"; then
   echo "Expected a required-reason API privacy manifest to fail." >&2
   exit 1
 fi
-if [[ "$output" != *"Privacy manifest unexpectedly declares required-reason API use."* ]]; then
+if [[ "$output" != *"Privacy manifest must declare only UserDefaults with own-app reason CA92.1."* ]]; then
   echo "Unexpected required-reason API rejection: $output" >&2
+  exit 1
+fi
+
+"$privacy_validator" "$repo_root/HafaRemoteControls/Resources/PrivacyInfo.xcprivacy" extension
+
+for value in '[]' '[{"NSPrivacyAccessedAPIType":"NSPrivacyAccessedAPICategoryUserDefaults","NSPrivacyAccessedAPITypeReasons":["1C8F.1"]}]' '[{"NSPrivacyAccessedAPIType":"NSPrivacyAccessedAPICategoryDiskSpace","NSPrivacyAccessedAPITypeReasons":["E174.1"]}]'; do
+  cp "$valid_privacy" "$accessed_api_privacy"
+  plutil -replace NSPrivacyAccessedAPITypes -json "$value" "$accessed_api_privacy"
+  if "$privacy_validator" "$accessed_api_privacy" >/dev/null 2>&1; then
+    echo "Expected missing, incorrect, or extra required-reason declarations to fail." >&2
+    exit 1
+  fi
+done
+if "$privacy_validator" "$valid_privacy" extension >/dev/null 2>&1; then
+  echo "Expected an extension with app preference APIs to fail." >&2
   exit 1
 fi
 

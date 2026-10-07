@@ -170,7 +170,13 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
                     displayName: confirmedInfo.displayName,
                     modelName: confirmedInfo.modelName,
                     firmwareVersion: confirmedInfo.firmwareVersion,
-                    powerState: observation?.powerState ?? .unknown
+                    powerState: observation?.powerState ?? .unknown,
+                    capabilityEvidence: TVCapabilityEvidence(
+                        implemented: TVCapability.implemented(for: .vizio),
+                        protocolReported: observation?.protocolReportedCapabilities
+                            ?? TVCapability.implemented(for: .vizio).subtracting([
+                                .inputSelection, .favoriteApps,
+                            ]))
                 )
             } catch {
                 await cleanup.cancel()
@@ -192,6 +198,11 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
                 await cleanup.cancel()
             }
         }
+    }
+
+    func convenience(_ request: TVConvenienceRequest) async throws -> TVConvenienceResponse {
+        guard let activeClient else { throw VizioHTTPSClientError.notConnected }
+        return try await activeClient.convenience(request)
     }
 
     func send(_ command: RemoteCommand) async throws {

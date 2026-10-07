@@ -285,19 +285,22 @@ final class HafaRemoteUITests: XCTestCase {
         app.launch()
 
         let forget = app.buttons["forgetPairingButton"]
-        XCTAssertTrue(forget.waitForExistence(timeout: 5))
-        for _ in 0..<3 where !forget.isHittable {
-            app.swipeUp()
+        for _ in 0..<6 where !forget.exists || !forget.isHittable {
+            panSetupGutter(in: app, upward: true)
         }
+        XCTAssertTrue(forget.waitForExistence(timeout: 5))
         XCTAssertTrue(forget.isHittable)
+        XCTAssertGreaterThanOrEqual(forget.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(forget.frame.width, 44)
         forget.tap()
         XCTAssertTrue(forget.waitForNonExistence(timeout: 3))
 
         let codeField = app.textFields["vizioPairingCodeField"]
-        for _ in 0..<3 where !codeField.exists {
-            app.swipeDown()
+        for _ in 0..<6 where !codeField.isHittable {
+            panSetupGutter(in: app, upward: false)
         }
         XCTAssertTrue(codeField.waitForExistence(timeout: 3))
+        XCTAssertTrue(codeField.isHittable)
         codeField.tap()
         codeField.typeText("0000")
 
@@ -713,12 +716,8 @@ final class HafaRemoteUITests: XCTestCase {
     /// The scrollable remote must remain usable at the largest accessibility text size.
     @MainActor
     func testRemoteSupportsLargestDynamicType() throws {
-        let app = makeApplication()
-        app.launchArguments += [
-            "-ui-testing-remote",
-            "-UIPreferredContentSizeCategoryName",
-            "UICTContentSizeCategoryAccessibilityXXXL",
-        ]
+        let app = makeApplication(contentSizeCategory: "UICTContentSizeCategoryAccessibilityXXXL")
+        app.launchArguments.append("-ui-testing-remote")
         app.launch()
 
         let dynamicTypeProbe = app.staticTexts["currentDynamicTypeSize"]
@@ -737,12 +736,8 @@ final class HafaRemoteUITests: XCTestCase {
     /// Large-text volume actions form an aligned column and keep their semantic dispatch.
     @MainActor
     func testLargestDynamicTypeVolumeActionsRemainAlignedAndReachable() throws {
-        let app = makeApplication()
-        app.launchArguments += [
-            "-ui-testing-remote",
-            "-UIPreferredContentSizeCategoryName",
-            "UICTContentSizeCategoryAccessibilityXXXL",
-        ]
+        let app = makeApplication(contentSizeCategory: "UICTContentSizeCategoryAccessibilityXXXL")
+        app.launchArguments.append("-ui-testing-remote")
         app.launch()
         XCTAssertTrue(app.staticTexts["currentDynamicTypeSize"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["currentDynamicTypeSize"].label, "accessibility5")
@@ -951,10 +946,22 @@ final class HafaRemoteUITests: XCTestCase {
     }
 
     @MainActor
-    private func makeApplication() -> XCUIApplication {
+    private func makeApplication(contentSizeCategory: String = "UICTContentSizeCategoryL") -> XCUIApplication
+    {
         let app = XCUIApplication()
-        app.launchArguments.append("-ui-testing-in-memory-store")
+        app.launchArguments = [
+            "-ui-testing-in-memory-store", "-UIPreferredContentSizeCategoryName",
+            contentSizeCategory,
+        ]
         return app
+    }
+
+    /// Scroll from the form gutter, away from the brand menu and destructive actions.
+    @MainActor
+    private func panSetupGutter(in app: XCUIApplication, upward: Bool) {
+        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: upward ? 0.7 : 0.3))
+        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: upward ? 0.4 : 0.6))
+        from.press(forDuration: 0.1, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.2)
     }
 
     /// Waits for the validated text and its corresponding asynchronous accessibility state.

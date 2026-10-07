@@ -23,6 +23,8 @@ struct HafaRemoteApp: App {
                     SavedSonyAssociationUITestHarness(mode: .colliding)
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-fresh-sony-rejection") {
                     SavedSonyAssociationUITestHarness(mode: .fresh)
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-conveniences") {
+                    RemoteConvenienceUITestHarness()
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-remote-offline") {
                     RemoteControlTestHarness(
                         isConnected: false,
