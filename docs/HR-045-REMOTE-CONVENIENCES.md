@@ -76,6 +76,15 @@ Cancelled TLS sends/receives check cancellation before reading a shared current
 connection. A held-callback regression releases cancelled A only after B is ready,
 then verifies B remains connected and accepts an ordinary command.
 
+The brand router also owns an attempt generation for both address and target
+connection paths. It checks cancellation and ownership after every suspended
+preparation/connection and before identity validation or activating a route.
+Validation cleanup is limited to the current attempt. Pairing-code brokers are
+per attempt, and replacement connections await any captured teardown task, so
+late cancellation or cleanup cannot affect the replacement's broker or transport.
+Held-result spies cover stale Samsung address completion and stale Sony target
+completion, including an invalid identity released only after Samsung is ready.
+
 ## Ownership and interaction
 
 Favorites and Sony keyboard preferences are bounded local records keyed by brand
@@ -135,10 +144,10 @@ privacy/ownership, bounded Samsung queries, Vizio fresh-hash request order, dyna
 payload rejection, Sony Unicode/focus/counter behavior, manual brand routing,
 delayed view actions, and queued requests across TV switching. Runtime test results
 passed in an isolated macOS 14 Swift package: all 13 new tests passed using the
-unchanged core and protocol sources. After material review fixes, all 23 focused
+unchanged core and protocol sources. After material review fixes, all 25 focused
 tests passed, including failed/cancelled configuration writes, independent IME
 freshness, timeout recovery, stale power-off/store projection, alias identity,
-stale wake guards, and late connection cleanup ownership. The package included the real controller and
+stale wake guards, and late connection cleanup ownership, and stale router result ownership. The package included the real controller and
 HTTPS client; the Vizio transaction used an injected URLProtocol and RFC 5737
 address, with no TV contact. The temporary package was removed. These results do
 not replace the integrated iPhone simulator gate or real UI checks.

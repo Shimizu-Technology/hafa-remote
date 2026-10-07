@@ -4,6 +4,65 @@ import Testing
 @testable import HafaRemote
 
 struct RemoteConvenienceTests {
+    @Test("A held cancelled Samsung address result cannot replace Sony routing")
+    func staleAddressRouterResult() async throws {
+        let callback = HeldRouterResult()
+        let a = try routingTV(brand: .samsung, id: "synthetic-a")
+        let b = try routingTV(brand: .sony, id: "synthetic-b")
+        let samsung = RoutingSamsungSpy(result: a, held: callback)
+        let sony = RoutingSonySpy(result: b)
+        let vizio = RoutingVizioSpy()
+        let router = MultiBrandSessionDriver(
+            samsung: samsung, sony: sony, vizio: vizio, distributionPolicy: .internalCandidate)
+        let old = Task { try await router.connect(addressText: "192.0.2.10") {} }
+        await callback.waitUntilStarted()
+        old.cancel()
+        _ = try await router.connect(to: b.connectionTarget) {}
+        let disconnects = await sony.disconnectCount
+        await callback.release(a)
+        if case .success = await old.result { Issue.record("Cancelled address result must not activate") }
+        try await router.send(.right)
+        #expect(await sony.commands == [.right])
+        #expect(await samsung.commands.isEmpty)
+        #expect(await sony.disconnectCount == disconnects)
+        await router.disconnect()
+    }
+
+    @Test(
+        "Stale target results and invalid identities cannot replace or disconnect Samsung routing",
+        arguments: [false, true])
+    func staleTargetRouterResult(invalidIdentity: Bool) async throws {
+        let callback = HeldRouterResult()
+        let a = try routingTV(brand: .sony, id: invalidIdentity ? "synthetic-wrong" : "synthetic-a")
+        let b = try routingTV(brand: .samsung, id: "synthetic-b")
+        let samsung = RoutingSamsungSpy(result: b)
+        let sony = RoutingSonySpy(result: a, held: callback)
+        let vizio = RoutingVizioSpy()
+        let router = MultiBrandSessionDriver(
+            samsung: samsung, sony: sony, vizio: vizio, distributionPolicy: .internalCandidate)
+        let target = TVConnectionTarget(
+            brand: .sony, reportedDeviceID: "synthetic-alias", address: a.address, controlPort: 6466,
+            expectedSavedDeviceID: "synthetic-a")
+        let old = Task { try await router.connect(to: target) {} }
+        await callback.waitUntilStarted()
+        // Intentionally do not cancel A: generation ownership alone must reject it.
+        _ = try await router.connect(addressText: "192.0.2.11") {}
+        let disconnects = await samsung.disconnectCount
+        await callback.release(a)
+        if case .success = await old.result { Issue.record("Stale target result must not activate") }
+        try await router.send(.right)
+        #expect(await samsung.commands == [.right])
+        #expect(await sony.commands.isEmpty)
+        #expect(await samsung.disconnectCount == disconnects)
+        await router.disconnect()
+    }
+
+    private func routingTV(brand: TVBrand, id: String) throws -> ConnectedTV {
+        ConnectedTV(
+            brand: brand, reportedDeviceID: id,
+            address: try .init(documentationAddressForTesting: "192.0.2.10"), modelName: "Synthetic",
+            firmwareVersion: nil)
+    }
     @Test("A late cancelled Sony connection callback cannot close the replacement session")
     func staleSonyConnectionCleanupIsAttemptOwned() async throws {
         let channel = ConvenienceSonyChannel()
@@ -546,6 +605,74 @@ struct RemoteConvenienceTests {
         else { throw TVConvenienceError.invalidResponse }
         return result
     }
+}
+
+private actor HeldRouterResult {
+    private var result: CheckedContinuation<ConnectedTV, Never>?
+    private var started: CheckedContinuation<Void, Never>?
+    func wait() async -> ConnectedTV {
+        await withCheckedContinuation {
+            result = $0
+            started?.resume()
+            started = nil
+        }
+    }
+    func waitUntilStarted() async {
+        if result != nil { return }
+        await withCheckedContinuation { started = $0 }
+    }
+    func release(_ television: ConnectedTV) {
+        result?.resume(returning: television)
+        result = nil
+    }
+}
+
+private actor RoutingSamsungSpy: SamsungPairingCoordinating {
+    let result: ConnectedTV
+    let held: HeldRouterResult?
+    private(set) var commands: [RemoteCommand] = []
+    private(set) var disconnectCount = 0
+    init(result: ConnectedTV, held: HeldRouterResult? = nil) {
+        self.result = result
+        self.held = held
+    }
+    func pair(addressText: String, onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void)
+        async throws -> ConnectedTV
+    {
+        if let held { return await held.wait() }
+        return result
+    }
+    func send(_ command: RemoteCommand) { commands.append(command) }
+    func forget(addressText: String) {}
+    func disconnect() { disconnectCount += 1 }
+}
+
+private actor RoutingSonySpy: SonyPairingCoordinating {
+    let result: ConnectedTV
+    let held: HeldRouterResult?
+    private(set) var commands: [RemoteCommand] = []
+    private(set) var disconnectCount = 0
+    init(result: ConnectedTV, held: HeldRouterResult? = nil) {
+        self.result = result
+        self.held = held
+    }
+    func connect(to target: TVConnectionTarget, requestPairingCode: @escaping SonyPairingCodeProvider)
+        async throws -> ConnectedTV
+    {
+        if let held { return await held.wait() }
+        return result
+    }
+    func send(_ command: RemoteCommand) { commands.append(command) }
+    func forget(reportedDeviceID: String) {}
+    func disconnect() { disconnectCount += 1 }
+}
+
+private actor RoutingVizioSpy: VizioPairingCoordinating {
+    func pair(target: TVConnectionTarget, pinProvider: @escaping VizioPINProvider) async throws -> ConnectedTV
+    { throw TVConvenienceError.unavailable }
+    func send(_ command: RemoteCommand) {}
+    func forget(reportedDeviceID: String) {}
+    func disconnect() {}
 }
 
 private actor ConvenienceTestDriver: RemoteSessionDriving {

@@ -8,8 +8,11 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
     private let samsung: any SamsungPairingCoordinating
     private let sony: any SonyPairingCoordinating
     private let vizio: any VizioPairingCoordinating
-    private let sonyPairingCodeBroker = PairingCodeBroker()
-    private let vizioPairingCodeBroker = PairingCodeBroker()
+    private var sonyPairingCodeBroker = PairingCodeBroker()
+    private var vizioPairingCodeBroker = PairingCodeBroker()
+    private var connectionGeneration = UUID()
+    private var teardownID: UUID?
+    private var teardownTask: Task<Void, Never>?
     private var activeBrand: TVBrand?
     private var lastAttemptedBrand: TVBrand?
 
@@ -34,14 +37,16 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> ConnectedTV {
         guard supports(.samsung) else { throw MultiBrandSessionDriverError.unsupportedBrand }
-        await sonyPairingCodeBroker.cancel()
-        await vizioPairingCodeBroker.cancel()
-        lastAttemptedBrand = .samsung
-        activeBrand = nil
+        let generation = try await beginAttempt(brand: .samsung)
         let television = try await samsung.pair(
             addressText: addressText,
             onWaitingForApproval: onWaitingForApproval
         )
+        try requireCurrentAttempt(generation)
+        guard television.brand == .samsung else {
+            await disconnect(ifOwnedBy: generation)
+            throw MultiBrandSessionDriverError.unsupportedBrand
+        }
         activeBrand = .samsung
         return television
     }
@@ -51,10 +56,7 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> ConnectedTV {
         guard supports(target.brand) else { throw MultiBrandSessionDriverError.unsupportedBrand }
-        await sonyPairingCodeBroker.cancel()
-        await vizioPairingCodeBroker.cancel()
-        lastAttemptedBrand = target.brand
-        activeBrand = nil
+        let generation = try await beginAttempt(brand: target.brand)
 
         let television: ConnectedTV
         switch target.brand {
@@ -69,6 +71,7 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
         case .sony:
             let broker = sonyPairingCodeBroker
             await broker.prepare()
+            try requireCurrentAttempt(generation)
             television = try await sony.connect(to: target) {
                 await onWaitingForApproval()
                 return try await broker.waitForCode()
@@ -76,19 +79,54 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
         case .vizio:
             let broker = vizioPairingCodeBroker
             await broker.prepare()
+            try requireCurrentAttempt(generation)
             television = try await vizio.pair(target: target) { _ in
                 await onWaitingForApproval()
                 return try await broker.waitForCode()
             }
         }
+        try requireCurrentAttempt(generation)
         do {
             try target.validateConnectedIdentity(television)
         } catch {
-            await disconnect()
+            await disconnect(ifOwnedBy: generation)
             throw error
         }
+        try requireCurrentAttempt(generation)
         activeBrand = target.brand
         return television.applyingDiscoveryMetadata(from: target)
+    }
+
+    private func beginAttempt(brand: TVBrand) async throws -> UUID {
+        try Task.checkCancellation()
+        let generation = UUID()
+        connectionGeneration = generation
+        activeBrand = nil
+        lastAttemptedBrand = brand
+        let oldSonyBroker = sonyPairingCodeBroker
+        let oldVizioBroker = vizioPairingCodeBroker
+        // Each attempt owns its own code continuation; late cancellation cannot
+        // cancel or submit to the replacement attempt's approval prompt.
+        sonyPairingCodeBroker = PairingCodeBroker()
+        vizioPairingCodeBroker = PairingCodeBroker()
+        let pendingTeardown = teardownTask
+        await pendingTeardown?.value
+        try requireCurrentAttempt(generation)
+        await oldSonyBroker.cancel()
+        try requireCurrentAttempt(generation)
+        await oldVizioBroker.cancel()
+        try requireCurrentAttempt(generation)
+        return generation
+    }
+
+    private func requireCurrentAttempt(_ generation: UUID) throws {
+        try Task.checkCancellation()
+        guard connectionGeneration == generation else { throw CancellationError() }
+    }
+
+    private func disconnect(ifOwnedBy generation: UUID) async {
+        guard connectionGeneration == generation else { return }
+        await disconnect()
     }
 
     func submitPairingCode(_ code: String) async throws {
@@ -210,12 +248,31 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
     }
 
     func disconnect() async {
+        connectionGeneration = UUID()
         activeBrand = nil
-        await sonyPairingCodeBroker.cancel()
-        await vizioPairingCodeBroker.cancel()
-        await samsung.disconnect()
-        await sony.disconnect()
-        await vizio.disconnect()
+        lastAttemptedBrand = nil
+        let oldSonyBroker = sonyPairingCodeBroker
+        let oldVizioBroker = vizioPairingCodeBroker
+        sonyPairingCodeBroker = PairingCodeBroker()
+        vizioPairingCodeBroker = PairingCodeBroker()
+        let previousTeardown = teardownTask
+        let id = UUID()
+        let task = Task { [samsung, sony, vizio] in
+            await previousTeardown?.value
+            await oldSonyBroker.cancel()
+            await oldVizioBroker.cancel()
+            await samsung.disconnect()
+            await sony.disconnect()
+            await vizio.disconnect()
+        }
+        teardownID = id
+        teardownTask = task
+        // Replacement connect waits this captured task before touching any driver.
+        await task.value
+        if teardownID == id {
+            teardownID = nil
+            teardownTask = nil
+        }
     }
 }
 
