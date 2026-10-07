@@ -43,7 +43,7 @@ for expected_status in (0, 7):
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         env=environment, start_new_session=True,
     )
-    def expire():
+    def expire(process=process):
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:

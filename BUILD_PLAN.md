@@ -4,7 +4,7 @@
 **Version:** 0.2
 **Last updated:** October 7, 2026
 **Current status:** Build 7 packages the Control Center launcher, capability-driven remote, adaptive appearance, and in-app help for internal TestFlight after build 6 was already present in App Store Connect
-**Current execution frontier:** Implement HR-041 through HR-048 in the [approved readiness plan](docs/APP-STORE-READINESS-PLAN.md), then upload the next unused internal TestFlight build for Leon's phone and exact-household-TV acceptance. Historical build 7 evidence does not certify this new release.
+**Current execution frontier:** Complete HR-041 through HR-047 and their acceptance criteria in the [approved readiness plan](docs/APP-STORE-READINESS-PLAN.md) before starting HR-048. HR-048 verifies the next unused build number, a passing gate on the exact merged release commit, signed archive and IPA preflight, successful TestFlight processing, and owner access for the specified phone and exact-household-TV acceptance journeys. Historical build 7 evidence does not certify this new release.
 
 ## Delivery targets
 
@@ -450,4 +450,6 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Immediate next action
 
-The exact build 7 release commit `0c5255f126ae94a00f8de6cc13bffd663b989a3e` passed the local gate (294 tests / 312 executions, 0 failures, 0 skips) and hosted iOS CI. Complete the current-head CodeRabbit review, merge the release record, then create and validate the signed archive and exported IPA from the merge commit. Upload that artifact to internal TestFlight and run the Control Center, accessibility, Samsung, Sony, and Vizio journeys in `ios/app-store/en-US/testflight_what_to_test.txt`.
+Complete HR-041 through HR-047 and their acceptance criteria in the [approved readiness plan](docs/APP-STORE-READINESS-PLAN.md). Then finish the current-head review and merge the release changes. For HR-048, verify the next unused build number and a passing gate on the exact merged release commit; create and preflight the signed archive and exported IPA; upload that artifact to internal TestFlight and confirm processing and owner access. The phone acceptance journeys are recorded in `ios/app-store/en-US/testflight_what_to_test.txt`.
+
+Historical build 7 evidence: release commit `0c5255f126ae94a00f8de6cc13bffd663b989a3e` passed the local gate (294 tests / 312 executions, 0 failures, 0 skips) and hosted iOS CI. This does not certify the October release.
