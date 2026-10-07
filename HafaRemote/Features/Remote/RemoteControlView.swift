@@ -404,37 +404,86 @@ struct RemoteControlView: View {
 
     private var volumeControls: some View {
         controlGroup(title: "Volume") {
-            HStack(spacing: 18) {
-                if capabilities.contains(.volume) {
-                    labeledControl(
-                        command: .volumeDown,
-                        systemImage: "speaker.minus.fill",
-                        label: "Down",
-                        hint: "Lowers volume. Hold to repeat.",
-                        accessibilityLabel: "Volume down",
-                        repeats: true
-                    )
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 16) {
+                    if capabilities.contains(.volume) {
+                        accessibleVolumeRow(
+                            .volumeDown, image: "speaker.minus.fill", label: "Down",
+                            accessibilityLabel: "Volume down", hint: "Lowers volume. Hold to repeat.",
+                            repeats: true
+                        )
+                    }
+                    if capabilities.contains(.mute) {
+                        accessibleVolumeRow(
+                            .mute, image: "speaker.slash.fill", label: "Mute",
+                            accessibilityLabel: "Mute", hint: "Toggles mute."
+                        )
+                    }
+                    if capabilities.contains(.volume) {
+                        accessibleVolumeRow(
+                            .volumeUp, image: "speaker.plus.fill", label: "Up",
+                            accessibilityLabel: "Volume up", hint: "Raises volume. Hold to repeat.",
+                            repeats: true
+                        )
+                    }
                 }
-                if capabilities.contains(.mute) {
-                    labeledControl(
-                        command: .mute,
-                        systemImage: "speaker.slash.fill",
-                        label: "Mute",
-                        hint: "Toggles mute."
-                    )
-                }
-                if capabilities.contains(.volume) {
-                    labeledControl(
-                        command: .volumeUp,
-                        systemImage: "speaker.plus.fill",
-                        label: "Up",
-                        hint: "Raises volume. Hold to repeat.",
-                        accessibilityLabel: "Volume up",
-                        repeats: true
-                    )
-                }
+            } else {
+                regularVolumeControls
             }
         }
+    }
+
+    private var regularVolumeControls: some View {
+        HStack(spacing: 18) {
+            if capabilities.contains(.volume) {
+                labeledControl(
+                    command: .volumeDown,
+                    systemImage: "speaker.minus.fill",
+                    label: "Down",
+                    hint: "Lowers volume. Hold to repeat.",
+                    accessibilityLabel: "Volume down",
+                    repeats: true
+                )
+            }
+            if capabilities.contains(.mute) {
+                labeledControl(
+                    command: .mute,
+                    systemImage: "speaker.slash.fill",
+                    label: "Mute",
+                    hint: "Toggles mute."
+                )
+            }
+            if capabilities.contains(.volume) {
+                labeledControl(
+                    command: .volumeUp,
+                    systemImage: "speaker.plus.fill",
+                    label: "Up",
+                    hint: "Raises volume. Hold to repeat.",
+                    accessibilityLabel: "Volume up",
+                    repeats: true
+                )
+            }
+        }
+    }
+
+    private func accessibleVolumeRow(
+        _ command: RemoteCommand, image: String, label: String,
+        accessibilityLabel: String, hint: String, repeats: Bool = false
+    ) -> some View {
+        HStack(spacing: 16) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(HafaTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityHidden(true)
+            Spacer(minLength: 8)
+            RemoteControlButton(
+                command: command, systemImage: image,
+                accessibilityLabel: accessibilityLabel, accessibilityHint: hint,
+                isEnabled: canControlTV, repeatsWhileHeld: repeats, action: action
+            )
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var playbackControls: some View {

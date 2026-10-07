@@ -40,6 +40,8 @@ The initial focused run was interrupted during stalled verbose diagnostic collec
 
 The owned simulator was shut down, and build/test process ownership was released. Borrowed simulators and shared services were left running.
 
+An additional compact-screen check during convenience QA found that the largest accessibility size split the volume captions across letters and misaligned the controls. Accessibility sizes now use full-width volume rows with preserved font scaling and button labels; ordinary sizes retain the compact horizontal group. This follow-up requires signed build and native large-text verification before merge.
+
 ## Visual evidence
 
 These app-only captures show synthetic UI test data, not hardware acceptance or App Store marketing claims:
