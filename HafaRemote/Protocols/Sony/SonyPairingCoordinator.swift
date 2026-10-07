@@ -32,6 +32,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     private let pairingChannel: any SonyTLSChanneling
     private let controlChannel: any SonyTLSChanneling
     private let writeSerializer = SonyWriteSerializer()
+    private let teardownSerializer = SonyWriteSerializer()
     private let keyboardPreference: @MainActor @Sendable (String) -> Bool
 
     private let observationBroadcaster = TVSessionObservationBroadcaster()
@@ -73,36 +74,59 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             throw SonyPairingCoordinatorError.unsupportedDevice
         }
 
-        await disconnect()
-        let identity = SonyClientIdentityReference(try identityStore.identity())
+        return try await performConnectionAttempt { [weak self] generation in
+            guard let self else { throw CancellationError() }
+            return try await self.connectWithinAttempt(
+                to: target, generation: generation, requestPairingCode: requestPairingCode)
+        }
+    }
 
+    /// The timeout owner can stop waiting before a cancelled TLS callback unwinds.
+    /// Cleanup may close only the generation that began this attempt.
+    private func performConnectionAttempt(
+        _ operation: @escaping @Sendable (UUID) async throws -> ConnectedTV
+    ) async throws -> ConnectedTV {
+        try Task.checkCancellation()
+        let generation = UUID()
+        await closeSession(generation: generation)
+        try Task.checkCancellation()
+        guard sessionGeneration == generation else { throw CancellationError() }
         do {
-            let credential: SonyPairingCredential
-            if let savedCredential = try await savedCredential(for: target) {
-                credential = savedCredential
-            } else {
-                guard target.expectedSavedDeviceID == nil else {
-                    throw SonyPairingCoordinatorError.pairingRejected
-                }
-                credential = try await pair(
-                    address: target.address,
-                    identity: identity,
-                    requestPairingCode: requestPairingCode
-                )
-            }
+            let television = try await operation(generation)
             try Task.checkCancellation()
-            return try await openRemote(
-                address: target.address,
-                identity: identity,
-                credential: credential
-            )
+            guard sessionGeneration == generation else { throw CancellationError() }
+            return television
         } catch {
-            await disconnect()
-            if Task.isCancelled || error is CancellationError {
-                throw CancellationError()
-            }
+            if sessionGeneration == generation { await closeSession(generation: UUID()) }
+            if Task.isCancelled || error is CancellationError { throw CancellationError() }
             throw error
         }
+    }
+
+    private func connectWithinAttempt(
+        to target: TVConnectionTarget,
+        generation: UUID,
+        requestPairingCode: @escaping SonyPairingCodeProvider
+    ) async throws -> ConnectedTV {
+        try Task.checkCancellation()
+        guard sessionGeneration == generation else { throw CancellationError() }
+        let identity = SonyClientIdentityReference(try identityStore.identity())
+        let credential: SonyPairingCredential
+        let saved = try await savedCredential(for: target)
+        try Task.checkCancellation()
+        guard sessionGeneration == generation else { throw CancellationError() }
+        if let saved {
+            credential = saved
+        } else {
+            guard target.expectedSavedDeviceID == nil else {
+                throw SonyPairingCoordinatorError.pairingRejected
+            }
+            credential = try await pair(
+                address: target.address, identity: identity, requestPairingCode: requestPairingCode)
+        }
+        try Task.checkCancellation()
+        guard sessionGeneration == generation else { throw CancellationError() }
+        return try await openRemote(address: target.address, identity: identity, credential: credential)
     }
 
     func send(_ command: RemoteCommand) async throws {
@@ -212,13 +236,33 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         func installSyntheticSessionForTesting(_ television: ConnectedTV, reportedFeatures: UInt64)
             async throws
         {
-            await disconnect()
-            let generation = sessionGeneration
-            let enabled = await keyboardPreference(television.stableDeviceKey)
+            _ = try await attemptSyntheticConnectionForTesting(reportedFeatures: reportedFeatures) {
+                television
+            }
+        }
+        /// Injects a held transport callback into the production attempt/cleanup owner.
+        func attemptSyntheticConnectionForTesting(
+            reportedFeatures: UInt64,
+            operation: @escaping @Sendable () async throws -> ConnectedTV
+        ) async throws -> ConnectedTV {
+            try await performConnectionAttempt { [weak self] generation in
+                let television = try await operation()
+                guard let self else { throw CancellationError() }
+                try await self.activateSyntheticSession(
+                    television, reportedFeatures: reportedFeatures, generation: generation)
+                return television
+            }
+        }
+        private func activateSyntheticSession(
+            _ television: ConnectedTV, reportedFeatures: UInt64, generation: UUID
+        ) async throws {
             try Task.checkCancellation()
             guard sessionGeneration == generation, television.brand == .sony else {
                 throw CancellationError()
             }
+            let enabled = await keyboardPreference(television.stableDeviceKey)
+            try Task.checkCancellation()
+            guard sessionGeneration == generation else { throw CancellationError() }
             keyboardEnabled = enabled
             self.reportedFeatures = reportedFeatures
             negotiatedFeatures = reportedFeatures & Self.requestedFeatures(keyboardEnabled: enabled)
@@ -262,7 +306,11 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     }
 
     func disconnect() async {
-        sessionGeneration = UUID()
+        await closeSession(generation: UUID())
+    }
+
+    private func closeSession(generation: UUID) async {
+        sessionGeneration = generation
         isRemoteSessionAlive = false
         readTask?.cancel()
         readTask = nil
@@ -271,8 +319,23 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
         reportedFeatures = 0
         keyboardEnabled = true
         imeFocus.clear()
+        let teardown = Task { [weak self, teardownSerializer] in
+            guard let self else { return }
+            try? await teardownSerializer.perform {
+                await self.closeChannels(generation: generation)
+            }
+        }
+        // Cleanup must finish even when its connection work was cancelled. A new
+        // attempt awaits this teardown FIFO before opening replacement channels.
+        await teardown.value
+    }
+
+    private func closeChannels(generation: UUID) async {
+        guard sessionGeneration == generation else { return }
         await observationBroadcaster.reset()
+        guard sessionGeneration == generation else { return }
         await pairingChannel.disconnect()
+        guard sessionGeneration == generation else { return }
         await controlChannel.disconnect()
     }
 

@@ -68,6 +68,14 @@ and reconnects instead of retaining a connected claim. Unsupported optional read
 remain soft failures. Missing Sony protocol model names use the static label
 Sony Google TV; household display names never become diagnostic model data.
 
+Connection attempts also own their cleanup generation. A cancelled attempt whose
+TLS callback arrives after another TV connected cannot reset or disconnect the
+replacement. Teardown uses a separate serialized FIFO and rechecks ownership
+between suspension points; replacement connection work waits for that teardown.
+Cancelled TLS sends/receives check cancellation before reading a shared current
+connection. A held-callback regression releases cancelled A only after B is ready,
+then verifies B remains connected and accepts an ordinary command.
+
 ## Ownership and interaction
 
 Favorites and Sony keyboard preferences are bounded local records keyed by brand
@@ -127,10 +135,10 @@ privacy/ownership, bounded Samsung queries, Vizio fresh-hash request order, dyna
 payload rejection, Sony Unicode/focus/counter behavior, manual brand routing,
 delayed view actions, and queued requests across TV switching. Runtime test results
 passed in an isolated macOS 14 Swift package: all 13 new tests passed using the
-unchanged core and protocol sources. After material review fixes, all 22 focused
+unchanged core and protocol sources. After material review fixes, all 23 focused
 tests passed, including failed/cancelled configuration writes, independent IME
 freshness, timeout recovery, stale power-off/store projection, alias identity,
-and stale wake guards. The package included the real controller and
+stale wake guards, and late connection cleanup ownership. The package included the real controller and
 HTTPS client; the Vizio transaction used an injected URLProtocol and RFC 5737
 address, with no TV contact. The temporary package was removed. These results do
 not replace the integrated iPhone simulator gate or real UI checks.

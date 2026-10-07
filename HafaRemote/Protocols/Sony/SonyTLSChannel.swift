@@ -236,6 +236,7 @@ actor SonyTLSChannel: SonyTLSChanneling {
     }
 
     func send(_ message: Data) async throws {
+        try Task.checkCancellation()
         guard let connection else { throw SonyTLSChannelError.connectionClosed }
         let framed = try SonyProtobuf.framed(message)
         try await withTaskCancellationHandler {
@@ -256,6 +257,7 @@ actor SonyTLSChannel: SonyTLSChanneling {
     }
 
     func receive() async throws -> Data {
+        try Task.checkCancellation()
         if let queued = messageBuffer.next() { return queued }
         guard let connection else { throw SonyTLSChannelError.connectionClosed }
 

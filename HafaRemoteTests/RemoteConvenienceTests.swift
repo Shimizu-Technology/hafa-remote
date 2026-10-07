@@ -4,6 +4,35 @@ import Testing
 @testable import HafaRemote
 
 struct RemoteConvenienceTests {
+    @Test("A late cancelled Sony connection callback cannot close the replacement session")
+    func staleSonyConnectionCleanupIsAttemptOwned() async throws {
+        let channel = ConvenienceSonyChannel()
+        let coordinator = SonyPairingCoordinator(controlChannel: channel, keyboardPreference: { _ in true })
+        let callback = HeldSonyConnectionCallback()
+        let oldAttempt = Task {
+            try await coordinator.attemptSyntheticConnectionForTesting(reportedFeatures: 615) {
+                try await callback.waitForLateCallback()
+            }
+        }
+        await callback.waitUntilStarted()
+        oldAttempt.cancel()
+        // Model the controller's explicit teardown after it stops waiting for A.
+        await coordinator.disconnect()
+        let replacement = try syntheticSony("synthetic-b")
+        _ = try await coordinator.attemptSyntheticConnectionForTesting(reportedFeatures: 615) {
+            await channel.setBehavior(.succeed)
+            return replacement
+        }
+        let disconnects = await channel.disconnectCount
+        await callback.completeCancelledCallback()
+        if case .success = await oldAttempt.result { Issue.record("Cancelled A must not connect") }
+        #expect(await channel.disconnectCount == disconnects)
+        try await coordinator.checkConnection()
+        try await coordinator.send(.right)
+        #expect(await channel.sentCount == 1)
+        await coordinator.disconnect()
+    }
+
     @Test("Missing Sony protocol model uses a generic model, separate from display name")
     func genericSonyModelFallback() async throws {
         let info = SonyProtobuf.stringField(2, "Sony")
@@ -651,6 +680,8 @@ private actor ConvenienceSonyChannel: SonyTLSChanneling {
     private var started = false
     private var startedWaiter: CheckedContinuation<Void, Never>?
     private var closed = false
+    private(set) var disconnectCount = 0
+    private(set) var sentCount = 0
     private var connectionGeneration = UUID()
     func setBehavior(_ value: Behavior) {
         behavior = value
@@ -668,6 +699,7 @@ private actor ConvenienceSonyChannel: SonyTLSChanneling {
     ) async throws -> SonyTLSPeer { throw SonyTLSChannelError.unavailable }
     func send(_ message: Data) async throws {
         guard !closed else { throw SonyTLSChannelError.connectionClosed }
+        sentCount += 1
         started = true
         startedWaiter?.resume()
         startedWaiter = nil
@@ -688,6 +720,7 @@ private actor ConvenienceSonyChannel: SonyTLSChanneling {
     }
     func checkConnection() throws { if closed { throw SonyTLSChannelError.connectionClosed } }
     func disconnect() {
+        disconnectCount += 1
         connectionGeneration = UUID()
         closed = true
     }
@@ -738,5 +771,26 @@ private struct StartedWriteTimeoutClock: RemoteSessionClock {
         } else {
             try await Task.sleep(for: duration)
         }
+    }
+}
+
+private actor HeldSonyConnectionCallback {
+    private var continuation: CheckedContinuation<ConnectedTV, Error>?
+    private var started: CheckedContinuation<Void, Never>?
+    func waitForLateCallback() async throws -> ConnectedTV {
+        // Intentionally ignores cancellation until the simulated TLS callback arrives.
+        try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            started?.resume()
+            started = nil
+        }
+    }
+    func waitUntilStarted() async {
+        if continuation != nil { return }
+        await withCheckedContinuation { started = $0 }
+    }
+    func completeCancelledCallback() {
+        continuation?.resume(throwing: SonyTLSChannelError.unavailable)
+        continuation = nil
     }
 }
