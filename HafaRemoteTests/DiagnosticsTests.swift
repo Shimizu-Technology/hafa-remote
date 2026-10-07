@@ -60,6 +60,41 @@ struct DiagnosticsTests {
         #expect(recorder.events.map(\.kind) == [.commandSent])
     }
 
+    @Test("Discovery completes once with its originating collection lease")
+    func discoveryCompletionConsumesOriginalLease() {
+        let recorder = DiagnosticRecorder()
+        recorder.setEnabled(true)
+        var scan = recorder.captureCollection()
+        recorder.record(.discoveryStarted, collection: scan)
+        recorder.finishDiscovery(collection: &scan)
+        recorder.finishDiscovery(collection: &scan)
+        #expect(scan == nil)
+        #expect(recorder.events.map(\.kind) == [.discoveryStarted, .discoveryFinished])
+    }
+
+    @Test("Held discovery completion cannot repopulate Clear or renewed consent", arguments: [false, true])
+    func heldDiscoveryCompletionRespectsDiscardedLease(_ renewConsent: Bool) {
+        let recorder = DiagnosticRecorder()
+        recorder.setEnabled(true)
+        var scan = recorder.captureCollection()
+        recorder.record(.discoveryStarted, collection: scan)
+        if renewConsent {
+            recorder.setEnabled(false)
+            recorder.setEnabled(true)
+        } else {
+            // TV changes also clear the recorder, invalidating this scan's collection scope.
+            recorder.clear()
+        }
+        recorder.finishDiscovery(collection: &scan)
+        recorder.finishDiscovery(collection: &scan)
+        #expect(scan == nil)
+        #expect(recorder.events.isEmpty)
+        var freshScan = recorder.captureCollection()
+        recorder.record(.discoveryStarted, collection: freshScan)
+        recorder.finishDiscovery(collection: &freshScan)
+        #expect(recorder.events.map(\.kind) == [.discoveryStarted, .discoveryFinished])
+    }
+
     @Test("Timing is coarse and invalid values are never exported")
     func timingBuckets() {
         #expect(DiagnosticDuration(seconds: 0.999) == .underOneSecond)

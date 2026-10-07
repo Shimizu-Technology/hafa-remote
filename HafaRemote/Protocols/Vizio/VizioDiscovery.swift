@@ -69,8 +69,8 @@ struct VizioBonjourMetadata: Equatable, Sendable {
 
 @MainActor
 protocol VizioServiceBrowserDelegate: AnyObject {
-    func vizioServiceBrowserDidFind(_ service: NetService)
-    func vizioServiceBrowserDidFail(errorCode: Int?)
+    func vizioServiceBrowser(_ browser: any VizioServiceBrowsing, didFind service: NetService)
+    func vizioServiceBrowser(_ browser: any VizioServiceBrowsing, didFail errorCode: Int?)
 }
 
 @MainActor
@@ -106,12 +106,12 @@ extension FoundationVizioServiceBrowser: NetServiceBrowserDelegate {
         didFind service: NetService,
         moreComing: Bool
     ) {
-        delegate?.vizioServiceBrowserDidFind(service)
+        delegate?.vizioServiceBrowser(self, didFind: service)
     }
 
     func netServiceBrowser(_ browser: NetServiceBrowser, didNotSearch errorDict: [String: NSNumber]) {
-        delegate?.vizioServiceBrowserDidFail(
-            errorCode: errorDict[NetService.errorCode]?.intValue
+        delegate?.vizioServiceBrowser(
+            self, didFail: errorDict[NetService.errorCode]?.intValue
         )
     }
 }
@@ -171,13 +171,14 @@ final class VizioBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
 
     func receiveResolvedService(_ service: NetService) {
         let serviceID = ObjectIdentifier(service)
-        guard services[serviceID] != nil else { return }
+        guard services[serviceID] === service else { return }
         defer { services[serviceID] = nil }
         guard let candidate = resolveCandidate(service) else { return }
         eventHandler?(.found(candidate))
     }
 
     func receiveResolutionFailure(_ service: NetService) {
+        guard services[ObjectIdentifier(service)] === service else { return }
         services[ObjectIdentifier(service)] = nil
     }
 
@@ -206,12 +207,14 @@ final class VizioBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
 }
 
 extension VizioBonjourDiscoveryBackend: VizioServiceBrowserDelegate {
-    func vizioServiceBrowserDidFind(_ service: NetService) {
+    func vizioServiceBrowser(_ browser: any VizioServiceBrowsing, didFind service: NetService) {
+        guard self.browser === browser else { return }
         services[ObjectIdentifier(service)] = service
         startResolution(service, self)
     }
 
-    func vizioServiceBrowserDidFail(errorCode: Int?) {
+    func vizioServiceBrowser(_ browser: any VizioServiceBrowsing, didFail errorCode: Int?) {
+        guard self.browser === browser else { return }
         let handler = eventHandler
         stop()
         handler?(

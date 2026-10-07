@@ -130,8 +130,11 @@ struct TVSetupView: View {
                 }
             }
             .onChange(of: discovery.state) { _, state in
-                if state == .noResults || state == .permissionDenied || state == .failed {
-                    session.diagnostics.record(.discoveryFinished, collection: discoveryCollection)
+                switch state {
+                case .results, .noResults, .permissionDenied, .failed:
+                    session.diagnostics.finishDiscovery(collection: &discoveryCollection)
+                case .idle, .searching:
+                    break
                 }
                 if let announcement = discoveryAnnouncement(for: state) {
                     UIAccessibility.post(notification: .announcement, argument: announcement)

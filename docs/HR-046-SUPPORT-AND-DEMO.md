@@ -197,3 +197,49 @@ bridge intermittently omitted the iOS accessibility subtree and did not scroll;
 its actual three native tests remain the functional evidence. Complete Release
 appearance/accessibility coverage belongs to HR-047. Both owned QA simulators
 were shut down after the preparation phase.
+
+The first integrated iOS 26.5 local and hosted gates both ran 422 declarations:
+418 passed, four failed, none skipped. Three new support journeys exposed a
+36-point native Home Help toolbar frame; the nested Help journey also found two
+simultaneously exposed Done buttons. These failures are retained as evidence.
+The repair uses an explicit plain 44-point label inside the Help button and
+scopes dismissal queries to the active navigation bar. Dimension, consent,
+immutable-preview, sharing-cancellation, and reset assertions remain in place.
+
+CodeRabbit's first current-head review requested two changes: record successful
+discovery completion and make the earlier demo-volume journey tolerate native
+scrolling and asynchronous accessibility updates. Discovery now consumes the
+scan's original collection lease on its first result or terminal state; further
+updates cannot duplicate the event or revive collection after Clear, renewed
+consent, or a TV change. Focused tests cover discarded and fresh scan leases.
+The volume journey uses bounded gestures inside the visible scroll viewport
+and waits for the observed value. The current full gate, hosted CI, and review
+must confirm these repairs before merge.
+
+The discovery repair also fences callback ownership at both TVDiscoveryStore
+and CompositeTVDiscoveryBackend. Retained old found/finished/denied/failed
+callbacks first reproduced six replaced-scan parameter failures plus a direct
+composite failure against unchanged production sources. Each producer now
+carries a process-local scan generation, invalidated before stop/cancellation;
+timeout completion uses that same generation. Restart, explicit stop, Clear,
+and renewed consent cannot forward the old scan into the current handler or
+consume its token. Tests then require the genuine current scan to finish once.
+These internal generations are never exported.
+
+Native delegate origins are fenced before they can reach the upper callback:
+Sony and Samsung require the current browser and tracked service; Samsung also
+checks the pending validation operation after its awaited fetch. Vizio's local
+browser delegate carries the originating browser and compares its identity
+before registering a service or ending discovery. A held old-browser fixture
+reproduced publication and termination of the replacement scan, then requires
+both callbacks to be ignored and genuine replacement discovery to remain usable.
+No physical occurrence is asserted by this synthetic regression.
+
+On iOS 26.5 the system activity UI is a popover with a native dismiss region,
+rather than the Close button exposed on iOS 18.5. The consent journey verifies
+actual activity presentation, dismisses without choosing an export destination,
+and verifies the same report plus Clear, disable, renewed consent, and relaunch.
+Its native 26.5 run passed after this correction. Support/report Done controls
+also use explicit 44-point labels, and Help is exercised by a near-corner tap
+inside its rectangular hit region. Final affected-suite and canonical gate
+results remain required; earlier failure bundles are preserved separately.

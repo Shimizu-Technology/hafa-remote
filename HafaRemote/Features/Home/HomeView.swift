@@ -216,10 +216,14 @@ struct HomeView: View {
     }
 
     private var helpButton: some View {
-        Button("Help", systemImage: "questionmark.circle") {
+        Button {
             isShowingSupport = true
+        } label: {
+            Label("Help", systemImage: "questionmark.circle")
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
         }
-        .frame(minWidth: 44, minHeight: 44)
+        .buttonStyle(.plain)
         .accessibilityIdentifier("homeHelpButton")
     }
 

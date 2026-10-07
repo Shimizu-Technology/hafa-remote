@@ -69,9 +69,9 @@ final class HafaRemoteUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(sonyGuidance.waitForExistence(timeout: 2))
-        app.buttons["Done"].tap()
+        app.navigationBars["Help & About"].buttons["Done"].tap()
         XCTAssertTrue(app.buttons["openOfflineDemoButton"].waitForExistence(timeout: 2))
-        app.buttons["Done"].tap()
+        app.navigationBars["Help"].buttons["Done"].tap()
         XCTAssertTrue(app.buttons["addTVButton"].isHittable)
         app.buttons["addTVButton"].tap()
         let setupHelp = app.buttons["setupHelpButton"]
@@ -956,9 +956,28 @@ final class HafaRemoteUITests: XCTestCase {
         let volume = app.staticTexts["demoVolumeState"]
         XCTAssertTrue(volume.label.contains("20"))
         let louder = app.buttons["demo-volumeUp"]
-        if !louder.isHittable { app.swipeUp() }
+        let bar = app.navigationBars["Try the Remote"]
+        for _ in 0..<12 {
+            let top = bar.frame.maxY + 8
+            let bottom = app.frame.maxY - 44
+            if louder.isHittable, louder.frame.minY >= top, louder.frame.maxY <= bottom { break }
+            let movesUp = louder.frame.maxY > bottom
+            let height = bottom - top
+            let from = app.coordinate(
+                withNormalizedOffset: CGVector(
+                    dx: 0.05, dy: (top + height * (movesUp ? 0.75 : 0.25)) / app.frame.height))
+            let to = app.coordinate(
+                withNormalizedOffset: CGVector(
+                    dx: 0.05, dy: (top + height * (movesUp ? 0.35 : 0.65)) / app.frame.height))
+            from.press(forDuration: 0.1, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.2)
+        }
+        XCTAssertTrue(louder.isHittable)
+        XCTAssertGreaterThanOrEqual(louder.frame.minY, bar.frame.maxY + 8)
+        XCTAssertLessThanOrEqual(louder.frame.maxY, app.frame.maxY - 44)
         louder.tap()
-        XCTAssertTrue(volume.label.contains("21"))
+        let increased = expectation(
+            for: NSPredicate(format: "label CONTAINS %@", "21"), evaluatedWith: volume)
+        wait(for: [increased], timeout: 3)
     }
 
     @MainActor

@@ -15,7 +15,7 @@ final class HafaRemoteSupportUITests: XCTestCase {
         let report = app.staticTexts["diagnosticsReportPreview"]
         XCTAssertTrue(report.waitForExistence(timeout: 3))
         XCTAssertTrue(report.label.contains("No events recorded"))
-        app.buttons["Done"].tap()
+        app.navigationBars["Support Report"].buttons["Done"].tap()
 
         setCollection(true, toggle: toggle, in: app)
         XCTAssertEqual(toggle.value as? String, "1")
@@ -28,16 +28,14 @@ final class HafaRemoteSupportUITests: XCTestCase {
         cycleLifecycle(app)
         XCTAssertEqual(report.label, snapshot, "Live collection cannot change the preview being shared")
         tap(app.buttons["shareDiagnosticsButton"], in: app)
-        let close = app.buttons["Close"].firstMatch
-        XCTAssertTrue(close.waitForExistence(timeout: 3))
-        close.tap()
+        cancelNativeShare(in: app)
         XCTAssertTrue(app.navigationBars["Support Report"].waitForExistence(timeout: 3))
         XCTAssertEqual(report.label, snapshot)
-        app.buttons["Done"].tap()
+        app.navigationBars["Support Report"].buttons["Done"].tap()
         tap(app.buttons["previewDiagnosticsButton"], in: app)
         XCTAssertTrue(report.waitForExistence(timeout: 3))
         XCTAssertNotEqual(report.label, snapshot, "A newly requested preview reflects later events")
-        app.buttons["Done"].tap()
+        app.navigationBars["Support Report"].buttons["Done"].tap()
         tap(clear, in: app)
         XCTAssertFalse(clear.isEnabled)
         assertEmptyPreview(app)
@@ -127,7 +125,10 @@ final class HafaRemoteSupportUITests: XCTestCase {
         reveal(share, in: app)
         XCTAssertGreaterThanOrEqual(share.frame.width, 44)
         XCTAssertGreaterThanOrEqual(share.frame.height, 44)
-        XCTAssertTrue(app.buttons["Done"].isHittable)
+        let done = app.navigationBars["Support Report"].buttons["Done"]
+        XCTAssertTrue(done.isHittable)
+        XCTAssertGreaterThanOrEqual(done.frame.width, 44)
+        XCTAssertGreaterThanOrEqual(done.frame.height, 44)
         let evidence = XCTAttachment(screenshot: app.screenshot())
         evidence.name = "Synthetic-support-largest-text"
         evidence.lifetime = .keepAlways
@@ -150,7 +151,8 @@ final class HafaRemoteSupportUITests: XCTestCase {
         XCTAssertTrue(help.isHittable)
         XCTAssertGreaterThanOrEqual(help.frame.width, 44)
         XCTAssertGreaterThanOrEqual(help.frame.height, 44)
-        help.tap()
+        // Tap the padded label's near corner to verify its whole 44-point hit region.
+        help.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)).tap()
     }
     @MainActor private func openDemo(_ app: XCUIApplication) {
         openSupport(app)
@@ -167,7 +169,7 @@ final class HafaRemoteSupportUITests: XCTestCase {
         let report = app.staticTexts["diagnosticsReportPreview"]
         XCTAssertTrue(report.waitForExistence(timeout: 3))
         XCTAssertTrue(report.label.contains("No events recorded"))
-        app.buttons["Done"].tap()
+        app.navigationBars["Support Report"].buttons["Done"].tap()
     }
     @MainActor private func cycleLifecycle(_ app: XCUIApplication) {
         XCUIDevice.shared.press(.home)
@@ -182,6 +184,37 @@ final class HafaRemoteSupportUITests: XCTestCase {
             for: NSPredicate(format: "value == %@", enabled ? "1" : "0"), evaluatedWith: toggle)
         wait(for: [changed], timeout: 3)
     }
+    @MainActor private func cancelNativeShare(in app: XCUIApplication) {
+        // Both native presentations must contain the activity UI before cancellation.
+        let activity = app.collectionViews["activityCollectionView"]
+        XCTAssertTrue(activity.waitForExistence(timeout: 3))
+        let close = app.buttons["Close"]
+        if close.exists {
+            XCTAssertTrue(close.isHittable)
+            close.tap()
+        } else {
+            // iOS 26 presents the activity sheet as a popover with a native dismiss region.
+            let dismiss = app.otherElements["PopoverDismissRegion"]
+            let popover = app.popovers.firstMatch
+            XCTAssertTrue(dismiss.waitForExistence(timeout: 3))
+            XCTAssertTrue(popover.exists)
+            let pointY = popover.frame.minY - 20
+            XCTAssertGreaterThan(pointY, dismiss.frame.minY)
+            XCTAssertLessThan(pointY, popover.frame.minY)
+            let cancelPoint = CGPoint(x: dismiss.frame.midX, y: pointY)
+            XCTAssertTrue(dismiss.frame.contains(cancelPoint))
+            XCTAssertFalse(popover.frame.contains(cancelPoint))
+            XCTAssertFalse(activity.frame.contains(cancelPoint))
+            dismiss.coordinate(
+                withNormalizedOffset: CGVector(
+                    dx: 0.5, dy: (pointY - dismiss.frame.minY) / dismiss.frame.height)
+            ).tap()
+        }
+        let dismissed = expectation(
+            for: NSPredicate(format: "exists == false"), evaluatedWith: activity)
+        wait(for: [dismissed], timeout: 3)
+    }
+
     @MainActor private func bodyBottom(in app: XCUIApplication) -> CGFloat {
         let keyboard = app.keyboards.firstMatch
         let keyboardTop =

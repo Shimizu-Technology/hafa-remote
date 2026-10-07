@@ -188,6 +188,14 @@ final class DiagnosticRecorder {
         events.append(DiagnosticEvent(kind: kind, duration: DiagnosticDuration(seconds: durationSeconds)))
     }
 
+    /// The first result or terminal state completes the scan using its original consent lease.
+    /// Later result updates cannot duplicate completion or acquire consent after Clear.
+    func finishDiscovery(collection: inout DiagnosticCollectionToken?) {
+        let startedCollection = collection
+        collection = nil
+        record(.discoveryFinished, collection: startedCollection)
+    }
+
     func captureCollection(producedAt: ContinuousClock.Instant? = nil) -> DiagnosticCollectionToken? {
         guard isEnabled, producedAt.map({ $0 >= epochStartedAt }) ?? true else { return nil }
         return DiagnosticCollectionToken(epoch: collectionEpoch)
