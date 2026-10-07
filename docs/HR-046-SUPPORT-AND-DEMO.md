@@ -153,6 +153,24 @@ renewed consent. The parent driver's default, Sony override, active-router
 forwarding, Vizio optional-rejection handling, and favorites behavior are retained.
 This interim parent still requires its final review/merge and a final rebase.
 
+Three focused native support journeys passed on an owned iPhone 16/iOS 18.5
+simulator with zero failures or skips. They use the normal no-TV Home flow and
+in-memory metadata, not a protocol driver or credential fixture. Diagnostics
+coverage exercises default-off collection, lifecycle events, a preview that stays
+immutable while collection changes, native share-sheet cancellation, clear,
+disable/reconsent, and default-off relaunch. The demo journey covers navigation,
+volume/mute, playback, disabled controls while off, text clearing, and fresh
+state on re-entry. Largest accessibility text verifies scroll reachability and
+44-point controls through the real sheet and keyboard viewport.
+
+The re-entry regression first observed one visible volume label retaining
+“Volume 21, muted.” Resetting the simulated model and text on appearance gives
+each visit a fresh demo, and the test verifies Back reaches Help before re-entry.
+Custom explanation/activity/footer text now uses semantic secondaryText, and
+the report uses the theme canvas and onAccent share-button foreground. These
+changes compile in Release-compatible views; final light/dark/increased-contrast
+computer-use checks and the full integrated gate are still required.
+
 Root integration must run the complete gate on the integrated current head and
 exercise these flows with computer use: first launch → demo → navigate/volume/
 mute/playback/power/keyboard → dismiss; Help → enable diagnostics → reproduce a

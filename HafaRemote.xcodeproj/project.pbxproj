@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F46100000000000000000009 /* HafaRemoteSupportUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000009 /* HafaRemoteSupportUITests.swift */; };
 		F46100000000000000000001 /* DiagnosticReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000001 /* DiagnosticReport.swift */; };
 		F46100000000000000000002 /* DemoRemoteModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000002 /* DemoRemoteModel.swift */; };
 		F46100000000000000000003 /* DemoRemoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000003 /* DemoRemoteView.swift */; };
@@ -130,6 +131,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		F46200000000000000000009 /* HafaRemoteSupportUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HafaRemoteUITests/HafaRemoteSupportUITests.swift"; sourceTree = SOURCE_ROOT; };
 		F46200000000000000000001 /* DiagnosticReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticReport.swift; sourceTree = "<group>"; };
 		F46200000000000000000002 /* DemoRemoteModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoRemoteModel.swift; sourceTree = "<group>"; };
 		F46200000000000000000003 /* DemoRemoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoRemoteView.swift; sourceTree = "<group>"; };
@@ -368,6 +370,7 @@
 		2CF6AD0EE094B893960FF0D4 /* HafaRemoteUITests */ = {
 			isa = PBXGroup;
 			children = (
+				F46200000000000000000009 /* HafaRemoteSupportUITests.swift */,
 				B0D40983FEA4B5F16427D191 /* HafaRemoteConvenienceUITests.swift */,
 				BF2140DF03D411A6556C98D5 /* HafaRemoteUITests.swift */,
 			);
@@ -751,6 +754,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F46100000000000000000009 /* HafaRemoteSupportUITests.swift in Sources */,
 				A29EFDEA721D13EFE3E949F8 /* HafaRemoteConvenienceUITests.swift in Sources */,
 				506ABD859CC36FF3F83677FC /* HafaRemoteUITests.swift in Sources */,
 			);

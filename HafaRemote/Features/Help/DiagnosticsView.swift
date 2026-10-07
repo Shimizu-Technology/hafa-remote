@@ -21,6 +21,7 @@ struct DiagnosticsView: View {
                 Text(
                     "Off by default. Records up to 100 recent connection and delivery events in memory. Nothing is uploaded automatically. Turning this off clears the events."
                 )
+                .foregroundStyle(HafaTheme.secondaryText)
             }
 
             Section {
@@ -38,8 +39,11 @@ struct DiagnosticsView: View {
                 Text(
                     "Reports include app and iOS versions, optional TV model and firmware, and coarse operation timing. Addresses, pairing credentials, device identities, TV names, Wi-Fi names, and entered text are excluded."
                 )
+                .foregroundStyle(HafaTheme.secondaryText)
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(HafaTheme.canvas)
         .navigationTitle("Diagnostics")
         .tint(HafaTheme.accent)
         .sheet(
@@ -66,7 +70,7 @@ private struct DiagnosticReportPreview: View {
                     Text(
                         "This exact report will be shared only if you choose a destination in the share sheet."
                     )
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(HafaTheme.secondaryText)
                     Text(report.text)
                         .font(.body.monospaced())
                         .textSelection(.enabled)
@@ -74,12 +78,14 @@ private struct DiagnosticReportPreview: View {
                     ShareLink(item: report.text) {
                         Label("Share This Report", systemImage: "square.and.arrow.up")
                             .frame(maxWidth: .infinity, minHeight: 44)
+                            .foregroundStyle(HafaTheme.onAccent)
                     }
                     .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("shareDiagnosticsButton")
                 }
                 .padding(20)
             }
+            .background(HafaTheme.canvas)
             .navigationTitle("Support Report")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

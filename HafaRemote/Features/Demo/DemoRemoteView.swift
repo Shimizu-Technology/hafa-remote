@@ -15,7 +15,7 @@ struct DemoRemoteView: View {
                 Text(
                     "Explore Hafa Remote without a TV. These controls change only the preview on this phone."
                 )
-                .foregroundStyle(.secondary)
+                .foregroundStyle(HafaTheme.secondaryText)
                 .multilineTextAlignment(.center)
                 demoScreen
                 controlRows
@@ -43,7 +43,7 @@ struct DemoRemoteView: View {
                     "Demo capabilities are simulated. Actual TV controls depend on the model, pairing, and verified protocol support."
                 )
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(HafaTheme.secondaryText)
             }
             .padding(20)
         }
@@ -51,6 +51,10 @@ struct DemoRemoteView: View {
         .navigationTitle("Try the Remote")
         .navigationBarTitleDisplayMode(.inline)
         .tint(HafaTheme.accent)
+        .onAppear {
+            model = DemoRemoteModel()
+            text = ""
+        }
         .onDisappear { text = "" }
     }
 
@@ -88,7 +92,7 @@ struct DemoRemoteView: View {
             }
             Text(model.activity)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(HafaTheme.secondaryText)
                 .accessibilityIdentifier("demoActivity")
         }
         .frame(maxWidth: .infinity, alignment: .leading)

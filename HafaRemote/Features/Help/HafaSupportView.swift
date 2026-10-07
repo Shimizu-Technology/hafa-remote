@@ -19,6 +19,7 @@ struct HafaSupportView: View {
                     .accessibilityIdentifier("openOfflineDemoButton")
                 } footer: {
                     Text("Explore a simulated remote without discovering, pairing, or contacting a TV.")
+                        .foregroundStyle(HafaTheme.secondaryText)
                 }
 
                 Section("Troubleshooting") {
