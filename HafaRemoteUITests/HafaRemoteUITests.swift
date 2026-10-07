@@ -42,6 +42,58 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertFalse(connectButton.isEnabled)
     }
 
+    /// Help is available before pairing and explains a wired TV on the home network.
+    @MainActor
+    func testFirstLaunchHelpExplainsLocalNetworkAndPairing() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-discovery-result")
+        app.launch()
+
+        let help = app.buttons["homeHelpButton"]
+        XCTAssertTrue(help.waitForExistence(timeout: 5))
+        XCTAssertTrue(help.isHittable)
+        help.tap()
+        XCTAssertTrue(app.navigationBars["Help & About"].waitForExistence(timeout: 2))
+        XCTAssertTrue(
+            app.staticTexts[
+                "Connect this iPhone to home Wi-Fi. Your TV can use Wi-Fi or Ethernet on the same network."
+            ].exists
+        )
+        let sonyGuidance = app.staticTexts["Enter the six-character code shown on the TV."]
+        for _ in 0..<4 where !sonyGuidance.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(sonyGuidance.waitForExistence(timeout: 2))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["addTVButton"].isHittable)
+        app.buttons["addTVButton"].tap()
+        let setupHelp = app.buttons["setupHelpButton"]
+        XCTAssertTrue(setupHelp.waitForExistence(timeout: 2))
+        setupHelp.tap()
+        XCTAssertTrue(app.navigationBars["Help & About"].waitForExistence(timeout: 2))
+    }
+
+    /// The distinct playback controls dispatch independent commands without inferred playback state.
+    @MainActor
+    func testSeparatePlayAndPauseSendTheirOwnCommands() throws {
+        let app = launchRemoteHarness()
+        for command in ["play", "pause"] {
+            let button = app.buttons["remote-\(command)"]
+            XCTAssertTrue(button.waitForExistence(timeout: 2))
+            for _ in 0..<6 where !button.isHittable {
+                app.swipeUp()
+            }
+            XCTAssertGreaterThanOrEqual(button.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+            button.tap()
+            let sent = expectation(
+                for: NSPredicate(format: "label == %@", command),
+                evaluatedWith: app.staticTexts["lastRemoteCommand"]
+            )
+            wait(for: [sent], timeout: 2)
+        }
+    }
+
     /// No-result discovery remains understandable and preserves a manual recovery path.
     @MainActor
     func testDiscoveryNoResultsOffersRetryAndManualFallback() throws {
@@ -585,6 +637,8 @@ final class HafaRemoteUITests: XCTestCase {
             }
             XCTAssertTrue(button.isHittable, "Unreachable \(command) control")
             XCTAssertTrue(button.isEnabled, "Disabled \(command) control")
+            XCTAssertGreaterThanOrEqual(button.frame.width, 44, "Narrow \(command) target")
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44, "Short \(command) target")
         }
 
         let select = app.buttons["remote-select"]

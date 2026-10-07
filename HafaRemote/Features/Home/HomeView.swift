@@ -11,6 +11,7 @@ struct HomeView: View {
     @State private var networkMonitor = LocalNetworkMonitor()
     @State private var isShowingSetup = false
     @State private var isShowingMyTVs = false
+    @State private var isShowingHelp = false
     @State private var scenePhaseEvents = ScenePhaseEvents()
     @State private var restoration = SavedTVRestorationCoordinator()
     @State private var selection = SavedTVSelectionCoordinator()
@@ -88,6 +89,19 @@ struct HomeView: View {
             } else {
                 emptyState
             }
+        }
+        .tint(HafaTheme.accent)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Help", systemImage: "questionmark.circle") {
+                    isShowingHelp = true
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityIdentifier("homeHelpButton")
+            }
+        }
+        .sheet(isPresented: $isShowingHelp) {
+            HafaRemoteHelpView()
         }
         .sheet(isPresented: $isShowingSetup) {
             TVSetupView(
@@ -217,16 +231,18 @@ struct HomeView: View {
                         Image(systemName: "tv")
                             .font(.system(size: 50, weight: .medium))
                             .foregroundStyle(HafaTheme.accent)
+                            .frame(width: 104, height: 104)
+                            .background(HafaTheme.surface, in: RoundedRectangle(cornerRadius: 28))
                             .accessibilityHidden(true)
 
                         VStack(spacing: 10) {
-                            Text("Your remote, without the rental fee.")
+                            Text("Make yourself at home.")
                                 .font(.title2.weight(.semibold))
                                 .foregroundStyle(HafaTheme.primaryText)
                                 .multilineTextAlignment(.center)
 
                             Text(
-                                "Connect a supported TV on this Wi-Fi network. No account, ads, or subscription."
+                                "Your TV remote, right here on your iPhone. No account, ads, or subscription."
                             )
                             .font(.body)
                             .foregroundStyle(HafaTheme.secondaryText)
@@ -243,9 +259,14 @@ struct HomeView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(HafaTheme.accent)
-                        .foregroundStyle(HafaTheme.canvas)
+                        .foregroundStyle(HafaTheme.onAccent)
                         .accessibilityIdentifier("addTVButton")
                         .disabled(restoration.isRestoring)
+
+                        Label("Same home network. Just you and your TV.", systemImage: "wifi")
+                            .font(.footnote)
+                            .foregroundStyle(HafaTheme.secondaryText)
+                            .multilineTextAlignment(.center)
 
                         Spacer(minLength: 24)
                     }
@@ -776,7 +797,7 @@ private struct MyTVsView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(HafaTheme.accent)
-                .foregroundStyle(HafaTheme.canvas)
+                .foregroundStyle(HafaTheme.onAccent)
                 .accessibilityIdentifier("addTVFromLibraryButton")
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
@@ -793,7 +814,7 @@ private struct MyTVsView: View {
             }
         }
         .sheet(isPresented: $isShowingHelp) {
-            HafaRemoteHelpView()
+            HafaRemoteHelpView(startsWithControlCenter: true)
         }
         .alert(item: $activeAlert) { alert in
             switch alert.kind {
@@ -960,23 +981,17 @@ private struct MyTVsView: View {
     }
 }
 
-private struct HafaRemoteHelpView: View {
+struct HafaRemoteHelpView: View {
     @Environment(\.dismiss) private var dismiss
+    var startsWithControlCenter = false
 
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    helpStep(1, "Open Control Center, then touch and hold an empty area.")
-                    helpStep(2, "Tap Add a Control and search for Hafa Remote.")
-                    helpStep(3, "Add the control. Tap it whenever you want your remote.")
-                } header: {
-                    Text("Control Center")
-                } footer: {
-                    Text(
-                        "iOS controls the layout. Hafa Remote cannot add or rearrange the control for you."
-                    )
+                if !startsWithControlCenter {
+                    pairingHelp
                 }
+                controlCenterHelp
 
                 Section("Why It’s Safe") {
                     Label("The control only opens Hafa Remote.", systemImage: "arrow.up.forward.app")
@@ -996,7 +1011,13 @@ private struct HafaRemoteHelpView: View {
                         destination: URL(string: "https://shimizu-technology.com/hafa-remote/privacy")!
                     )
                 }
+                if startsWithControlCenter {
+                    pairingHelp
+                }
             }
+            .scrollContentBackground(.hidden)
+            .background(HafaTheme.canvas)
+            .tint(HafaTheme.accent)
             .navigationTitle("Help & About")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1006,6 +1027,57 @@ private struct HafaRemoteHelpView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var pairingHelp: some View {
+        Group {
+            Section("Connect your TV") {
+                Label("Turn on your TV with its physical remote.", systemImage: "power")
+                Label(
+                    "Connect this iPhone to home Wi-Fi. Your TV can use Wi-Fi or Ethernet on the same network.",
+                    systemImage: "wifi"
+                )
+                Text(
+                    "Guest Wi-Fi and router device isolation can prevent the iPhone and TV from finding each other."
+                )
+                .foregroundStyle(HafaTheme.secondaryText)
+            }
+            Section("Pairing by brand") {
+                LabeledContent("Samsung") {
+                    Text("Choose Allow when the TV asks to approve Hafa Remote.")
+                }
+                LabeledContent("Sony") {
+                    Text("Enter the six-character code shown on the TV.")
+                }
+                LabeledContent("Vizio") {
+                    Text("Enter the four-digit PIN shown on the TV.")
+                }
+                Text("Local pairing varies by model. A brand name alone does not guarantee compatibility.")
+                    .font(.footnote)
+                    .foregroundStyle(HafaTheme.secondaryText)
+            }
+            Section("If your TV is missing") {
+                Text("Check the TV is on, allow Local Network access in iPhone Settings, then scan again.")
+                Text(
+                    "If the TV is asleep, use its physical remote. Network power on depends on the TV and its standby settings."
+                )
+                .foregroundStyle(HafaTheme.secondaryText)
+            }
+        }
+    }
+
+    private var controlCenterHelp: some View {
+        Section {
+            helpStep(1, "Open Control Center, then touch and hold an empty area.")
+            helpStep(2, "Tap Add a Control and search for Hafa Remote.")
+            helpStep(3, "Add the control. Tap it whenever you want your remote.")
+        } header: {
+            Text("Control Center")
+        } footer: {
+            Text(
+                "iOS controls the layout. Hafa Remote cannot add or rearrange the control for you."
+            )
         }
     }
 
@@ -1021,7 +1093,7 @@ private struct HafaRemoteHelpView: View {
         HStack(alignment: .top, spacing: 12) {
             Text("\(number)")
                 .font(.caption.weight(.bold).monospacedDigit())
-                .foregroundStyle(HafaTheme.canvas)
+                .foregroundStyle(HafaTheme.onAccent)
                 .frame(width: 28, height: 28)
                 .background(HafaTheme.accent, in: Circle())
                 .accessibilityHidden(true)

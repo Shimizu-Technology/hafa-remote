@@ -60,7 +60,8 @@ struct RemoteControlView: View {
                     }
                     if capabilities.contains(.playback) {
                         playbackControls
-                    } else if capabilities.contains(.textInput) {
+                    }
+                    if capabilities.contains(.textInput) {
                         textControls
                     }
                 }
@@ -143,15 +144,15 @@ struct RemoteControlView: View {
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(tvName)
-                        .font(.title3.weight(.semibold))
+                        .font(.title2.weight(.semibold))
                         .foregroundStyle(HafaTheme.primaryText)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("remoteTVName")
 
                     Text(modelName)
                         .font(.subheadline)
                         .foregroundStyle(HafaTheme.secondaryText)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 8)
@@ -202,12 +203,12 @@ struct RemoteControlView: View {
                     ? "checkmark.circle.fill" : "arrow.trianglehead.2.clockwise.rotate.90"
             )
             .font(.caption.weight(.semibold))
-            .foregroundStyle(isConnected ? HafaTheme.accent : .orange)
+            .foregroundStyle(isConnected ? HafaTheme.accent : HafaTheme.warning)
             .labelStyle(.titleAndIcon)
             .accessibilityIdentifier("remoteConnectionStatus")
         }
         .padding(16)
-        .background(HafaTheme.surface.opacity(0.76), in: RoundedRectangle(cornerRadius: 22))
+        .background(HafaTheme.surface, in: RoundedRectangle(cornerRadius: 24))
     }
 
     private var navigationControls: some View {
@@ -240,6 +241,8 @@ struct RemoteControlView: View {
                     accessibilityHint: "Activates the focused item.",
                     isEnabled: canControlTV,
                     size: 76,
+                    title: "OK",
+                    isPrimary: true,
                     action: action
                 )
 
@@ -264,8 +267,15 @@ struct RemoteControlView: View {
                 action: action
             )
         }
+        .padding(12)
+        .background(HafaTheme.surface, in: RoundedRectangle(cornerRadius: 28))
+        .overlay {
+            RoundedRectangle(cornerRadius: 28)
+                .strokeBorder(HafaTheme.controlBorder, lineWidth: 1)
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Navigation controls")
+        .accessibilityIdentifier("remoteNavigationGroup")
     }
 
     private var recoveryControls: some View {
@@ -299,7 +309,7 @@ struct RemoteControlView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(HafaTheme.accent)
-                .foregroundStyle(HafaTheme.canvas)
+                .foregroundStyle(HafaTheme.onAccent)
                 .disabled(isPoweringOnTV)
                 .accessibilityIdentifier("retryConnectionButton")
 
@@ -328,7 +338,7 @@ struct RemoteControlView: View {
             .buttonStyle(.bordered)
         }
         .padding(16)
-        .background(HafaTheme.surface.opacity(0.76), in: RoundedRectangle(cornerRadius: 22))
+        .background(HafaTheme.surface, in: RoundedRectangle(cornerRadius: 24))
     }
 
     private var recoveryStatus: some View {
@@ -356,7 +366,7 @@ struct RemoteControlView: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .background(HafaTheme.surface.opacity(0.76), in: RoundedRectangle(cornerRadius: 22))
+        .background(HafaTheme.surface, in: RoundedRectangle(cornerRadius: 24))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             isAwaitingApproval
@@ -421,36 +431,32 @@ struct RemoteControlView: View {
     }
 
     private var playbackControls: some View {
-        let includesTextInput = capabilities.contains(.textInput)
-        return controlGroup(title: includesTextInput ? "Playback & Text" : "Playback") {
-            HStack(spacing: includesTextInput ? 8 : 12) {
+        controlGroup(title: "Playback") {
+            HStack(spacing: 8) {
                 compactControl(
                     .rewind,
                     image: "backward.fill",
                     label: "Rewind",
-                    size: includesTextInput ? 52 : 56
+                    size: 52
                 )
                 compactControl(
                     .play,
                     image: "play.fill",
                     label: "Play",
-                    size: includesTextInput ? 52 : 56
+                    size: 52
                 )
                 compactControl(
                     .pause,
                     image: "pause.fill",
                     label: "Pause",
-                    size: includesTextInput ? 52 : 56
+                    size: 52
                 )
                 compactControl(
                     .fastForward,
                     image: "forward.fill",
                     label: "Fast forward",
-                    size: includesTextInput ? 52 : 56
+                    size: 52
                 )
-                if includesTextInput {
-                    keyboardControl
-                }
             }
         }
     }
@@ -460,12 +466,11 @@ struct RemoteControlView: View {
             isShowingKeyboard = true
         } label: {
             Image(systemName: "keyboard")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.title3.weight(.semibold))
                 .frame(width: 52, height: 52)
-                .contentShape(.circle)
+                .contentShape(RoundedRectangle(cornerRadius: 18))
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.circle)
+        .buttonStyle(RemoteControlButtonStyle())
         .tint(HafaTheme.accent)
         .disabled(!canControlTV)
         .accessibilityLabel("Keyboard")
@@ -474,9 +479,20 @@ struct RemoteControlView: View {
     }
 
     private var textControls: some View {
-        controlGroup(title: "Text") {
+        HStack(spacing: 12) {
             keyboardControl
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Keyboard")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(HafaTheme.primaryText)
+                Text("Focus a text field on your TV first.")
+                    .font(.caption)
+                    .foregroundStyle(HafaTheme.secondaryText)
+            }
+            .accessibilityHidden(true)
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 14)
     }
 
     private func controlGroup<Content: View>(
@@ -484,16 +500,15 @@ struct RemoteControlView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(spacing: 12) {
-            Text(title.uppercased())
-                .font(.caption.weight(.semibold))
-                .tracking(1.2)
+            Text(title)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(HafaTheme.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
             content()
                 .frame(maxWidth: .infinity)
         }
         .padding(14)
-        .background(HafaTheme.surface.opacity(0.52), in: RoundedRectangle(cornerRadius: 22))
+        .background(HafaTheme.surface, in: RoundedRectangle(cornerRadius: 24))
     }
 
     private func labeledControl(
