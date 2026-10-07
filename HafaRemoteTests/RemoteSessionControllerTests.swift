@@ -4,6 +4,21 @@ import Testing
 @testable import HafaRemote
 
 struct RemoteSessionControllerTests {
+    @Test("Cancelled manual deadlines cannot be mistaken for live retry timers")
+    func cancelledDeadlineIsHiddenBeforeDeferredCleanup() async throws {
+        let cleanup = ManualClockCleanupBarrier()
+        let clock = ManualRemoteSessionClock(beforeCancellationCleanup: { await cleanup.wait() })
+        let deadline = Task { try await clock.sleep(for: .seconds(1)) }
+        await waitUntil { await clock.pendingSleeps.contains(.seconds(1)) }
+
+        deadline.cancel()
+        #expect(await clock.pendingSleeps.isEmpty)
+        #expect(!(await clock.resumeFirst(matching: .seconds(1))))
+
+        await cleanup.release()
+        await #expect(throws: CancellationError.self) { try await deadline.value }
+    }
+
     @Test(
         "Sony saved pairing rejection requires record-scoped repair, while fresh rejection stays denied",
         arguments: [false, true])
@@ -2762,33 +2777,52 @@ private actor ManualRemoteSessionClock: RemoteSessionClock {
         let id: UUID
         let duration: Duration
         let continuation: CheckedContinuation<Void, Error>
+        let cancellation: ManualClockCancellationFlag
     }
 
     private var sleepers: [Sleeper] = []
+    private let beforeCancellationCleanup: @Sendable () async -> Void
+
+    init(beforeCancellationCleanup: @escaping @Sendable () async -> Void = {}) {
+        self.beforeCancellationCleanup = beforeCancellationCleanup
+    }
 
     var pendingSleeps: [Duration] {
-        sleepers.map(\.duration)
+        sleepers.filter { !$0.cancellation.isCancelled }.map(\.duration)
     }
 
     func sleep(for duration: Duration) async throws {
         let id = UUID()
+        let cancellation = ManualClockCancellationFlag()
+        let beforeCancellationCleanup = beforeCancellationCleanup
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                if Task.isCancelled {
+                if Task.isCancelled || cancellation.isCancelled {
                     continuation.resume(throwing: CancellationError())
                 } else {
-                    sleepers.append(Sleeper(id: id, duration: duration, continuation: continuation))
+                    sleepers.append(
+                        Sleeper(
+                            id: id, duration: duration, continuation: continuation,
+                            cancellation: cancellation))
                 }
             }
         } onCancel: { [weak self] in
+            // A cancellation-handler Task can be queued behind a test's next
+            // clock advance. Hide the cancelled deadline synchronously first.
+            cancellation.cancel()
             Task {
+                await beforeCancellationCleanup()
                 await self?.cancel(id)
             }
         }
     }
 
     func resumeFirst(matching duration: Duration) -> Bool {
-        guard let index = sleepers.firstIndex(where: { $0.duration == duration }) else { return false }
+        guard
+            let index = sleepers.firstIndex(where: {
+                $0.duration == duration && !$0.cancellation.isCancelled
+            })
+        else { return false }
         let sleeper = sleepers.remove(at: index)
         sleeper.continuation.resume()
         return true
@@ -2798,6 +2832,39 @@ private actor ManualRemoteSessionClock: RemoteSessionClock {
         guard let index = sleepers.firstIndex(where: { $0.id == id }) else { return }
         let sleeper = sleepers.remove(at: index)
         sleeper.continuation.resume(throwing: CancellationError())
+    }
+}
+
+private final class ManualClockCancellationFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
+}
+
+private actor ManualClockCleanupBarrier {
+    private var isReleased = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        guard !isReleased else { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func release() {
+        isReleased = true
+        continuation?.resume()
+        continuation = nil
     }
 }
 
