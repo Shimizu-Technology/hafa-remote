@@ -87,6 +87,12 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
                     throw VizioPairingCoordinatorError.unrecognizedDeviceInfo
                 }
                 try Task.checkCancellation()
+                guard
+                    target.expectedSavedDeviceID == nil
+                        || target.expectedSavedDeviceID == provisionalInfo.reportedDeviceID
+                else {
+                    throw TVDriverError.savedDeviceIdentityMismatch
+                }
                 let identity = try VizioPairingIdentity(
                     reportedDeviceID: provisionalInfo.reportedDeviceID
                 )

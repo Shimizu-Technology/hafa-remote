@@ -1,0 +1,39 @@
+# HR-042 — Keep saved TV identity through reconnect and rediscovery
+
+A remembered address can be reassigned to a different, already paired TV. Connecting the selected saved TV must verify its authenticated identity before using a credential or activating commands.
+
+## Acceptance criteria and implementation
+
+- Saved targets carry an explicit expected device identity. Discovery candidates carry a separate, non-secret discovery identifier; a service-name hash never selects a saved certificate pin.
+- Samsung and Vizio reject a mismatched device-info identity before looking up or presenting a credential. A rejected attempt closes its transport and preserves existing credentials.
+- Sony selects the remembered certificate pin from the expected saved identity, and keeps its existing pinned TLS connection checks. A remembered identity with no saved pin cannot silently become new pairing.
+- The router validates the final brand and expected identity before activating command routing.
+- A successful first pairing promotes the controller's reconnect target to the authenticated identity.
+- Sony service-name hashes and Vizio fallback identifiers are persisted separately from authenticated device identity. Address recovery matches that discovery alias, then binds the candidate to the selected saved identity. A candidate at the unchanged endpoint cannot cause a retry loop merely because its metadata differs.
+- Setup rebinds a discovered row to exactly one existing brand-scoped saved alias (or a Samsung/Vizio stable identifier). Known Sony rows reuse their saved certificate pin without restarting PIN pairing. Conflicting aliases require an explicit saved-TV choice and never automatically select a pin or begin new pairing. Pending-removal records are excluded.
+- A rejected or changed remembered pairing uses the explicit **My TVs → Forget only the selected TV → Add TV** flow. Setup does not silently clear the saved identity, guess another candidate, or remove unrelated credentials. Existing saved-target repair refuses an absent pin; that refusal is deliberate until the user completes this management flow.
+- Identity mismatches present a useful Find TV message. Certificate failures can search for a moved endpoint without clearing or bypassing certificate trust.
+
+## Verification
+
+Deterministic regressions cover already-paired wrong targets for Samsung and Vizio, router rejection before commands, Sony hash/fingerprint collisions, preserved expected Sony pins, moved Sony candidates, Sony/Vizio alias rebinding, same-endpoint alias collisions, SwiftData alias persistence, and first-pair foreground reconnect promotion.
+
+The complete integrated gate passed locally: credential scans, strict Swift formatting, release fixture checks, release preflight, signed simulator build, unit/UI execution, bundle verification, install and launch. Physical DHCP-change and certificate checks remain hardware acceptance work. Current PR-head review and hosted CI are checked before merge.
+
+New networked-test-double endpoints use RFC 5737 addresses through a DEBUG-only fixture initializer. Normal initialization, decoding, and Release builds retain the strict private/link-local network policy.
+
+## Recovery limits
+
+Old Sony/Vizio records have no discovery alias. Selecting the TV once from discovery associates its current advertisement only after authenticating the endpoint. A previously paired Sony certificate can be reused after that peer presents it, but its unassociated service hash alone cannot select a saved pin. Later selections reuse the established association directly. A renamed Bonjour service may likewise require selecting the TV again. The implementation never guesses among unrelated candidates or relaxes a saved certificate pin to recover an address.
+
+Only claimed development resources were used during integration. Ticket-owned simulators and build/test processes were shut down or released after each QA phase; borrowed devices and services were preserved.
+
+## Integrated simulator evidence
+
+On October 8, the integrating session completed the full gate for the implemented identity/setup code at `a9c127a` on iOS 18.5: 314 tests passed, with zero failures or skips. Two older endpoint-merge assertions were corrected to require the retained discovery alias. CodeRabbit CLI reviewed the complete committed ticket delta with zero findings. Dedicated iOS 26.5 controller/setup coverage passed 78 tests / 80 executions, also with zero failures or skips.
+
+Computer use exercised the in-memory saved-TV fixture: switch Samsung to Sony and observe the Sony connected header; open its management menu; cancel Forget and confirm Sony remains selected; then deliberately forget that synthetic Sony and observe only its row removed, with Samsung reconnecting and the malformed Vizio record preserved. No real driver, television, or household credential participated. The exact owned simulator was shut down after the QA phase.
+
+![Synthetic saved Sony selected after switching](evidence/HR-042/saved-sony-selection.png)
+
+These journeys verify the native library and setup safeguards. They do not establish physical DHCP, certificate, wake, or hardware-command acceptance. Review coverage, hosted CI, and cleanup are rechecked on the final PR head before merge; subsequent changes require validation on their own commit.

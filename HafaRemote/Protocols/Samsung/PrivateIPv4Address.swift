@@ -28,6 +28,25 @@ struct PrivateIPv4Address: Codable, CustomStringConvertible, Equatable, Hashable
         rawValue = octets.map(String.init).joined(separator: ".")
     }
 
+    #if DEBUG
+        /// Constructs RFC 5737 endpoints for injected, non-networking test doubles.
+        /// The normal initializer and Codable path continue to reject these addresses.
+        init(documentationAddressForTesting candidate: String) throws {
+            let parts = candidate.split(separator: ".", omittingEmptySubsequences: false)
+            guard parts.count == 4,
+                let first = UInt8(parts[0]), let second = UInt8(parts[1]),
+                let third = UInt8(parts[2]), let fourth = UInt8(parts[3]),
+                [(192, 0, 2), (198, 51, 100), (203, 0, 113)].contains(where: {
+                    $0.0 == Int(first) && $0.1 == Int(second) && $0.2 == Int(third)
+                }),
+                candidate == [first, second, third, fourth].map(String.init).joined(separator: ".")
+            else {
+                throw PrivateIPv4AddressError.invalid
+            }
+            rawValue = candidate
+        }
+    #endif
+
     var description: String {
         "PrivateIPv4Address(redacted)"
     }

@@ -59,7 +59,7 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
                 throw MultiBrandSessionDriverError.unsupportedBrand
             }
             television = try await samsung.pair(
-                addressText: target.address.rawValue,
+                target: target,
                 onWaitingForApproval: onWaitingForApproval
             )
         case .sony:
@@ -77,8 +77,14 @@ actor MultiBrandSessionDriver: RemoteSessionDriving {
                 return try await broker.waitForCode()
             }
         }
+        do {
+            try target.validateConnectedIdentity(television)
+        } catch {
+            await disconnect()
+            throw error
+        }
         activeBrand = target.brand
-        return television.applyingSuggestedDisplayName(target.suggestedDisplayName)
+        return television.applyingDiscoveryMetadata(from: target)
     }
 
     func submitPairingCode(_ code: String) async throws {

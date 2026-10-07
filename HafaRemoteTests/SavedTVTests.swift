@@ -5,6 +5,107 @@ import Testing
 @testable import HafaRemote
 
 struct SavedTVTests {
+    @Test("Rejected remembered pairing requires explicit selected-TV management")
+    func savedRepairCannotBecomeFreshPairingSilently() throws {
+        let target = TVConnectionTarget(
+            brand: .sony, reportedDeviceID: "synthetic-alias",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.49"),
+            controlPort: 6466,
+            expectedSavedDeviceID: String(repeating: "a", count: 64)
+        )
+        #expect(SavedTVPairingRecovery.requiresManagement(state: .certificateChanged, target: target))
+        #expect(SavedTVPairingRecovery.requiresManagement(state: .savedPairingRejected, target: target))
+        #expect(!SavedTVPairingRecovery.requiresManagement(state: .offline, target: target))
+        #expect(
+            !SavedTVPairingRecovery.requiresManagement(
+                state: .certificateChanged, target: target.expectingSavedIdentity(nil)))
+    }
+
+    @MainActor
+    @Test("Colliding saved discovery aliases require a deliberate choice in either order")
+    func collidingAliasesNeverPickAnArbitraryPin() throws {
+        let alias = "synthetic-colliding-service-alias"
+        let first = SavedTV(
+            brand: .sony, reportedDeviceID: String(repeating: "a", count: 64),
+            displayName: "Synthetic First TV",
+            modelName: "Synthetic BRAVIA", firmwareVersion: nil, lastKnownAddress: "203.0.113.45",
+            discoveryIdentifier: alias
+        )
+        let second = SavedTV(
+            brand: .sony, reportedDeviceID: String(repeating: "b", count: 64),
+            displayName: "Synthetic Second TV",
+            modelName: "Synthetic BRAVIA", firmwareVersion: nil, lastKnownAddress: "203.0.113.46",
+            discoveryIdentifier: alias
+        )
+        let candidate = DiscoveredTV(
+            brand: .sony, reportedIdentifier: alias, displayName: "Synthetic Candidate",
+            modelName: "Synthetic BRAVIA",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "203.0.113.47"), controlPort: 6466
+        )
+        for records in [[first, second], [second, first]] {
+            guard
+                case .requiresChoice(let matches) = SavedTVDiscoveryAssociation.resolve(
+                    candidate, savedTVs: records)
+            else {
+                Issue.record("A collision must not choose a saved pin or begin new pairing")
+                continue
+            }
+            #expect(
+                Set(matches.map(\.reportedDeviceID)) == [first.reportedDeviceID, second.reportedDeviceID])
+        }
+    }
+
+    @MainActor
+    @Test("A Sony candidate hash alone cannot associate with a legacy saved certificate")
+    func legacySonyNeedsAuthenticatedReselection() throws {
+        let hash = String(repeating: "a", count: 64)
+        let legacy = SavedTV(
+            brand: .sony, reportedDeviceID: hash, displayName: "Synthetic Legacy Sony",
+            modelName: "Synthetic BRAVIA", firmwareVersion: nil, lastKnownAddress: "192.0.2.47"
+        )
+        let candidate = DiscoveredTV(
+            brand: .sony, reportedIdentifier: hash, displayName: "Synthetic Candidate",
+            modelName: "Synthetic BRAVIA",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.48"), controlPort: 6466
+        )
+        guard
+            case .newCandidate(let target) = SavedTVDiscoveryAssociation.resolve(
+                candidate, savedTVs: [legacy])
+        else {
+            Issue.record("An unassociated service hash must never select a certificate pin")
+            return
+        }
+        #expect(target.expectedSavedDeviceID == nil)
+    }
+
+    @MainActor
+    @Test(
+        "Stable Samsung and Vizio IDs can associate with legacy saved records",
+        arguments: [TVBrand.samsung, .vizio])
+    func stableBrandIDsAssociateSavedTarget(brand: TVBrand) throws {
+        let saved = SavedTV(
+            brand: brand, reportedDeviceID: "synthetic-stable-id", displayName: "Synthetic Saved TV",
+            modelName: "Synthetic Model", firmwareVersion: nil, lastKnownAddress: "198.51.100.47"
+        )
+        let candidate = DiscoveredTV(
+            brand: brand, reportedIdentifier: "synthetic-stable-id", displayName: "Synthetic Candidate",
+            modelName: "Synthetic Model",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.48"),
+            controlPort: brand == .samsung ? 8002 : 7345
+        )
+        guard case .saved(let target) = SavedTVDiscoveryAssociation.resolve(candidate, savedTVs: [saved])
+        else {
+            Issue.record("The stable brand-scoped identifier should locate the saved TV")
+            return
+        }
+        #expect(target.expectedSavedDeviceID == saved.reportedDeviceID)
+        saved.pendingCredentialRemoval = true
+        guard case .newCandidate = SavedTVDiscoveryAssociation.resolve(candidate, savedTVs: [saved]) else {
+            Issue.record("Pending-removal credentials must not be selected")
+            return
+        }
+    }
+
     /// Saved metadata remains available after SwiftData persistence and fetch.
     @MainActor
     @Test("Saved TV metadata survives an in-memory SwiftData round trip")
@@ -21,6 +122,7 @@ struct SavedTVTests {
             firmwareVersion: "2210",
             lastKnownAddress: "192.168.10.20",
             controlPort: 6466,
+            discoveryIdentifier: "synthetic-discovery-alias",
             macAddress: "02:00:5E:10:00:01",
             wakeWasVerified: true,
             lastSeenAt: Date(timeIntervalSince1970: 100),
@@ -42,6 +144,9 @@ struct SavedTVTests {
         #expect(fetched.first?.firmwareVersion == "2210")
         #expect(fetched.first?.validatedAddress == (try PrivateIPv4Address("192.168.10.20")))
         #expect(fetched.first?.validatedControlPort == 6466)
+        #expect(fetched.first?.discoveryIdentifier == "synthetic-discovery-alias")
+        #expect(fetched.first?.connectionTarget?.expectedSavedDeviceID == "synthetic-device-id")
+        #expect(fetched.first?.connectionTarget?.discoveryDeviceKey == "sony:synthetic-discovery-alias")
         #expect(fetched.first?.validatedMACAddress == (try SamsungMACAddress("02:00:5E:10:00:01")))
         #expect(fetched.first?.wakeWasVerified == true)
         #expect(fetched.first?.pendingCredentialRemoval == false)
@@ -857,6 +962,79 @@ struct SavedTVTests {
         #expect(connectedTargets == [second])
         #expect(selection.selectedDeviceKey == "sony:second")
         #expect(!selection.isSwitching)
+    }
+
+    @MainActor
+    @Test(
+        "Saved-TV rediscovery binds candidate aliases to the remembered identity",
+        arguments: [TVBrand.sony, .vizio])
+    func recoveryKeepsSavedIdentityWhenAliasDiffers(brand: TVBrand) async throws {
+        let port: UInt16 = brand == .sony ? 6466 : 7345
+        let alias = "synthetic-discovery-alias"
+        let savedIdentity = "synthetic-authenticated-identity"
+        let cached = TVConnectionTarget(
+            brand: brand,
+            reportedDeviceID: savedIdentity,
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.45"),
+            controlPort: port,
+            expectedSavedDeviceID: savedIdentity,
+            discoveryIdentifier: alias
+        )
+        let moved = DiscoveredTV(
+            brand: brand,
+            reportedIdentifier: alias,
+            displayName: "Synthetic Office TV",
+            modelName: "Synthetic Model",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.46"),
+            controlPort: port
+        )
+        let recovery = SavedTVAddressRecoveryCoordinator(
+            discovery: TVDiscoveryStore(
+                backend: SavedTVRecoveryDiscoveryBackend(events: [.found(moved), .finished])
+            ))
+        var connectedTargets: [TVConnectionTarget] = []
+        recovery.recover(stableDeviceKey: "\(brand.rawValue):\(savedIdentity)", cachedTarget: cached) {
+            connectedTargets.append($0)
+        }
+        await waitForSelectionState { !recovery.isRecovering }
+
+        #expect(connectedTargets == [moved.connectionTarget.expectingSavedIdentity(savedIdentity)])
+        #expect(connectedTargets.first?.reportedDeviceID == alias)
+        #expect(connectedTargets.first?.expectedSavedDeviceID == savedIdentity)
+    }
+
+    @MainActor
+    @Test("Recovery does not retry the same endpoint when only candidate metadata differs")
+    func recoveryDoesNotLoopOnAliasCollisionAtCachedAddress() async throws {
+        let address = try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.45")
+        let alias = "synthetic-colliding-alias"
+        let cached = TVConnectionTarget(
+            brand: .sony,
+            reportedDeviceID: "synthetic-authenticated-identity",
+            address: address,
+            controlPort: 6466,
+            expectedSavedDeviceID: "synthetic-authenticated-identity",
+            discoveryIdentifier: alias
+        )
+        let candidate = DiscoveredTV(
+            brand: .sony,
+            reportedIdentifier: alias,
+            displayName: "Synthetic Other Name",
+            modelName: "Synthetic Other Model",
+            address: address,
+            controlPort: 6466
+        )
+        let recovery = SavedTVAddressRecoveryCoordinator(
+            discovery: TVDiscoveryStore(
+                backend: SavedTVRecoveryDiscoveryBackend(events: [.found(candidate), .finished])
+            ))
+        var connections = 0
+        recovery.recover(stableDeviceKey: "sony:synthetic-authenticated-identity", cachedTarget: cached) {
+            _ in
+            connections += 1
+        }
+        await waitForSelectionState { !recovery.isRecovering }
+        #expect(connections == 0)
     }
 
     @MainActor

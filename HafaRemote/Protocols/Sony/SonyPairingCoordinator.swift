@@ -67,6 +67,9 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             if let savedCredential = try await savedCredential(for: target) {
                 credential = savedCredential
             } else {
+                guard target.expectedSavedDeviceID == nil else {
+                    throw SonyPairingCoordinatorError.pairingRejected
+                }
                 credential = try await pair(
                     address: target.address,
                     identity: identity,
@@ -127,14 +130,7 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
     }
 
     private func savedCredential(for target: TVConnectionTarget) async throws -> SonyPairingCredential? {
-        guard let candidate = try? SonyPairingCredential(reportedDeviceID: target.reportedDeviceID)
-        else {
-            return nil
-        }
-        return try await SonyRecoverableCredentialLookup.credential(
-            in: credentialStore,
-            fingerprint: candidate.certificateSHA256
-        )
+        try await SonySavedTargetCredentialLookup.credential(for: target, in: credentialStore)
     }
 
     private func pair(
@@ -318,6 +314,24 @@ actor SonyPairingCoordinator: SonyPairingCoordinating {
             throw SonyPairingCoordinatorError.invalidPairingResponse
         }
         return certificate
+    }
+}
+
+enum SonySavedTargetCredentialLookup {
+    static func credential(
+        for target: TVConnectionTarget,
+        in store: any SonyPairingCredentialStoring
+    ) async throws -> SonyPairingCredential? {
+        // Service-name hashes and certificate fingerprints have the same shape.
+        // Only the authenticated identity of a remembered TV may choose a pin.
+        guard target.brand == .sony,
+            let expectedIdentity = target.expectedSavedDeviceID,
+            let candidate = try? SonyPairingCredential(reportedDeviceID: expectedIdentity)
+        else { return nil }
+        return try await SonyRecoverableCredentialLookup.credential(
+            in: store,
+            fingerprint: candidate.certificateSHA256
+        )
     }
 }
 

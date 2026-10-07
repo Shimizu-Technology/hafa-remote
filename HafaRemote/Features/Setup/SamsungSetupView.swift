@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 import UIKit
 
@@ -5,9 +6,13 @@ struct TVSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Query private var savedTVs: [SavedTV]
     @State private var discovery: TVDiscoveryStore
     @State private var address = ""
     @State private var selectedTV: DiscoveredTV?
+    @State private var ambiguousCandidate: DiscoveredTV?
+    @State private var ambiguousSavedTVs: [SavedTV] = []
+    @State private var isChoosingSavedTV = false
     @State private var selectedBrand: TVBrand?
     @State private var selectedTarget: TVConnectionTarget?
     @State private var isShowingManualSetup = false
@@ -38,7 +43,7 @@ struct TVSetupView: View {
         self.initialTarget = initialTarget
         self.initialAddress = initialTarget?.address.rawValue ?? initialAddress
         self.initialReportedDeviceID =
-            initialTarget?.reportedDeviceID ?? initialReportedDeviceID
+            initialTarget?.expectedSavedDeviceID ?? initialTarget?.reportedDeviceID ?? initialReportedDeviceID
         _address = State(initialValue: initialTarget?.address.rawValue ?? initialAddress)
         _selectedBrand = State(initialValue: initialTarget?.brand)
         _selectedTarget = State(initialValue: initialTarget)
@@ -50,7 +55,7 @@ struct TVSetupView: View {
             Form {
                 discoverySection
                 connectionStatusSection
-                manualSetupSection
+                if !requiresSavedTVManagement { manualSetupSection }
             }
             .navigationTitle("Add TV")
             .navigationBarTitleDisplayMode(.inline)
@@ -60,6 +65,29 @@ struct TVSetupView: View {
                         dismiss()
                     }
                 }
+            }
+            .confirmationDialog(
+                "Choose the saved TV", isPresented: $isChoosingSavedTV, titleVisibility: .visible
+            ) {
+                ForEach(ambiguousSavedTVs) { saved in
+                    Button(savedTVChoiceLabel(saved)) {
+                        guard let candidate = ambiguousCandidate else { return }
+                        beginConnection(
+                            to: candidate,
+                            target: candidate.connectionTarget.expectingSavedIdentity(saved.reportedDeviceID)
+                        )
+                        ambiguousCandidate = nil
+                        ambiguousSavedTVs = []
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    ambiguousCandidate = nil
+                    ambiguousSavedTVs = []
+                }
+            } message: {
+                Text(
+                    "More than one saved TV matches this discovery name. Choose the TV you intend to control. Its saved security identity will still be checked."
+                )
             }
             .task {
                 discovery.start()
@@ -400,8 +428,15 @@ struct TVSetupView: View {
         }
     }
 
+    private var requiresSavedTVManagement: Bool {
+        SavedTVPairingRecovery.requiresManagement(
+            state: session.state, target: selectedTarget ?? initialTarget
+        )
+    }
+
     private var canForgetPairing: Bool {
-        switch session.state {
+        guard !requiresSavedTVManagement else { return false }
+        return switch session.state {
         case .savedPairingRejected, .certificateChanged:
             !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .failed(.timedOut(.forgetPairing)):
@@ -414,6 +449,7 @@ struct TVSetupView: View {
     private func preparePairingRepairIfNeeded(for state: RemoteSessionState) {
         switch state {
         case .savedPairingRejected, .certificateChanged:
+            guard !requiresSavedTVManagement else { return }
             if address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 address = session.lastConnectedTV?.address.rawValue ?? ""
             }
@@ -426,15 +462,30 @@ struct TVSetupView: View {
     }
 
     private func connect(to television: DiscoveredTV) {
+        switch SavedTVDiscoveryAssociation.resolve(television, savedTVs: savedTVs) {
+        case .newCandidate(let target), .saved(let target):
+            beginConnection(to: television, target: target)
+        case .requiresChoice(let matches):
+            ambiguousCandidate = television
+            ambiguousSavedTVs = matches
+            isChoosingSavedTV = true
+        }
+    }
+
+    private func savedTVChoiceLabel(_ saved: SavedTV) -> String {
+        [saved.displayName, saved.roomName, saved.modelName].compactMap { $0 }.joined(separator: " • ")
+    }
+
+    private func beginConnection(to television: DiscoveredTV, target: TVConnectionTarget) {
         resetPairingCodeSubmission()
         selectedTV = television
         selectedBrand = television.brand
-        selectedTarget = television.connectionTarget
+        selectedTarget = target
         pairingCode = ""
         hasSubmittedPairingCode = false
         address = television.address.rawValue
         discovery.stop()
-        connect(to: television.connectionTarget)
+        connect(to: target)
     }
 
     private func connectManually() {
@@ -481,6 +532,16 @@ struct TVSetupView: View {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
                     .accessibilityIdentifier("setupErrorMessage")
+
+                if requiresSavedTVManagement {
+                    Text(
+                        "Close setup, open My TVs, and forget only this TV. Then choose Add TV to approve it again."
+                    )
+                    .accessibilityIdentifier("savedTVManagementRecoveryMessage")
+                    Button("Close Setup") { dismiss() }
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("closeSetupForSavedTVManagement")
+                }
 
                 Button("Find TVs Again", systemImage: "arrow.clockwise") {
                     connectionTask?.cancel()
@@ -612,7 +673,7 @@ struct TVSetupView: View {
             try await session.forgetPairing(
                 for: address,
                 reportedDeviceID:
-                    repairTarget?.reportedDeviceID
+                    repairTarget?.expectedSavedDeviceID ?? repairTarget?.reportedDeviceID
                     ?? (address == initialAddress ? initialReportedDeviceID : nil),
                 brand: repairBrand
             )
@@ -676,6 +737,41 @@ struct TVSetupView: View {
     }
 }
 
+enum SavedTVPairingRecovery {
+    static func requiresManagement(state: RemoteSessionState, target: TVConnectionTarget?) -> Bool {
+        guard target?.expectedSavedDeviceID != nil else { return false }
+        switch state {
+        case .savedPairingRejected, .certificateChanged: return true
+        default: return false
+        }
+    }
+}
+
+/// Discovery metadata may locate a saved TV, but never becomes its security identity.
+@MainActor
+enum SavedTVDiscoveryAssociation {
+    case newCandidate(TVConnectionTarget)
+    case saved(TVConnectionTarget)
+    case requiresChoice([SavedTV])
+
+    static func resolve(_ candidate: DiscoveredTV, savedTVs: [SavedTV]) -> Self {
+        let matches = savedTVs.filter { saved in
+            guard saved.brand == candidate.brand, !saved.pendingCredentialRemoval else { return false }
+            let aliasMatches = saved.discoveryIdentifier == candidate.reportedIdentifier
+            // Sony's advertisement hash has the shape of a certificate fingerprint;
+            // only an alias persisted after authentication may associate those records.
+            let stableIDMatches =
+                candidate.brand != .sony
+                && saved.reportedDeviceID == candidate.reportedIdentifier
+            return aliasMatches || stableIDMatches
+        }
+        guard let saved = matches.first else { return .newCandidate(candidate.connectionTarget) }
+        guard matches.count == 1 else { return .requiresChoice(matches) }
+        return .saved(candidate.connectionTarget.expectingSavedIdentity(saved.reportedDeviceID))
+    }
+}
+
 #Preview {
     TVSetupView(session: RemoteSessionStore())
+        .modelContainer(for: SavedTV.self, inMemory: true)
 }

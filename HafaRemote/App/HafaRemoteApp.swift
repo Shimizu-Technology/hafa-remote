@@ -17,7 +17,13 @@ struct HafaRemoteApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-                if ProcessInfo.processInfo.arguments.contains("-ui-testing-remote-offline") {
+                if ProcessInfo.processInfo.arguments.contains("-ui-testing-saved-sony-alias") {
+                    SavedSonyAssociationUITestHarness(mode: .unique)
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-colliding-sony-alias") {
+                    SavedSonyAssociationUITestHarness(mode: .colliding)
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-fresh-sony-rejection") {
+                    SavedSonyAssociationUITestHarness(mode: .fresh)
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-remote-offline") {
                     RemoteControlTestHarness(
                         isConnected: false,
                         isAwaitingApproval: false,
@@ -104,6 +110,144 @@ struct HafaRemoteApp: App {
 }
 
 #if DEBUG
+    /// Exercises actual setup association and error projection with no network or Keychain.
+    private struct SavedSonyAssociationUITestHarness: View {
+        enum Mode { case unique, colliding, fresh }
+        @Environment(\.modelContext) private var modelContext
+        @State private var didSeed = false
+        @State private var session: RemoteSessionStore
+        @State private var discovery: TVDiscoveryStore
+        @State private var probe: SavedSonyAssociationUIProbe
+        let mode: Mode
+
+        init(mode: Mode) {
+            self.mode = mode
+            let probe = SavedSonyAssociationUIProbe()
+            _probe = State(initialValue: probe)
+            _session = State(
+                initialValue: RemoteSessionStore(
+                    controller: RemoteSessionController(
+                        driver: SavedSonyAssociationUIFixtureDriver {
+                            target in
+                            probe.connectionAttempts += 1
+                            probe.expectedIdentity = target?.expectedSavedDeviceID ?? "none"
+                            if target == nil { probe.addressBasedAttempts += 1 }
+                        } onForget: {
+                            probe.forgetAttempts += 1
+                        })
+                ))
+            _discovery = State(initialValue: TVDiscoveryStore(backend: SavedSonyAliasDiscoveryFixture()))
+        }
+
+        var body: some View {
+            Group {
+                if didSeed {
+                    TVSetupView(session: session, discovery: discovery)
+                } else {
+                    ProgressView("Preparing synthetic saved TVs…")
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                VStack {
+                    Text(String(probe.connectionAttempts))
+                        .accessibilityIdentifier("sonyAssociationConnectionAttempts")
+                    Text(probe.expectedIdentity)
+                        .accessibilityIdentifier("sonyAssociationExpectedIdentity")
+                    Text(String(probe.addressBasedAttempts))
+                        .accessibilityIdentifier("sonyAssociationAddressBasedAttempts")
+                    Text(String(probe.forgetAttempts))
+                        .accessibilityIdentifier("sonyAssociationForgetAttempts")
+                }
+                .font(.caption2)
+                .opacity(0.01)
+            }
+            .task {
+                guard !didSeed else { return }
+                if mode != .fresh {
+                    modelContext.insert(
+                        savedTV(identity: "synthetic-authenticated-sony-a", name: "Synthetic Den TV"))
+                }
+                if mode == .colliding {
+                    modelContext.insert(
+                        savedTV(identity: "synthetic-authenticated-sony-b", name: "Synthetic Study TV"))
+                }
+                do {
+                    try modelContext.save()
+                    didSeed = true
+                } catch {
+                    preconditionFailure("The synthetic in-memory saved-TV fixture must persist")
+                }
+            }
+        }
+
+        private func savedTV(identity: String, name: String) -> SavedTV {
+            SavedTV(
+                brand: .sony, reportedDeviceID: identity, displayName: name,
+                modelName: "Synthetic BRAVIA", firmwareVersion: "synthetic-firmware",
+                lastKnownAddress: "198.51.100.42", controlPort: 6466,
+                discoveryIdentifier: SavedSonyAliasDiscoveryFixture.alias
+            )
+        }
+    }
+
+    @MainActor
+    @Observable
+    private final class SavedSonyAssociationUIProbe {
+        var connectionAttempts = 0
+        var expectedIdentity = "none"
+        var addressBasedAttempts = 0
+        var forgetAttempts = 0
+    }
+
+    @MainActor
+    private final class SavedSonyAliasDiscoveryFixture: TVDiscoveryBackend {
+        static let alias = "synthetic-shared-sony-advertisement"
+        func start(eventHandler: @escaping @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void) {
+            guard let address = try? PrivateIPv4Address(documentationAddressForTesting: "192.0.2.42") else {
+                preconditionFailure("The RFC 5737 UI fixture address must remain valid")
+            }
+            eventHandler(
+                .found(
+                    DiscoveredTV(
+                        brand: .sony, reportedIdentifier: Self.alias,
+                        displayName: "Synthetic Nearby Sony", modelName: "Synthetic BRAVIA",
+                        address: address, controlPort: 6466
+                    )))
+            eventHandler(.finished)
+        }
+        func stop() {}
+    }
+
+    private actor SavedSonyAssociationUIFixtureDriver: RemoteSessionDriving {
+        nonisolated var brand: TVBrand { .sony }
+        let onAttempt: @MainActor @Sendable (TVConnectionTarget?) -> Void
+        let onForget: @MainActor @Sendable () -> Void
+        init(
+            onAttempt: @escaping @MainActor @Sendable (TVConnectionTarget?) -> Void,
+            onForget: @escaping @MainActor @Sendable () -> Void
+        ) {
+            self.onAttempt = onAttempt
+            self.onForget = onForget
+        }
+        func connect(
+            to target: TVConnectionTarget,
+            onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+        ) async throws -> ConnectedTV {
+            await onAttempt(target)
+            throw SonyPairingCoordinatorError.pairingRejected
+        }
+        func connect(
+            addressText: String,
+            onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+        ) async throws -> ConnectedTV {
+            await onAttempt(nil)
+            throw SonyPairingCoordinatorError.pairingRejected
+        }
+        func send(_ command: RemoteCommand) {}
+        func forget(addressText: String) async { await onForget() }
+        func disconnect() {}
+    }
+
     private struct VizioPairingRepairUITestHarness: View {
         private let target: TVConnectionTarget
         @State private var session: RemoteSessionStore

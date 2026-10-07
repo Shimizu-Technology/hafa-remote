@@ -5,6 +5,10 @@ protocol SamsungPairingCoordinating: Sendable {
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
     ) async throws -> ConnectedTV
+    func pair(
+        target: TVConnectionTarget,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> ConnectedTV
     func send(_ command: RemoteCommand) async throws
     func sendText(_ input: RemoteTextInput) async throws
     func checkConnection() async throws
@@ -16,6 +20,23 @@ protocol SamsungPairingCoordinating: Sendable {
 }
 
 extension SamsungPairingCoordinating {
+    func pair(
+        target: TVConnectionTarget,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> ConnectedTV {
+        let television = try await pair(
+            addressText: target.address.rawValue,
+            onWaitingForApproval: onWaitingForApproval
+        )
+        do {
+            try target.validateConnectedIdentity(television)
+        } catch {
+            await disconnect()
+            throw error
+        }
+        return television
+    }
+
     func checkConnection() async throws {}
 
     func sendSelect() async throws {
@@ -58,6 +79,30 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
         addressText: String,
         onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void = {}
     ) async throws -> ConnectedTV {
+        try await pair(
+            address: try PrivateIPv4Address(addressText.trimmingCharacters(in: .whitespacesAndNewlines)),
+            expectedSavedDeviceID: nil,
+            onWaitingForApproval: onWaitingForApproval
+        )
+    }
+
+    func pair(
+        target: TVConnectionTarget,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> ConnectedTV {
+        guard target.brand == .samsung else { throw TVDriverError.savedDeviceIdentityMismatch }
+        return try await pair(
+            address: target.address,
+            expectedSavedDeviceID: target.expectedSavedDeviceID,
+            onWaitingForApproval: onWaitingForApproval
+        )
+    }
+
+    private func pair(
+        address: PrivateIPv4Address,
+        expectedSavedDeviceID: String?,
+        onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void
+    ) async throws -> ConnectedTV {
         guard activeAttemptID == nil else {
             throw SamsungPairingCoordinatorError.pairingInProgress
         }
@@ -77,14 +122,17 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
         return try await withTaskCancellationHandler {
             do {
                 try Task.checkCancellation()
-                let address = try PrivateIPv4Address(
-                    addressText.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
                 attemptedAddress = address
                 let deviceInfo = try await deviceInfoProvider.fetchDeviceInfo(at: address)
                 try Task.checkCancellation()
                 guard deviceInfo.supportsTokenAuthentication else {
                     throw SamsungPairingCoordinatorError.unsupportedTokenAuthentication
+                }
+                guard
+                    expectedSavedDeviceID == nil
+                        || expectedSavedDeviceID == deviceInfo.reportedDeviceID
+                else {
+                    throw TVDriverError.savedDeviceIdentityMismatch
                 }
                 let identity = try SamsungPairingCredentialIdentity(
                     reportedDeviceID: deviceInfo.reportedDeviceID

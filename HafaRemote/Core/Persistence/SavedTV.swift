@@ -7,6 +7,7 @@ final class SavedTV: CustomStringConvertible {
     @Attribute(.unique) var id: UUID
     @Attribute(.unique) var stableDeviceID: String?
     var reportedDeviceID: String
+    var discoveryIdentifier: String?
     var brandRawValue: String = TVBrand.samsung.rawValue
     var displayName: String
     var roomName: String?
@@ -33,6 +34,7 @@ final class SavedTV: CustomStringConvertible {
         firmwareVersion: String?,
         lastKnownAddress: String,
         controlPort: UInt16? = nil,
+        discoveryIdentifier: String? = nil,
         macAddress: String? = nil,
         wakeWasVerified: Bool = false,
         pendingCredentialRemoval: Bool = false,
@@ -44,6 +46,7 @@ final class SavedTV: CustomStringConvertible {
         brandRawValue = brand.rawValue
         stableDeviceID = "\(brand.rawValue):\(reportedDeviceID)"
         self.reportedDeviceID = reportedDeviceID
+        self.discoveryIdentifier = discoveryIdentifier
         self.displayName = displayName
         self.roomName = roomName
         self.modelName = modelName
@@ -98,7 +101,9 @@ final class SavedTV: CustomStringConvertible {
             reportedDeviceID: reportedDeviceID,
             address: address,
             controlPort: validatedControlPort,
-            suggestedDisplayName: displayName
+            suggestedDisplayName: displayName,
+            expectedSavedDeviceID: reportedDeviceID,
+            discoveryIdentifier: discoveryIdentifier
         )
     }
 
@@ -117,7 +122,8 @@ final class SavedTV: CustomStringConvertible {
             firmwareVersion: firmwareVersion,
             networkConnection: savedMACAddress == nil ? .unavailable : .wireless,
             macAddress: savedMACAddress,
-            capabilities: capabilities
+            capabilities: capabilities,
+            discoveryIdentifier: discoveryIdentifier
         )
     }
 
@@ -146,6 +152,7 @@ final class SavedTV: CustomStringConvertible {
         brandRawValue = tv.brand.rawValue
         stableDeviceID = tv.stableDeviceKey
         reportedDeviceID = tv.reportedDeviceID
+        discoveryIdentifier = tv.discoveryIdentifier ?? discoveryIdentifier
         modelName = tv.modelName
         firmwareVersion = tv.firmwareVersion
         lastKnownAddress = tv.address.rawValue

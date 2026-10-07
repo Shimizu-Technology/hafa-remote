@@ -138,7 +138,8 @@ struct SamsungDiscoveryTests {
                     reportedDeviceID: modelAdvertisement.reportedIdentifier,
                     address: modelAdvertisement.address,
                     controlPort: modelAdvertisement.controlPort,
-                    suggestedDisplayName: roomAdvertisement.displayName
+                    suggestedDisplayName: roomAdvertisement.displayName,
+                    discoveryIdentifier: modelAdvertisement.reportedIdentifier
                 )
         )
     }
@@ -275,7 +276,8 @@ struct SamsungDiscoveryTests {
                     reportedDeviceID: existingEndpoint.reportedIdentifier,
                     address: existingEndpoint.address,
                     controlPort: existingEndpoint.controlPort,
-                    suggestedDisplayName: moved.displayName
+                    suggestedDisplayName: moved.displayName,
+                    discoveryIdentifier: existingEndpoint.reportedIdentifier
                 )
         )
     }
