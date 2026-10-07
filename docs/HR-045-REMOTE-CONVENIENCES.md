@@ -205,3 +205,22 @@ These references informed a native implementation. Their code licenses and
 interoperability evidence do not establish permission to distribute a brand's
 control protocol publicly. The existing separate distribution decision still
 applies.
+
+## Final review follow-up
+
+The first combined head `3a98a52` passed the complete canonical gate: 380 tests /
+429 executions, zero failures or skips, followed by signature, installation and
+launch checks. A completed 43-file CodeRabbit CLI pass identified three further
+functional issues. Vizio server rejection of an optional request now leaves
+ordinary controls available, while transport and pairing errors retain their
+existing handling. Samsung app socket writes preserve cancellation and report
+existing typed transport failures so recovery can run. A saved, validated Vizio
+favorite remains requestable after reconnect before any current-app read;
+this does not establish an installed-app inventory.
+
+Regression coverage checks rejected read/launch/input requests followed by an
+ordinary command, app-write error normalization, and native launch of a saved Vizio
+favorite without newly reported optional support. Public synthetic visual evidence
+is linked from the native QA record. The resulting head still requires its complete
+gate, current native QA, reviewer coverage and hosted CI before merge. Hardware
+acceptance and public distribution remain separate.

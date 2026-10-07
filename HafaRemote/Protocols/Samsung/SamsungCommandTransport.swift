@@ -137,7 +137,9 @@ actor SamsungCommandTransport: SamsungTransporting {
             guard app.target.brand == .samsung else { throw TVConvenienceError.wrongTV }
             let serializer = commandSerializer
             let available = try await query.catalogForLaunch {
-                try await serializer.perform { try await socket.send(SamsungAppCodec.request()) }
+                try await serializer.perform {
+                    try await Self.performAppWrite { try await socket.send(SamsungAppCodec.request()) }
+                }
             }
             try Task.checkCancellation()
             guard socketGeneration == generation, webSocket === socket else { throw CancellationError() }
@@ -145,7 +147,9 @@ actor SamsungCommandTransport: SamsungTransporting {
                 throw TVConvenienceError.unavailable
             }
             let message = try SamsungAppCodec.launch(app)
-            try await commandSerializer.perform { try await socket.send(message) }
+            try await commandSerializer.perform {
+                try await Self.performAppWrite { try await socket.send(message) }
+            }
             return .sent
         default: throw TVConvenienceError.unavailable
         }
@@ -157,7 +161,21 @@ actor SamsungCommandTransport: SamsungTransporting {
         let message = try SamsungAppCodec.request()
         let serializer = commandSerializer
         return try await query.query {
-            try await serializer.perform { try await socket.send(message) }
+            try await serializer.perform {
+                try await Self.performAppWrite { try await socket.send(message) }
+            }
+        }
+    }
+
+    /// Preserves cancellation and the existing typed recovery path for app socket writes.
+    static func performAppWrite(_ operation: @escaping @Sendable () async throws -> Void) async throws {
+        do {
+            try Task.checkCancellation()
+            try await operation()
+            try Task.checkCancellation()
+        } catch {
+            if Task.isCancelled || error is CancellationError { throw CancellationError() }
+            throw SamsungConnectionError.unavailable
         }
     }
 

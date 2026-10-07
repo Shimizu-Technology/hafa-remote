@@ -73,3 +73,13 @@ head, and preserve the remote's D-pad and volume controls before the navigation
 picker and extra controls. This fixture establishes native interaction and
 capability presentation only. Physical Samsung, Sony, and Vizio protocol behavior
 and household hardware acceptance remain separate gates.
+
+## Inspectable visual evidence
+
+These app-only captures contain synthetic QA data. They show presentation and
+interaction guidance, not hardware compatibility or App Store marketing claims.
+Pixels were inspected before inclusion; no household address, identifier, token,
+certificate, Wi-Fi name, or entered text is visible.
+
+- [More Controls and TV-reported synthetic apps](evidence/HR-045/more-controls-synthetic.png), retained from the native convenience run described above.
+- [Largest accessibility text in dark Swipe mode](evidence/HR-045/largest-text-swipe-synthetic.png), retained from the integrated native repair's actual touch/CUA QA. Its wrapped instruction and Buttons fallback were exercised; native XCTest additionally proved complete gesture geometry and scrolling.

@@ -4,6 +4,32 @@ import Testing
 @testable import HafaRemote
 
 struct RemoteConvenienceTests {
+    @Test(
+        "Vizio optional server rejections preserve ordinary controls",
+        arguments: [
+            TVConvenienceRequest.apps,
+            .launch(
+                try! TVAppShortcut(
+                    name: "Synthetic Video", target: .vizio(appID: "synthetic-video", namespace: 3))),
+            .selectInput(try! TVInputSource(value: "HDMI-1", name: "Synthetic Console")),
+        ], [VizioProtocolError.rejected("synthetic-rejection"), .invalidResponse])
+    func vizioRejectionPreservesRemote(request: TVConvenienceRequest, error: VizioProtocolError) async throws
+    {
+        let tv = ConnectedTV(
+            brand: .vizio, reportedDeviceID: "synthetic-vizio-rejection",
+            address: try .init(documentationAddressForTesting: "192.0.2.55"),
+            modelName: "Synthetic Model", firmwareVersion: nil)
+        let driver = RejectingVizioConvenienceDriver(error: error)
+        let controller = RemoteSessionController(driver: driver, initialState: .connected(tv))
+        await #expect(throws: TVConvenienceError.unavailable) {
+            try await controller.convenience(request, expectedDeviceKey: tv.stableDeviceKey)
+        }
+        #expect(await controller.state == .connected(tv))
+        try await controller.send(.volumeUp, expectedDeviceKey: tv.stableDeviceKey)
+        #expect(await driver.commands == [.volumeUp])
+        await controller.disconnect()
+    }
+
     @Test("A held cancelled Samsung address result cannot replace Sony routing")
     func staleAddressRouterResult() async throws {
         let callback = HeldRouterResult()
@@ -921,4 +947,18 @@ private actor HeldSonyConnectionCallback {
         continuation?.resume(throwing: SonyTLSChannelError.unavailable)
         continuation = nil
     }
+}
+
+private actor RejectingVizioConvenienceDriver: RemoteSessionDriving {
+    nonisolated var brand: TVBrand { .vizio }
+    let error: VizioProtocolError
+    private(set) var commands: [RemoteCommand] = []
+    init(error: VizioProtocolError) { self.error = error }
+    func connect(addressText: String, onWaitingForApproval: @escaping @Sendable @MainActor () async -> Void)
+        async throws -> ConnectedTV
+    { throw TVConvenienceError.unavailable }
+    func convenience(_ request: TVConvenienceRequest) throws -> TVConvenienceResponse { throw error }
+    func send(_ command: RemoteCommand) { commands.append(command) }
+    func disconnect() {}
+    func forget(addressText: String) {}
 }

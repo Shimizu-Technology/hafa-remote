@@ -84,6 +84,27 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
     }
 
     @MainActor
+    func testVizioSavedFavoriteWorksBeforeCurrentAppRead() {
+        let app = launch(
+            brand: "vizio",
+            extra: [
+                "-convenience-no-optional-features", "-convenience-restored-favorite",
+            ])
+        openMore(app)
+        let favorite = app.buttons["favoriteApp-Synthetic Saved Video"]
+        reveal(favorite, in: app)
+        XCTAssertTrue(favorite.isEnabled)
+        favorite.tap()
+        assertTrace("request:launch:Synthetic Saved Video", in: app)
+        XCTAssertFalse(app.staticTexts["App opened"].exists)
+        backToRemote(app)
+        let volume = app.buttons["remote-volumeUp"]
+        reveal(volume, in: app, direction: .down)
+        volume.tap()
+        assertTrace("command:volumeUp", in: app)
+    }
+
+    @MainActor
     func testSonyConfiguredLinksKeyboardPreferenceAndFocusError() {
         let app = launch(brand: "sony")
         let keyboard = app.buttons["remote-keyboard"]

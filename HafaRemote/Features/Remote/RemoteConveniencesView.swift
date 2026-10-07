@@ -208,7 +208,10 @@ struct RemoteConveniencesView: View {
             .accessibilityIdentifier("\(inFavorites ? "favorite" : "available")App-\(app.name)")
             .disabled(
                 !capabilities.contains(.favoriteApps)
-                    && !apps.contains(where: { $0.target == app.target }))
+                    && !apps.contains(where: { $0.target == app.target })
+                    && !(inFavorites && context.brand == .vizio && app.target.brand == .vizio
+                        && app.target.isValid)
+            )
             Button {
                 do { try preferences.toggleFavorite(app, for: context.stableDeviceKey) } catch {
                     message = "This favorite could not be saved. Keep up to 12 favorites per TV."

@@ -4,6 +4,16 @@ import Testing
 @testable import HafaRemote
 
 struct SamsungProtocolCodecTests {
+    @Test("Samsung app socket write failures retain typed reconnect behavior")
+    func appWriteFailureRecovers() async {
+        await #expect(throws: SamsungConnectionError.unavailable) {
+            try await SamsungCommandTransport.performAppWrite { throw URLError(.networkConnectionLost) }
+        }
+        await #expect(throws: CancellationError.self) {
+            try await SamsungCommandTransport.performAppWrite { throw CancellationError() }
+        }
+    }
+
     @Test("A successful Samsung socket catalog remains usable for launch after query timeout")
     func cachedCatalogSurvivesTimeout() async throws {
         let query = SamsungAppListQuery()

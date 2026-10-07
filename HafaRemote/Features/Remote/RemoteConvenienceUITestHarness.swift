@@ -38,6 +38,11 @@
             // This one explicitly disposable DEBUG fixture domain never touches production defaults.
             defaults.removePersistentDomain(forName: suite)
             preferences = TVConveniencePreferences(defaults: defaults)
+            if brand == .vizio, arguments.contains("-convenience-restored-favorite") {
+                let favorite = try! TVAppShortcut(
+                    name: "Synthetic Saved Video", target: .vizio(appID: "synthetic-video", namespace: 3))
+                try! preferences.toggleFavorite(favorite, for: television.stableDeviceKey)
+            }
         }
 
         var body: some View {

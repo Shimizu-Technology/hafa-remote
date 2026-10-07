@@ -331,7 +331,8 @@ actor RemoteSessionController {
         let requestedGeneration = generation
         let box = TVConvenienceResultBox()
         try await performSend(
-            optionalFeature: !request.changesTVState, recoverCancelledWrite: request.changesTVState,
+            optionalFeature: !request.changesTVState, isConvenienceRequest: true,
+            recoverCancelledWrite: request.changesTVState,
             timeout: .seconds(10)
         ) { [weak self] in
             guard let self else { throw CancellationError() }
@@ -385,6 +386,7 @@ actor RemoteSessionController {
 
     private func performSend(
         optionalFeature: Bool = false,
+        isConvenienceRequest: Bool = false,
         recoverCancelledWrite: Bool = false,
         timeout requestedTimeout: Duration? = nil,
         _ operation: @escaping @Sendable () async throws -> Void
@@ -442,7 +444,8 @@ actor RemoteSessionController {
         } catch {
             commandTasks[commandID] = nil
             if error is TVConvenienceError { throw error }
-            if optionalFeature, error is VizioProtocolError { throw TVConvenienceError.unavailable }
+            // A rejected optional request does not establish that ordinary TV controls are unavailable.
+            if isConvenienceRequest, error is VizioProtocolError { throw TVConvenienceError.unavailable }
             if optionalFeature, let timeout = error as? RemoteSessionControllerError, case .timedOut = timeout
             {
                 throw TVConvenienceError.timedOut
