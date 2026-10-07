@@ -221,7 +221,9 @@ final class HafaRemoteUITests: XCTestCase {
         app.activate()
 
         let recovery = app.descendants(matching: .any)["automaticReconnectStatus"]
-        XCTAssertTrue(recovery.waitForExistence(timeout: 2))
+        // activate() can wait for UI idleness until a quick reconnect finishes.
+        // Verify recovery completes and control returns, rather than requiring
+        // a transient banner to remain visible after activation.
         XCTAssertTrue(recovery.waitForNonExistence(timeout: 10))
         expectation(for: NSPredicate(format: "label == 'Connected'"), evaluatedWith: status)
         waitForExpectations(timeout: 5)
