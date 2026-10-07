@@ -633,7 +633,13 @@ final class HafaRemoteUITests: XCTestCase {
                 restoredStatus.waitForExistence(timeout: 20),
                 "Expected the saved pairing to restore after relaunch."
             )
-            XCTAssertTrue(["Connected", "Connected • TV power unknown"].contains(restoredStatus.label))
+            XCTAssertTrue(
+                ["Connected", "Connected • TV power unknown"].contains(restoredStatus.label),
+                "Expected a restored connected session; protocol power evidence may be unavailable."
+            )
+            let restoredSelect = app.buttons["remote-select"]
+            XCTAssertTrue(restoredSelect.waitForExistence(timeout: 5))
+            XCTAssertTrue(restoredSelect.isEnabled)
         #endif
     }
 

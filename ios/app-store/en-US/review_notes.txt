@@ -1,6 +1,6 @@
 Hafa Remote is an iPhone-only local-network remote. No account or test credentials are required. This candidate is for internal TestFlight household verification; simulator testing does not certify public compatibility or physical-TV acceptance.
 
-Without hardware: from first launch, Help → Try the Remote Offline opens a Release-compatible, explicitly simulated remote and connection/error states. It does not discover, pair, contact a TV, use pairing credentials, or save a real TV.
+Without hardware: from first launch, Help → Try the Remote Offline opens a Release-compatible, explicitly simulated remote for ordinary controls, power, playback, volume, and text. It does not discover, pair, contact a TV, use pairing credentials, or save a real TV.
 
 Live control: connect the iPhone by Wi-Fi and a compatible TV by Wi-Fi or Ethernet to the same non-guest local network. Choose Add TV, allow Local Network access, select the intended TV, and complete its on-TV approval/code. Discovery uses declared Bonjour services and bounded protocol-specific discovery; availability varies. TV not showing up? provides brand-aware manual private-address setup. My TVs manages selection, names, rooms, Add TV, and deliberate Forget TV. Saved identity is checked separately from discovery aliases/cached addresses; ambiguous aliases require explicit selection.
 

@@ -2,7 +2,7 @@ Next internal candidate: household remote, recovery, accessibility, and support 
 
 Compatibility depends on the exact TV, firmware, and local-control service. Live control requires the iPhone and TV on the same non-guest local network. Pair while the TV is on. No account is required.
 
-1. First launch: Help → Try the Remote Offline should work before adding a TV. It stays clearly simulated, without discovery, pairing, network commands, or changes to saved TVs. Try ordinary controls and connection/error states.
+1. First launch: Help → Try the Remote Offline should work before adding a TV. It stays clearly simulated, without discovery, pairing, network commands, or changes to saved TVs. Try ordinary controls, power, playback, volume, and text.
 2. Appearance: check first launch, Add TV, My TVs, Help, and the remote in Light/Dark, Increased Contrast, Reduce Motion, VoiceOver, and the largest Dynamic Type size. Inspect the Warm teal icon on the Home Screen and in Settings. Controls and recovery actions should stay reachable.
 3. Pairing: Add TV, allow Local Network access, select the intended TV, and complete its approval/code. If discovery is unavailable, use TV not showing up? and select the correct brand. An address locates a TV; it must not replace saved identity or authorize another TV.
 4. Saved TVs: rename/set rooms in My TVs, relaunch, then switch TVs at least ten times. Commands and favorites must follow the selection. A delayed command, launch, or wake started for A must not act on B.
