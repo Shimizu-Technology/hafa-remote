@@ -53,14 +53,17 @@ struct RemoteControlView: View {
                     }
                     if capabilities.contains(.navigation) {
                         navigationControls
-                        utilityControls
                     }
                     if capabilities.contains(.volume) || capabilities.contains(.mute) {
                         volumeControls
                     }
+                    if capabilities.contains(.navigation) {
+                        utilityControls
+                    }
                     if capabilities.contains(.playback) {
                         playbackControls
-                    } else if capabilities.contains(.textInput) {
+                    }
+                    if capabilities.contains(.textInput) {
                         textControls
                     }
                 }
@@ -70,6 +73,7 @@ struct RemoteControlView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         }
+        .tint(HafaTheme.accent)
         .navigationTitle("Remote")
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: isConnected) { wasConnected, isConnected in
@@ -143,15 +147,15 @@ struct RemoteControlView: View {
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(tvName)
-                        .font(.title3.weight(.semibold))
+                        .font(.title2.weight(.semibold))
                         .foregroundStyle(HafaTheme.primaryText)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("remoteTVName")
 
                     Text(modelName)
                         .font(.subheadline)
                         .foregroundStyle(HafaTheme.secondaryText)
-                        .lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 8)
@@ -174,7 +178,7 @@ struct RemoteControlView: View {
                     }
                     .frame(width: 46, height: 46)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(RemoteControlButtonStyle(role: offersPowerOff ? .destructive : nil))
                 .tint(offersPowerOff ? .red : HafaTheme.accent)
                 .disabled(
                     isPoweringOnTV || isPoweringOffTV || isAwaitingApproval
@@ -202,12 +206,12 @@ struct RemoteControlView: View {
                     ? "checkmark.circle.fill" : "arrow.trianglehead.2.clockwise.rotate.90"
             )
             .font(.caption.weight(.semibold))
-            .foregroundStyle(isConnected ? HafaTheme.accent : .orange)
+            .foregroundStyle(isConnected ? HafaTheme.accent : HafaTheme.warning)
             .labelStyle(.titleAndIcon)
             .accessibilityIdentifier("remoteConnectionStatus")
         }
         .padding(16)
-        .background(HafaTheme.surface.opacity(0.76), in: RoundedRectangle(cornerRadius: 22))
+        .background(HafaTheme.surface, in: RoundedRectangle(cornerRadius: 24))
     }
 
     private var navigationControls: some View {
@@ -218,6 +222,7 @@ struct RemoteControlView: View {
                 accessibilityLabel: "Navigate up",
                 accessibilityHint: "Moves focus up. Hold to repeat.",
                 isEnabled: canControlTV,
+                size: dynamicTypeSize.isAccessibilitySize ? 64 : 56,
                 repeatsWhileHeld: true,
                 action: action
             )
@@ -229,6 +234,7 @@ struct RemoteControlView: View {
                     accessibilityLabel: "Navigate left",
                     accessibilityHint: "Moves focus left. Hold to repeat.",
                     isEnabled: canControlTV,
+                    size: dynamicTypeSize.isAccessibilitySize ? 64 : 56,
                     repeatsWhileHeld: true,
                     action: action
                 )
@@ -239,7 +245,9 @@ struct RemoteControlView: View {
                     accessibilityLabel: "Select",
                     accessibilityHint: "Activates the focused item.",
                     isEnabled: canControlTV,
-                    size: 76,
+                    size: dynamicTypeSize.isAccessibilitySize ? 76 : 72,
+                    title: "OK",
+                    isPrimary: true,
                     action: action
                 )
 
@@ -249,6 +257,7 @@ struct RemoteControlView: View {
                     accessibilityLabel: "Navigate right",
                     accessibilityHint: "Moves focus right. Hold to repeat.",
                     isEnabled: canControlTV,
+                    size: dynamicTypeSize.isAccessibilitySize ? 64 : 56,
                     repeatsWhileHeld: true,
                     action: action
                 )
@@ -260,12 +269,20 @@ struct RemoteControlView: View {
                 accessibilityLabel: "Navigate down",
                 accessibilityHint: "Moves focus down. Hold to repeat.",
                 isEnabled: canControlTV,
+                size: dynamicTypeSize.isAccessibilitySize ? 64 : 56,
                 repeatsWhileHeld: true,
                 action: action
             )
         }
+        .padding(12)
+        .background(HafaTheme.surface, in: RoundedRectangle(cornerRadius: 28))
+        .overlay {
+            RoundedRectangle(cornerRadius: 28)
+                .strokeBorder(HafaTheme.controlBorder, lineWidth: 1)
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Navigation controls")
+        .accessibilityIdentifier("remoteNavigationGroup")
     }
 
     private var recoveryControls: some View {
@@ -299,7 +316,7 @@ struct RemoteControlView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(HafaTheme.accent)
-                .foregroundStyle(HafaTheme.canvas)
+                .foregroundStyle(HafaTheme.onAccent)
                 .disabled(isPoweringOnTV)
                 .accessibilityIdentifier("retryConnectionButton")
 
@@ -328,7 +345,7 @@ struct RemoteControlView: View {
             .buttonStyle(.bordered)
         }
         .padding(16)
-        .background(HafaTheme.surface.opacity(0.76), in: RoundedRectangle(cornerRadius: 22))
+        .background(HafaTheme.surface, in: RoundedRectangle(cornerRadius: 24))
     }
 
     private var recoveryStatus: some View {
@@ -356,7 +373,7 @@ struct RemoteControlView: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .background(HafaTheme.surface.opacity(0.76), in: RoundedRectangle(cornerRadius: 22))
+        .background(HafaTheme.surface, in: RoundedRectangle(cornerRadius: 24))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             isAwaitingApproval
@@ -387,70 +404,115 @@ struct RemoteControlView: View {
 
     private var volumeControls: some View {
         controlGroup(title: "Volume") {
-            HStack(spacing: 18) {
-                if capabilities.contains(.volume) {
-                    labeledControl(
-                        command: .volumeDown,
-                        systemImage: "speaker.minus.fill",
-                        label: "Down",
-                        hint: "Lowers volume. Hold to repeat.",
-                        accessibilityLabel: "Volume down",
-                        repeats: true
-                    )
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 16) {
+                    if capabilities.contains(.volume) {
+                        accessibleVolumeRow(
+                            .volumeDown, image: "speaker.minus.fill", label: "Down",
+                            accessibilityLabel: "Volume down", hint: "Lowers volume. Hold to repeat.",
+                            repeats: true
+                        )
+                    }
+                    if capabilities.contains(.mute) {
+                        accessibleVolumeRow(
+                            .mute, image: "speaker.slash.fill", label: "Mute",
+                            accessibilityLabel: "Mute", hint: "Toggles mute."
+                        )
+                    }
+                    if capabilities.contains(.volume) {
+                        accessibleVolumeRow(
+                            .volumeUp, image: "speaker.plus.fill", label: "Up",
+                            accessibilityLabel: "Volume up", hint: "Raises volume. Hold to repeat.",
+                            repeats: true
+                        )
+                    }
                 }
-                if capabilities.contains(.mute) {
-                    labeledControl(
-                        command: .mute,
-                        systemImage: "speaker.slash.fill",
-                        label: "Mute",
-                        hint: "Toggles mute."
-                    )
-                }
-                if capabilities.contains(.volume) {
-                    labeledControl(
-                        command: .volumeUp,
-                        systemImage: "speaker.plus.fill",
-                        label: "Up",
-                        hint: "Raises volume. Hold to repeat.",
-                        accessibilityLabel: "Volume up",
-                        repeats: true
-                    )
-                }
+            } else {
+                regularVolumeControls
             }
         }
     }
 
+    private var regularVolumeControls: some View {
+        HStack(spacing: 18) {
+            if capabilities.contains(.volume) {
+                labeledControl(
+                    command: .volumeDown,
+                    systemImage: "speaker.minus.fill",
+                    label: "Down",
+                    hint: "Lowers volume. Hold to repeat.",
+                    accessibilityLabel: "Volume down",
+                    repeats: true
+                )
+            }
+            if capabilities.contains(.mute) {
+                labeledControl(
+                    command: .mute,
+                    systemImage: "speaker.slash.fill",
+                    label: "Mute",
+                    hint: "Toggles mute."
+                )
+            }
+            if capabilities.contains(.volume) {
+                labeledControl(
+                    command: .volumeUp,
+                    systemImage: "speaker.plus.fill",
+                    label: "Up",
+                    hint: "Raises volume. Hold to repeat.",
+                    accessibilityLabel: "Volume up",
+                    repeats: true
+                )
+            }
+        }
+    }
+
+    private func accessibleVolumeRow(
+        _ command: RemoteCommand, image: String, label: String,
+        accessibilityLabel: String, hint: String, repeats: Bool = false
+    ) -> some View {
+        HStack(spacing: 16) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(HafaTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityHidden(true)
+            Spacer(minLength: 8)
+            RemoteControlButton(
+                command: command, systemImage: image,
+                accessibilityLabel: accessibilityLabel, accessibilityHint: hint,
+                isEnabled: canControlTV, size: 96, repeatsWhileHeld: repeats, action: action
+            )
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     private var playbackControls: some View {
-        let includesTextInput = capabilities.contains(.textInput)
-        return controlGroup(title: includesTextInput ? "Playback & Text" : "Playback") {
-            HStack(spacing: includesTextInput ? 8 : 12) {
+        controlGroup(title: "Playback") {
+            HStack(spacing: 8) {
                 compactControl(
                     .rewind,
                     image: "backward.fill",
                     label: "Rewind",
-                    size: includesTextInput ? 52 : 56
+                    size: 52
                 )
                 compactControl(
                     .play,
                     image: "play.fill",
                     label: "Play",
-                    size: includesTextInput ? 52 : 56
+                    size: 52
                 )
                 compactControl(
                     .pause,
                     image: "pause.fill",
                     label: "Pause",
-                    size: includesTextInput ? 52 : 56
+                    size: 52
                 )
                 compactControl(
                     .fastForward,
                     image: "forward.fill",
                     label: "Fast forward",
-                    size: includesTextInput ? 52 : 56
+                    size: 52
                 )
-                if includesTextInput {
-                    keyboardControl
-                }
             }
         }
     }
@@ -460,12 +522,11 @@ struct RemoteControlView: View {
             isShowingKeyboard = true
         } label: {
             Image(systemName: "keyboard")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.title3.weight(.semibold))
                 .frame(width: 52, height: 52)
-                .contentShape(.circle)
+                .contentShape(RoundedRectangle(cornerRadius: 18))
         }
-        .buttonStyle(.bordered)
-        .buttonBorderShape(.circle)
+        .buttonStyle(RemoteControlButtonStyle())
         .tint(HafaTheme.accent)
         .disabled(!canControlTV)
         .accessibilityLabel("Keyboard")
@@ -474,9 +535,20 @@ struct RemoteControlView: View {
     }
 
     private var textControls: some View {
-        controlGroup(title: "Text") {
+        HStack(spacing: 12) {
             keyboardControl
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Keyboard")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(HafaTheme.primaryText)
+                Text("Focus a text field on your TV first.")
+                    .font(.caption)
+                    .foregroundStyle(HafaTheme.secondaryText)
+            }
+            .accessibilityHidden(true)
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 14)
     }
 
     private func controlGroup<Content: View>(
@@ -484,16 +556,15 @@ struct RemoteControlView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(spacing: 12) {
-            Text(title.uppercased())
-                .font(.caption.weight(.semibold))
-                .tracking(1.2)
+            Text(title)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(HafaTheme.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
             content()
                 .frame(maxWidth: .infinity)
         }
         .padding(14)
-        .background(HafaTheme.surface.opacity(0.52), in: RoundedRectangle(cornerRadius: 22))
+        .background(HafaTheme.surface, in: RoundedRectangle(cornerRadius: 24))
     }
 
     private func labeledControl(
@@ -814,6 +885,8 @@ private struct SamsungTextInputSheet: View {
                     .accessibilityIdentifier("sendRemoteTextButton")
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(HafaTheme.canvas)
             .navigationTitle("TV Keyboard")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -828,6 +901,7 @@ private struct SamsungTextInputSheet: View {
                 isTextFieldFocused = true
             }
         }
+        .tint(HafaTheme.accent)
         .presentationDetents([.medium, .large])
         .onChange(of: delivery.result) { _, result in
             guard let result else { return }

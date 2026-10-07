@@ -42,6 +42,60 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertFalse(connectButton.isEnabled)
     }
 
+    /// Help is available before pairing and explains a wired TV on the home network.
+    @MainActor
+    func testFirstLaunchHelpExplainsLocalNetworkAndPairing() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-discovery-result")
+        app.launch()
+
+        let help = app.buttons["homeHelpButton"]
+        XCTAssertTrue(help.waitForExistence(timeout: 5))
+        XCTAssertTrue(help.isHittable)
+        help.tap()
+        XCTAssertTrue(app.navigationBars["Help & About"].waitForExistence(timeout: 2))
+        XCTAssertTrue(
+            app.staticTexts[
+                "Connect this iPhone to home Wi-Fi. Your TV can use Wi-Fi or Ethernet on the same network."
+            ].exists
+        )
+        let sonyGuidance = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "Enter the six-character code shown on the TV.")
+        ).firstMatch
+        for _ in 0..<4 where !sonyGuidance.exists {
+            app.swipeUp()
+        }
+        XCTAssertTrue(sonyGuidance.waitForExistence(timeout: 2))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["addTVButton"].isHittable)
+        app.buttons["addTVButton"].tap()
+        let setupHelp = app.buttons["setupHelpButton"]
+        XCTAssertTrue(setupHelp.waitForExistence(timeout: 2))
+        setupHelp.tap()
+        XCTAssertTrue(app.navigationBars["Help & About"].waitForExistence(timeout: 2))
+    }
+
+    /// The distinct playback controls dispatch independent commands without inferred playback state.
+    @MainActor
+    func testSeparatePlayAndPauseSendTheirOwnCommands() throws {
+        let app = launchRemoteHarness()
+        for command in ["play", "pause"] {
+            let button = app.buttons["remote-\(command)"]
+            XCTAssertTrue(button.waitForExistence(timeout: 2))
+            for _ in 0..<6 where !button.isHittable {
+                app.swipeUp()
+            }
+            XCTAssertGreaterThanOrEqual(button.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+            button.tap()
+            let sent = expectation(
+                for: NSPredicate(format: "label == %@", command),
+                evaluatedWith: app.staticTexts["lastRemoteCommand"]
+            )
+            wait(for: [sent], timeout: 2)
+        }
+    }
+
     /// No-result discovery remains understandable and preserves a manual recovery path.
     @MainActor
     func testDiscoveryNoResultsOffersRetryAndManualFallback() throws {
@@ -181,7 +235,7 @@ final class HafaRemoteUITests: XCTestCase {
 
         codeField.tap()
         codeField.typeText("A1B2C3")
-        XCTAssertTrue(submit.isEnabled)
+        waitForPairingEntry(codeField, value: "A1B2C3", submit: submit)
         submit.tap()
 
         let connectionStatus = app.staticTexts["remoteConnectionStatus"]
@@ -214,7 +268,7 @@ final class HafaRemoteUITests: XCTestCase {
 
         codeField.tap()
         codeField.typeText("1234")
-        XCTAssertTrue(submit.isEnabled)
+        waitForPairingEntry(codeField, value: "1234", submit: submit)
         submit.tap()
 
         let connectionStatus = app.staticTexts["remoteConnectionStatus"]
@@ -249,7 +303,7 @@ final class HafaRemoteUITests: XCTestCase {
 
         let submit = app.buttons["submitVizioPairingCodeButton"]
         XCTAssertTrue(submit.waitForExistence(timeout: 2))
-        XCTAssertTrue(submit.isEnabled)
+        waitForPairingEntry(codeField, value: "0000", submit: submit)
         submit.tap()
 
         let error = app.staticTexts["setupErrorMessage"]
@@ -583,8 +637,13 @@ final class HafaRemoteUITests: XCTestCase {
             for _ in 0..<6 where !button.isHittable {
                 app.swipeUp()
             }
+            for _ in 0..<6 where !button.isHittable {
+                app.swipeDown()
+            }
             XCTAssertTrue(button.isHittable, "Unreachable \(command) control")
             XCTAssertTrue(button.isEnabled, "Disabled \(command) control")
+            XCTAssertGreaterThanOrEqual(button.frame.width, 44, "Narrow \(command) target")
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44, "Short \(command) target")
         }
 
         let select = app.buttons["remote-select"]
@@ -673,6 +732,89 @@ final class HafaRemoteUITests: XCTestCase {
         }
         XCTAssertTrue(keyboard.isHittable)
         XCTAssertTrue(keyboard.isEnabled)
+    }
+
+    /// Large-text volume actions form an aligned column and keep their semantic dispatch.
+    @MainActor
+    func testLargestDynamicTypeVolumeActionsRemainAlignedAndReachable() throws {
+        let app = makeApplication()
+        app.launchArguments += [
+            "-ui-testing-remote",
+            "-UIPreferredContentSizeCategoryName",
+            "UICTContentSizeCategoryAccessibilityXXXL",
+        ]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["currentDynamicTypeSize"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["currentDynamicTypeSize"].label, "accessibility5")
+        var columnX: CGFloat?
+        for command in ["volumeDown", "mute", "volumeUp"] {
+            let button = app.buttons["remote-\(command)"]
+            XCTAssertTrue(button.waitForExistence(timeout: 2))
+            for _ in 0..<12 {
+                let top = app.navigationBars.firstMatch.frame.maxY + 8
+                let bottom = app.frame.maxY - 8
+                if button.isHittable && button.frame.minY >= top && button.frame.maxY <= bottom {
+                    break
+                }
+                // Short bidirectional pans avoid skipping a tall accessibility row.
+                let desiredCenter = (top + bottom) / 2
+                let movement = min(180, max(-180, button.frame.midY - desiredCenter))
+                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.6))
+                let end = app.coordinate(
+                    withNormalizedOffset: CGVector(
+                        dx: 0.1, dy: 0.6 - movement / app.frame.height
+                    ))
+                start.press(
+                    forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.25)
+            }
+            if !button.isHittable {
+                let blocked = XCTAttachment(screenshot: app.screenshot())
+                blocked.name = "Unreachable large-type \(command)"
+                blocked.lifetime = .keepAlways
+                add(blocked)
+            }
+            XCTAssertTrue(button.isHittable)
+            XCTAssertGreaterThanOrEqual(button.frame.width, 44)
+            XCTAssertGreaterThanOrEqual(button.frame.height, 44)
+            XCTAssertGreaterThanOrEqual(button.frame.minX, app.frame.minX)
+            XCTAssertLessThanOrEqual(button.frame.maxX, app.frame.maxX)
+            if let columnX {
+                XCTAssertEqual(button.frame.midX, columnX, accuracy: 1)
+            } else {
+                columnX = button.frame.midX
+            }
+            button.tap()
+            let dispatched = expectation(
+                for: NSPredicate(format: "label == %@", command),
+                evaluatedWith: app.staticTexts["lastRemoteCommand"]
+            )
+            wait(for: [dispatched], timeout: 2)
+        }
+        // Place the complete group below the native bar for inspectable visual evidence.
+        let down = app.buttons["remote-volumeDown"]
+        let up = app.buttons["remote-volumeUp"]
+        // An offscreen heading can have a clipped frame; anchor on the actual action target.
+        let desiredDownY = app.navigationBars.firstMatch.frame.maxY + down.frame.height + 24
+        let delta = desiredDownY - down.frame.minY
+        if abs(delta) > 1 {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
+            let endY = min(0.9, max(0.1, 0.5 + delta / app.frame.height))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: endY))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.25)
+        }
+        for _ in 0..<4 where down.frame.minY < app.navigationBars.firstMatch.frame.maxY + 8 {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.45))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.52))
+            start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.25)
+        }
+        XCTAssertTrue(down.isHittable)
+        XCTAssertTrue(up.isHittable)
+        XCTAssertGreaterThanOrEqual(down.frame.minY, app.navigationBars.firstMatch.frame.maxY)
+        XCTAssertLessThanOrEqual(up.frame.maxY, app.frame.maxY)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Largest Dynamic Type aligned volume rows"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     /// Text entry uses the native keyboard and never claims the TV inserted the text.
@@ -813,6 +955,18 @@ final class HafaRemoteUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments.append("-ui-testing-in-memory-store")
         return app
+    }
+
+    /// Waits for the validated text and its corresponding asynchronous accessibility state.
+    @MainActor
+    private func waitForPairingEntry(_ field: XCUIElement, value: String, submit: XCUIElement) {
+        let enteredValue = expectation(
+            for: NSPredicate(format: "value == %@", value), evaluatedWith: field)
+        let enabledSubmit = expectation(
+            for: NSPredicate(format: "enabled == true"), evaluatedWith: submit)
+        wait(for: [enteredValue, enabledSubmit], timeout: 2)
+        XCTAssertEqual(field.value as? String, value)
+        XCTAssertTrue(submit.isEnabled)
     }
 
     /// Replaces a text field's full value through the same edit menu available to users.

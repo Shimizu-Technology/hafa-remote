@@ -16,6 +16,7 @@ struct TVSetupView: View {
     @State private var selectedBrand: TVBrand?
     @State private var selectedTarget: TVConnectionTarget?
     @State private var isShowingManualSetup = false
+    @State private var isShowingHelp = false
     @State private var isForgettingPairing = false
     @State private var connectionTaskID: UUID?
     @State private var connectionTask: Task<Void, Never>?
@@ -57,9 +58,19 @@ struct TVSetupView: View {
                 connectionStatusSection
                 if !requiresSavedTVManagement { manualSetupSection }
             }
+            .scrollContentBackground(.hidden)
+            .background(HafaTheme.canvas)
+            .tint(HafaTheme.accent)
             .navigationTitle("Add TV")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Help", systemImage: "questionmark.circle") {
+                        isShowingHelp = true
+                    }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .accessibilityIdentifier("setupHelpButton")
+                }
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         dismiss()
@@ -88,6 +99,9 @@ struct TVSetupView: View {
                 Text(
                     "More than one saved TV matches this discovery name. Choose the TV you intend to control. Its saved security identity will still be checked."
                 )
+            }
+            .sheet(isPresented: $isShowingHelp) {
+                HafaRemoteHelpView()
             }
             .task {
                 discovery.start()
@@ -138,6 +152,7 @@ struct TVSetupView: View {
                 }
             }
         }
+        .tint(HafaTheme.accent)
     }
 
     @ViewBuilder
@@ -154,10 +169,12 @@ struct TVSetupView: View {
                     VStack(spacing: 6) {
                         Text("Looking for TVs…")
                             .font(.headline)
-                        Text("Keep your TV on and connected to the same home Wi-Fi as this iPhone.")
-                            .font(.subheadline)
-                            .foregroundStyle(HafaTheme.secondaryText)
-                            .multilineTextAlignment(.center)
+                        Text(
+                            "Keep your TV on and on the same home network. This iPhone uses Wi-Fi; your TV can use Wi-Fi or Ethernet."
+                        )
+                        .font(.subheadline)
+                        .foregroundStyle(HafaTheme.secondaryText)
+                        .multilineTextAlignment(.center)
                     }
 
                     ProgressView()
@@ -225,16 +242,18 @@ struct TVSetupView: View {
                     Label("No supported TVs found", systemImage: "tv.slash")
                         .font(.headline)
 
-                    Text("Check that the TV is on and that neither device is using a guest Wi-Fi network.")
-                        .font(.subheadline)
-                        .foregroundStyle(HafaTheme.secondaryText)
+                    Text(
+                        "No compatible TV responded. Check that the TV is on, on the same home network, and not isolated by guest Wi-Fi."
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(HafaTheme.secondaryText)
 
                     Button("Scan Again", systemImage: "arrow.clockwise") {
                         discovery.start()
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(HafaTheme.accent)
-                    .foregroundStyle(HafaTheme.canvas)
+                    .foregroundStyle(HafaTheme.onAccent)
                     .accessibilityIdentifier("scanAgainButton")
                 }
                 .padding(.vertical, 8)
@@ -258,7 +277,7 @@ struct TVSetupView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(HafaTheme.accent)
-                    .foregroundStyle(HafaTheme.canvas)
+                    .foregroundStyle(HafaTheme.onAccent)
                 }
                 .padding(.vertical, 8)
             }
@@ -311,7 +330,7 @@ struct TVSetupView: View {
             }
         case .offline:
             connectionErrorSection(
-                "The TV is unavailable. Make sure it is on and connected to the same Wi-Fi.")
+                "The TV did not respond. Make sure it is on and connected to the same home network.")
         case .denied:
             connectionErrorSection(pairingDeniedMessage)
         case .savedPairingRejected:
@@ -355,7 +374,7 @@ struct TVSetupView: View {
             if isShowingManualSetup {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(
-                        "As a troubleshooting fallback, enter the private TV address shown under Settings › Network › Network Status › IP Settings."
+                        "For a Samsung TV, enter the private address from Settings › Network › Network Status › IP Settings. Sony and Vizio use nearby discovery and their own pairing codes."
                     )
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -530,7 +549,7 @@ struct TVSetupView: View {
         Section {
             VStack(alignment: .leading, spacing: 12) {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(HafaTheme.warning)
                     .accessibilityIdentifier("setupErrorMessage")
 
                 if requiresSavedTVManagement {
