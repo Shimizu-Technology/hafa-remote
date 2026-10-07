@@ -23,7 +23,8 @@ case "$command_name" in
       -destination "generic/platform=iOS" \
       -archivePath "$archive_path" \
       -allowProvisioningUpdates \
-      archive
+      archive \
+      "CC=$repo_root/scripts/xcode-clang-probe.sh"
     ./scripts/ios-release-preflight.sh --archive "$archive_path"
     echo "Validated archive: $archive_path"
     ;;

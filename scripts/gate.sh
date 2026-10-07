@@ -14,6 +14,7 @@ xcrun swift-format lint --strict --recursive HafaRemote HafaRemoteControls HafaR
 echo "Checking release configuration"
 ./scripts/test-ios-release-preflight.sh
 ./scripts/ios-release-preflight.sh
+./scripts/test-xcode-clang-probe.sh
 
 if [[ "$(uname -s)" != "Darwin" ]] || ! command -v xcodebuild >/dev/null 2>&1; then
   echo "Xcode is required to run the Hafa Remote gate." >&2
@@ -73,9 +74,12 @@ xcodebuild \
   -skip-testing:HafaRemoteUITests/HafaRemoteUITests/testHardwareDiscoveryFindsSamsungTV \
   -quiet \
   test \
-  CODE_SIGNING_ALLOWED=NO
+  CODE_SIGNING_ALLOWED=YES \
+  CODE_SIGN_IDENTITY=- \
+  "CC=$repo_root/scripts/xcode-clang-probe.sh"
 
 app_path="$derived_data/Build/Products/Debug-iphonesimulator/Hafa Remote.app"
+codesign --verify --deep --strict "$app_path"
 bundle_id="$(plutil -extract CFBundleIdentifier raw "$app_path/Info.plist")"
 if [[ "$bundle_id" != "com.shimizutechnology.hafaremote" ]]; then
   echo "Unexpected app bundle identifier: $bundle_id" >&2

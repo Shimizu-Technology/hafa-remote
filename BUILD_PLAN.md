@@ -2,9 +2,9 @@
 ## Build Plan
 
 **Version:** 0.2
-**Last updated:** September 13, 2026
+**Last updated:** October 7, 2026
 **Current status:** Build 7 packages the Control Center launcher, capability-driven remote, adaptive appearance, and in-app help for internal TestFlight after build 6 was already present in App Store Connect
-**Current execution frontier:** Validate and upload internal build 7, then test the system control, accessibility settings, and existing remote regressions on Leon's iPhone and exact household TVs
+**Current execution frontier:** Implement HR-041 through HR-048 in the [approved readiness plan](docs/APP-STORE-READINESS-PLAN.md), then upload the next unused internal TestFlight build for Leon's phone and exact-household-TV acceptance. Historical build 7 evidence does not certify this new release.
 
 ## Delivery targets
 
