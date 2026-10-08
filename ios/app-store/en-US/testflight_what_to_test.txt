@@ -1,4 +1,4 @@
-Next internal candidate: household remote, recovery, accessibility, and support checks
+Build 8 internal candidate: household remote, recovery, accessibility, and support checks
 
 Compatibility depends on the exact TV, firmware, and local-control service. Live control requires the iPhone and TV on the same non-guest local network. Pair while the TV is on. No account is required.
 

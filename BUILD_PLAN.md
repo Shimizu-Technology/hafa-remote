@@ -3,8 +3,8 @@
 
 **Version:** 0.2
 **Last updated:** October 7, 2026
-**Current status:** Build 7 packages the Control Center launcher, capability-driven remote, adaptive appearance, and in-app help for internal TestFlight after build 6 was already present in App Store Connect
-**Current execution frontier:** Complete HR-041 through HR-047 and their acceptance criteria in the [approved readiness plan](docs/APP-STORE-READINESS-PLAN.md) before starting HR-048. HR-048 verifies the next unused build number, a passing gate on the exact merged release commit, signed archive and IPA preflight, successful TestFlight processing, and owner access for the specified phone and exact-household-TV acceptance journeys. Historical build 7 evidence does not certify this new release.
+**Current status:** HR-041 through HR-047 are merged; HR-048 prepares version 1.0 build 8 after authenticated App Store Connect records confirmed builds 1–7 already used. Current archive/upload/processing evidence remains required.
+**Current execution frontier:** Complete HR-048 on the exact reviewed merge commit: canonical gate, signed archive and IPA preflight, actual internal-only upload, successful processing and Leon’s existing internal access. Build 8 was verified unused through the existing authorized API credential; historical build 7 evidence does not certify this candidate.
 
 ## Delivery targets
 
