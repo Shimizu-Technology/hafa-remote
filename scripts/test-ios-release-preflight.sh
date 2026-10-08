@@ -50,6 +50,32 @@ privacy_tmp="$(mktemp -d "${TMPDIR:-/tmp}/hafa-privacy-fixtures.XXXXXX")"
 cleanup() { rm -rf -- "$privacy_tmp"; }
 trap cleanup EXIT
 
+export_validator="$repo_root/scripts/validate-export-options.sh"
+valid_export="$repo_root/ios/app-store/ExportOptions.plist"
+"$export_validator" "$valid_export" export
+upload_options="$privacy_tmp/upload-options.plist"
+cp "$valid_export" "$upload_options"
+plutil -replace destination -string upload "$upload_options"
+"$export_validator" "$upload_options" upload
+for mutation in internal-false internal-string internal-missing manage-build destination team method signing; do
+  unsafe_options="$privacy_tmp/unsafe-options.plist"
+  cp "$valid_export" "$unsafe_options"
+  case "$mutation" in
+    internal-false) plutil -replace testFlightInternalTestingOnly -bool false "$unsafe_options" ;;
+    internal-string) plutil -replace testFlightInternalTestingOnly -string true "$unsafe_options" ;;
+    internal-missing) plutil -remove testFlightInternalTestingOnly "$unsafe_options" ;;
+    manage-build) plutil -replace manageAppVersionAndBuildNumber -bool true "$unsafe_options" ;;
+    destination) plutil -replace destination -string upload "$unsafe_options" ;;
+    team) plutil -replace teamID -string SYNTHETIC_OTHER_TEAM "$unsafe_options" ;;
+    method) plutil -replace method -string development "$unsafe_options" ;;
+    signing) plutil -replace signingStyle -string manual "$unsafe_options" ;;
+  esac
+  if "$export_validator" "$unsafe_options" export >/dev/null 2>&1; then
+    echo "Unsafe release option was accepted: $mutation." >&2
+    exit 1
+  fi
+done
+
 valid_privacy="$repo_root/HafaRemote/Resources/PrivacyInfo.xcprivacy"
 "$privacy_validator" "$valid_privacy"
 

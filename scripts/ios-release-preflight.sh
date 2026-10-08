@@ -104,7 +104,7 @@ assert_setting PRODUCT_NAME "Hafa Remote"
 assert_setting PRODUCT_MODULE_NAME HafaRemote
 assert_setting DEVELOPMENT_TEAM 4T358A5S74
 assert_setting MARKETING_VERSION 1.0
-assert_setting CURRENT_PROJECT_VERSION 7
+assert_setting CURRENT_PROJECT_VERSION 8
 assert_setting IPHONEOS_DEPLOYMENT_TARGET 18.4
 assert_setting TARGETED_DEVICE_FAMILY 1
 assert_setting CODE_SIGN_STYLE Automatic
@@ -129,7 +129,7 @@ assert_control_setting() {
 
 assert_control_setting PRODUCT_BUNDLE_IDENTIFIER com.shimizutechnology.hafaremote.controls
 assert_control_setting MARKETING_VERSION 1.0
-assert_control_setting CURRENT_PROJECT_VERSION 7
+assert_control_setting CURRENT_PROJECT_VERSION 8
 assert_control_setting IPHONEOS_DEPLOYMENT_TARGET 18.4
 assert_control_setting TARGETED_DEVICE_FAMILY 1
 assert_control_setting APPLICATION_EXTENSION_API_ONLY YES
@@ -198,18 +198,7 @@ if [[ "$(sips -g hasAlpha "$app_icon" 2>/dev/null | awk '/hasAlpha/ { print $2 }
   exit 1
 fi
 
-if [[ "$(plutil -extract method raw "$export_options")" != "app-store-connect" ]]; then
-  echo "Export method must be app-store-connect." >&2
-  exit 1
-fi
-if [[ "$(plutil -extract teamID raw "$export_options")" != "4T358A5S74" ]]; then
-  echo "Export options use the wrong Apple team." >&2
-  exit 1
-fi
-if [[ "$(plutil -extract manageAppVersionAndBuildNumber raw -expect bool "$export_options")" != "false" ]]; then
-  echo "Release export must not silently change the reviewed build number." >&2
-  exit 1
-fi
+"$repo_root/scripts/validate-export-options.sh" "$export_options" export
 
 METADATA_PATH="$metadata_path" ruby <<'RUBY'
 require "uri"

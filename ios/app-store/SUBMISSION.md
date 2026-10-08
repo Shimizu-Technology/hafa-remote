@@ -3,7 +3,7 @@
 ## Release identity
 
 - Version: `1.0`
-- Source build: `7`; HR-048 must verify the next available App Store Connect build number before changing or uploading it.
+- Source build: `8`; authenticated App Store Connect build and upload inventories confirmed version 1.0 builds 1–7 already used. Recheck immediately before upload.
 - App Store Connect Apple ID: `6808899369`
 - SKU: `hafa-remote-ios`
 - Bundle ID: `com.shimizutechnology.hafaremote`
@@ -61,11 +61,14 @@ and [Manage app privacy](https://developer.apple.com/help/app-store-connect/mana
 4. Validate it with `./scripts/ios-release-preflight.sh --archive <path>`.
 5. Export with `./scripts/ios-release.sh export <archive-path>`.
 6. Validate the export with both `--archive` and `--export`.
-7. Verify the App Store Connect record and next unused build number; build `7`
-   remains the source value until HR-048 verifies availability. Match the app and
-   extension build numbers and revalidate any changed artifact.
-8. Upload the exact validated build, wait for processing, answer export
-   compliance, and add the owner as an internal tester.
+7. Recheck that build `8` is still unused in the correct App Store Connect record
+   and that only Leon receives internal builds. Match both app and extension
+   identities/build numbers to the reviewed commit and validated artifacts.
+8. Upload the same validated archive with `./scripts/ios-release.sh upload <archive-path> <validated-export-path> <upload-output-path>`.
+   Xcode packages it with the reviewed build number and TestFlight Internal Only
+   option; its receipt is separate from the earlier local IPA hash. Wait for
+   processing, verify export compliance, and confirm the processed build is
+   available to Leon through his existing internal group without new invitations.
 
 ## Public-review gates
 
@@ -90,3 +93,13 @@ complete:
 
 Hafa Remote must be described as independent and unaffiliated. Never claim universal brand or
 power-on support without device evidence.
+
+## Build 8 delivery safeguards
+
+The existing internal group has one tester, Leon, and no external group. Verify
+that scope again before upload. Export and upload options enforce the Apple team,
+automatic signing, internal-only distribution and unchanged build numbering.
+Optional existing API authentication uses `HAFA_ASC_KEY_PATH`, `HAFA_ASC_KEY_ID`
+and `HAFA_ASC_ISSUER_ID` together. Keep key files private outside this repository;
+never commit or print keys or JWTs. Archive/export is not an upload receipt, and
+an upload is not proof of successful processing or owner availability.
