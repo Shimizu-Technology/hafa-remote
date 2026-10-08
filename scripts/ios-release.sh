@@ -24,10 +24,6 @@ if [[ "$audience" == public ]]; then
   scheme="HafaRemotePublic"
   export_options="ios/app-store/PublicExportOptions.plist"
 fi
-if [[ "$audience" == public && "${1:-}" == upload ]]; then
-  echo "Public upload is closed until HR-051's release evidence and decision are complete." >&2
-  exit 1
-fi
 
 authentication_args=()
 if [[ -n "${HAFA_ASC_KEY_PATH:-}${HAFA_ASC_KEY_ID:-}${HAFA_ASC_ISSUER_ID:-}" ]]; then
@@ -81,14 +77,23 @@ case "$command_name" in
     archive_path="${2:-}"
     export_path="${3:-}"
     [[ -n "$archive_path" && -n "$export_path" ]] || usage
-    upload_path="${4:-$repo_root/build/InternalUpload}"
+    default_upload_path="$repo_root/build/InternalUpload"
+    if [[ "$audience" == public ]]; then default_upload_path="$repo_root/build/PublicUpload"; fi
+    upload_path="${4:-$default_upload_path}"
+    if [[ "$audience" == public ]]; then
+      [[ -f "${HAFA_PUBLIC_RELEASE_EVIDENCE:-}" ]] || { echo "Public upload requires actual verified release evidence; preparation alone is insufficient." >&2; exit 1; }
+      git diff --quiet && git diff --cached --quiet || { echo "Public upload source must be tracked clean." >&2; exit 1; }
+    fi
     ./scripts/ios-release-preflight.sh --audience "$audience" --archive "$archive_path" --export "$export_path"
+    if [[ "$audience" == public ]]; then
+      ./scripts/validate-public-upload-readiness.sh "$HAFA_PUBLIC_RELEASE_EVIDENCE" "$export_path" "$archive_path"
+    fi
     mkdir -p "$upload_path"
     upload_options="$upload_path/UploadOptions.plist"
     cp "$export_options" "$upload_options"
     plutil -replace destination -string upload "$upload_options"
     ./scripts/validate-export-options.sh "$upload_options" upload "$audience"
-    # Xcode packages the same validated archive, preserving its build and internal-only audience.
+    # Xcode packages the same validated archive, preserving its build and explicitly selected audience.
     # Its delivery receipt is separate from the earlier local IPA's hash.
     xcodebuild \
       -exportArchive \
@@ -97,7 +102,7 @@ case "$command_name" in
       -exportOptionsPlist "$upload_options" \
       -allowProvisioningUpdates \
       ${authentication_args[@]+"${authentication_args[@]}"}
-    echo "Xcode upload completed; verify Apple processing and owner availability separately."
+    echo "Xcode upload completed; verify Apple processing and the selected audience separately."
     ;;
   *)
     usage

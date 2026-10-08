@@ -3,7 +3,7 @@
 ## Identity and audiences
 
 - Version: `1.0`; app and embedded control extension share the reviewed build number.
-- Source build: `8`, already delivered as **Internal Only** TestFlight. It is used, not an unused public candidate.
+- Source build: `9`, selected after authenticated builds/uploads at 2026-10-08T23:29:00Z showed only 1–8. This is a source candidate, not an upload/processing receipt. Existing `8` is already used and delivered as **Internal Only** TestFlight.
 - Public candidate: HR-051 selects the next number only after a fresh authenticated build **and upload** inventory check. An earlier observation that `9` was unused is not a reservation or current proof.
 - App Store Connect Apple ID: `6808899369`; SKU: `hafa-remote-ios`.
 - App bundle ID: `com.shimizutechnology.hafaremote`; control extension: `com.shimizutechnology.hafaremote.controls`.
@@ -42,7 +42,7 @@ The owner selected retained voluntary support reports with a defined retention p
 3. Update the app, extension and preflight together. Pass the complete current-commit gate, affected native QA, current CodeRabbit coverage and hosted CI; resolve material findings and merge the release ticket.
 4. Recheck the exact merged release source and audience. Use `./scripts/ios-release-preflight.sh --audience public`, then `./scripts/ios-release.sh --audience public archive <archive-path>`. Automatic signing must actually be attempted with the existing authorized account; absence of a local certificate alone is not a proven blocker.
 5. Validate the archive with `--audience public --archive <archive-path>`, export with `--audience public export`, then validate the exact archive and export together. Match bundle/build/team, signatures, entitlements, privacy declarations, public audience and experimental exclusion. App Store packaging must not have Internal Only enabled.
-6. After HR-051 explicitly satisfies the recorded eligibility conditions, upload the same validated archive/export through native tools. Public upload remains closed in HR-050; neither owner authorization alone nor a flavor switch is an artifact receipt.
+6. After HR-051 explicitly satisfies the recorded eligibility conditions, upload the same validated archive/export through native tools. HR-051 requires the private factual receipt described in [the delivery record](../../docs/HR-051-SAMSUNG-PUBLIC-DELIVERY.md), exact source/export binding, live policy and published matching privacy label. Neither owner authorization alone nor a flavor switch is an artifact receipt.
 7. Wait for processing and verify the current build is valid and App Store eligible. Complete the selected-build, localized packet/screenshots, privacy, age, rights, contact, territories and export-compliance fields. Keep release manual after approval.
 8. Submit the exact selected processed build only when those facts are verified. Retain the actual submission receipt/state; an upload, screenshot save or success-looking API request does not prove review submission or approval. Respond to any review request/rejection with a focused evidence-backed task.
 
