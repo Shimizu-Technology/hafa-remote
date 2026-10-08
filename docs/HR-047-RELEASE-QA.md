@@ -1,9 +1,11 @@
 # HR-047 internal-candidate release preparation
 
-The metadata prepares the final integrated HR-042 through HR-047 candidate.
-The icon/documentation branch is based on HR-042 `c6c6b15`; HR-045/046 behavior was
-checked read-only in their completed source branches. Integration and validation
-of the final binary remain with the release owner. Build numbers stay at 7 until
+The three icon/metadata commits are integrated onto actual HR-046 squash
+`1e6898c891475a7120cca5be9e5029007f19d399`, which includes HR-041 through HR-046.
+The ticket also applies the approved semantic text, canvas and concrete row surfaces
+to More Controls. Full current-head gate, native Release QA, review and hosted CI
+are required before merge; their final evidence will be recorded on the ticket PR.
+Build numbers stay at 7 until
 HR-048 checks App Store Connect. No upload, metadata publication, or website
 change is performed by this ticket.
 
@@ -63,8 +65,9 @@ and [Manage app privacy](https://developer.apple.com/help/app-store-connect/mana
 
 ## Test tooling
 
-The canonical gate now passes `-collect-test-diagnostics never` to xcodebuild,
-which the installed Xcode documents as suppressing verbose diagnostic collection.
+The canonical gate retains the `-collect-test-diagnostics never` flag introduced by
+HR-045, with exactly one copy after integration. The installed Xcode documents it
+as suppressing verbose diagnostic collection.
 It avoids the previously observed sysdiagnose stall and incidental host-log
 collection. Test assertions, ordinary activity/results, and retained screenshot
 attachments remain. No new test skip is added. The existing physical discovery
@@ -76,7 +79,7 @@ Connected • TV power unknown label; standby still fails the enabled-control ch
 Physical execution of that discovery test and final integrated gate/review remain
 pending. Simulator compilation does not certify household hardware acceptance.
 
-## Local evidence
+## Historical preparation evidence
 
 - Signed simulator build-for-testing passed on owned iPhone 16 Pro, iOS 18.5;
   bundle seal verification passed. Build log and DerivedData are preserved under

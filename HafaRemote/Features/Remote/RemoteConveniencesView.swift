@@ -38,24 +38,33 @@ struct RemoteConveniencesView: View {
     var body: some View {
         Form {
             if !isConnected {
-                Section { Label("Reconnect to use these controls.", systemImage: "wifi.exclamationmark") }
+                Section {
+                    Label("Reconnect to use these controls.", systemImage: "wifi.exclamationmark")
+                        .foregroundStyle(HafaTheme.secondaryText)
+                        .listRowBackground(HafaTheme.surface)
+                }
             }
             if capabilities.contains(.sourceMenu) {
-                Section("Inputs") {
+                Section {
                     commandButton(.inputSource, name: "Open TV Inputs", symbol: "rectangle.on.rectangle")
                     if capabilities.contains(.inputSelection) || context.brand == .vizio {
                         ForEach(inputs) { input in
                             Button(input.name) { perform(.selectInput(input)) }
                                 .frame(minHeight: 44)
                                 .accessibilityIdentifier("convenienceInput-\(input.value)")
+                                .listRowBackground(HafaTheme.surface)
                         }
                         Button("Refresh Inputs", systemImage: "arrow.clockwise") { perform(.inputs) }
                             .frame(minHeight: 44)
+                            .listRowBackground(HafaTheme.surface)
                     }
+                } header: {
+                    Text("Inputs")
+                        .foregroundStyle(HafaTheme.secondaryText)
                 }
             }
             if capabilities.contains(.channels) {
-                Section("Channels") {
+                Section {
                     commandButton(.channelUp, name: "Channel Up", symbol: "plus")
                     commandButton(.channelDown, name: "Channel Down", symbol: "minus")
                     if capabilities.contains(.guide) {
@@ -77,7 +86,11 @@ struct RemoteConveniencesView: View {
                                 .accessibilityIdentifier("convenience-\(command.rawValue)")
                             }
                         }
+                        .listRowBackground(HafaTheme.surface)
                     }
+                } header: {
+                    Text("Channels")
+                        .foregroundStyle(HafaTheme.secondaryText)
                 }
             }
             if capabilities.contains(.favoriteApps) || context.brand == .samsung || context.brand == .vizio {
@@ -86,23 +99,28 @@ struct RemoteConveniencesView: View {
                         appRow(app, favorited: true, inFavorites: true)
                     }
                     if preferences.favorites(for: context.stableDeviceKey).isEmpty {
-                        Text("Choose a favorite below for this TV.").foregroundStyle(.secondary)
+                        Text("Choose a favorite below for this TV.").foregroundStyle(HafaTheme.secondaryText)
+                            .listRowBackground(HafaTheme.surface)
                     }
                 } header: {
                     Text("Favorite Apps")
+                        .foregroundStyle(HafaTheme.secondaryText)
                 } footer: {
                     Text(
                         "Favorites stay on this phone and belong to this TV. A sent launch request does not confirm that the app opened."
                     )
+                    .foregroundStyle(HafaTheme.secondaryText)
                 }
                 if context.brand == .vizio {
                     Section {
                         Button("Save Current TV App", systemImage: "star") { perform(.currentApp) }
                             .frame(minHeight: 44)
+                            .listRowBackground(HafaTheme.surface)
                     } footer: {
                         Text(
                             "Open an app on the TV first, then save its launch configuration. Apps requiring a media or casting payload cannot be saved."
                         )
+                        .foregroundStyle(HafaTheme.secondaryText)
                     }
                 } else {
                     Section {
@@ -114,14 +132,17 @@ struct RemoteConveniencesView: View {
                         }
                         Button("Refresh Apps", systemImage: "arrow.clockwise") { perform(.apps) }
                             .frame(minHeight: 44)
+                            .listRowBackground(HafaTheme.surface)
                     } header: {
                         Text(context.brand == .sony ? "Configured App Links" : "Apps Reported by TV")
+                            .foregroundStyle(HafaTheme.secondaryText)
                     } footer: {
                         Text(
                             context.brand == .sony
                                 ? "These links are not an installed-app inventory. Test each on your TV before saving it as a favorite."
                                 : "Some Samsung TVs do not provide an app list. Ordinary remote controls remain available."
                         )
+                        .foregroundStyle(HafaTheme.secondaryText)
                     }
                 }
             }
@@ -135,20 +156,33 @@ struct RemoteConveniencesView: View {
                         )
                     )
                     .accessibilityIdentifier("remoteKeyboardPreference")
+                    .listRowBackground(HafaTheme.surface)
                 } footer: {
                     Text(
                         "Turn off if the TV's onscreen keyboard becomes unavailable. Text requires a newly focused TV field and current protocol counters."
                     )
+                    .foregroundStyle(HafaTheme.secondaryText)
                 }
             }
-            if job != nil { Section { ProgressView("Requesting from TV…") } }
+            if job != nil {
+                Section {
+                    ProgressView("Requesting from TV…")
+                        .foregroundStyle(HafaTheme.secondaryText)
+                        .listRowBackground(HafaTheme.surface)
+                }
+            }
             if let message {
                 Section {
-                    Text(message).foregroundStyle(.secondary).accessibilityIdentifier("convenienceResult")
+                    Text(message).foregroundStyle(HafaTheme.secondaryText).accessibilityIdentifier(
+                        "convenienceResult"
+                    )
+                    .listRowBackground(HafaTheme.surface)
                 }
             }
         }
         .disabled(!isConnected || job != nil)
+        .scrollContentBackground(.hidden)
+        .background(HafaTheme.canvas)
         .navigationTitle("More Controls")
         .tint(HafaTheme.accent)
         .task(id: context.stableDeviceKey) {
@@ -192,6 +226,7 @@ struct RemoteConveniencesView: View {
         Button(name, systemImage: symbol) { sendCommand(command) }
             .frame(minHeight: 44)
             .accessibilityIdentifier("convenience-\(command.rawValue)")
+            .listRowBackground(HafaTheme.surface)
     }
 
     private func appRow(_ app: TVAppShortcut, favorited: Bool, inFavorites: Bool = false) -> some View {
@@ -224,6 +259,7 @@ struct RemoteConveniencesView: View {
             .accessibilityLabel("\(favorited ? "Remove" : "Save") \(app.name) favorite")
             .accessibilityIdentifier("toggleFavorite-\(inFavorites ? "favorite" : "available")-\(app.name)")
         }
+        .listRowBackground(HafaTheme.surface)
     }
 
     private func sendCommand(_ command: RemoteCommand) {
