@@ -450,6 +450,6 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Immediate next action
 
-Complete HR-041 through HR-047 and their acceptance criteria in the [approved readiness plan](docs/APP-STORE-READINESS-PLAN.md). Then finish the current-head review and merge the release changes. For HR-048, verify the next unused build number and a passing gate on the exact merged release commit; create and preflight the signed archive and exported IPA; upload that artifact to internal TestFlight and confirm processing and owner access. The phone acceptance journeys are recorded in `ios/app-store/en-US/testflight_what_to_test.txt`.
+HR-041 through HR-047 are merged. Finish HR-048 build 8 current-head review, canonical gate and CI, then merge when ready. Gate the exact merged release commit; create and preflight its signed archive and exported IPA. Recheck that build 8 is unused and Leon is the only internal recipient, upload with TestFlight Internal Only enforced, then verify Apple processing and existing owner access. The phone acceptance journeys are recorded in `ios/app-store/en-US/testflight_what_to_test.txt`.
 
 Historical build 7 evidence: release commit `0c5255f126ae94a00f8de6cc13bffd663b989a3e` passed the local gate (294 tests / 312 executions, 0 failures, 0 skips) and hosted iOS CI. This does not certify the October release.
