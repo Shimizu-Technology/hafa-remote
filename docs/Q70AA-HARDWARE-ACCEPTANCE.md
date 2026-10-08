@@ -106,3 +106,9 @@ simulator on the same LAN or a connected iPhone.
 - Open P0/P1 defects:
 - Go is allowed only when every required check passes, physical evidence is complete, and Open P0/P1 defects is `None`.
 - Tester:
+
+## October 9 owner report and initial public scope
+
+Leon confirmed testing Hafa Remote **1.0 (8) on Samsung Q70AA** and reported that almost all Samsung controls worked. Firmware, the exact unconfirmed controls, command totals, reconnect timing and repeated wake results were not supplied. This is an owner report about the internal build tested; it is not physical acceptance of a later public artifact. The earlier per-flow checklist and September measurements above are not silently marked complete or transferred to build 8.
+
+Leon also explicitly directed the Samsung App Store submission. The narrower initial-release acceptance and remaining evidence limits are recorded in [HR-050's decision](HR-050-SAMSUNG-SUBMISSION-DECISION.md). No universal model support, 500-command/99% delivery result, twenty-cycle result or guaranteed wake is inferred.

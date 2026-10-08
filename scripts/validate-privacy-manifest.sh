@@ -24,8 +24,24 @@ plutil -convert json -o - "$manifest_path" | ruby -rjson -e '
   if manifest["NSPrivacyTrackingDomains"] != []
     abort "Privacy manifest unexpectedly declares tracking domains."
   end
-  if manifest["NSPrivacyCollectedDataTypes"] != []
-    abort "Privacy manifest unexpectedly declares collected data."
+  # Only user-chosen support receipt is declared; this enables no upload, SDK or tracking.
+  collected = manifest["NSPrivacyCollectedDataTypes"]
+  if ARGV[0] == "extension"
+    abort "Control extension must not declare collected data." unless collected == []
+  else
+    support_types = %w[Name EmailAddress CustomerSupport ProductInteraction PerformanceData OtherDiagnosticData]
+    expected_support = support_types.map { |type| {
+      "NSPrivacyCollectedDataType" => "NSPrivacyCollectedDataType#{type}",
+      "NSPrivacyCollectedDataTypeLinked" => true,
+      "NSPrivacyCollectedDataTypeTracking" => false,
+      "NSPrivacyCollectedDataTypePurposes" => ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
+    } }.sort_by { |row| row.fetch("NSPrivacyCollectedDataType") }
+    valid_shape = collected.is_a?(Array) && collected.all? { |row|
+      row.is_a?(Hash) && row["NSPrivacyCollectedDataType"].is_a?(String)
+    }
+    unless valid_shape && collected.sort_by { |row| row.fetch("NSPrivacyCollectedDataType") } == expected_support
+      abort "App privacy manifest must declare exactly the six reviewed voluntary support data types."
+    end
   end
   expected = ARGV[0] == "extension" ? [] : [{
     "NSPrivacyAccessedAPIType" => "NSPrivacyAccessedAPICategoryUserDefaults",

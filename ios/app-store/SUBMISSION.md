@@ -1,105 +1,53 @@
 # Hafa Remote submission source of truth
 
-## Release identity
+## Identity and audiences
 
-- Version: `1.0`
-- Source build: `8`; authenticated App Store Connect build and upload inventories confirmed version 1.0 builds 1–7 already used. Recheck immediately before upload.
-- App Store Connect Apple ID: `6808899369`
-- SKU: `hafa-remote-ios`
-- Bundle ID: `com.shimizutechnology.hafaremote`
-- Apple team: `4T358A5S74`
-- Minimum OS: iOS 18.4
-- Platforms: iPhone only
-- Category: Utilities
-- Price: Free; no in-app purchases or subscriptions
-- Copyright: `2026 Shimizu Technology`
-- Release: Manual
-- Account/backend/ads/tracking: None
-- Export compliance: No non-exempt encryption
+- Version: `1.0`; app and embedded control extension share the reviewed build number.
+- Source build: `8`, already delivered as **Internal Only** TestFlight. It is used, not an unused public candidate.
+- Public candidate: HR-051 selects the next number only after a fresh authenticated build **and upload** inventory check. An earlier observation that `9` was unused is not a reservation or current proof.
+- App Store Connect Apple ID: `6808899369`; SKU: `hafa-remote-ios`.
+- App bundle ID: `com.shimizutechnology.hafaremote`; control extension: `com.shimizutechnology.hafaremote.controls`.
+- Apple team: `4T358A5S74`; minimum OS: iOS 18.4; iPhone only.
+- Category: Utilities; price: Free; no in-app purchases or subscriptions. Root saved and API-verified the current age declaration as 4+, with all relevant answers false/NONE; future questionnaire changes require another verification.
+- Copyright: `2026 Shimizu Technology`; release: Manual after Apple approval.
+- No app account, backend, advertising, tracking or subscription; standard local TLS is declared as no non-exempt encryption, subject to final artifact verification.
 
-The localized metadata in `en-US/` prepares the next integrated internal candidate,
-including HR-045 conveniences and HR-046 support/demo. Reconcile it against the
-final merged binary before upload. These notes do not certify household hardware
-or approve public submission. The support and privacy URLs responded successfully
-on October 8, 2026 (Guam), but their deployed wording still needs reconciliation
-with voluntary diagnostic sharing; see [release QA evidence](../../docs/HR-047-RELEASE-QA.md).
+| Audience | Scheme / archive configuration | Metadata | Packaging |
+| --- | --- | --- | --- |
+| Public Samsung | `HafaRemotePublic` / `ReleasePublic` | `public/en-US/` | `PublicExportOptions.plist`, Internal Only **false** |
+| Internal three-brand testing | `HafaRemote` / `Release` | `en-US/` | `ExportOptions.plist`, Internal Only **true** |
 
-## App privacy
+The public source excludes Sony/Vizio protocols, accepts Samsung only and retains experimental saved records/credentials without using or deleting them. Manufacturer names describe compatibility; artwork and identity are original. Hafa Remote is independent and unaffiliated.
 
-Ordinary control sends commands, text, and requests only between the iPhone and
-selected TV on the local network. Pairing credentials remain in Keychain;
-non-secret TV metadata and per-TV preferences stay on the phone. There is no
-backend or automatic diagnostic upload.
+## Current scoped decision
 
-Diagnostics are off by default. When enabled, at most 100 semantic events and
-coarse timings remain in memory. A preview includes app/iOS versions and optional
-model/firmware, excluding addresses, credentials, identifiers, TV/Wi-Fi names, and
-entered text. The system share sheet sends the immutable preview only to a
-destination the user chooses. If that destination is Shimizu Technology support,
-support may receive the report and accompanying message/contact details. Do not
-say that Shimizu can never receive data from the app.
+Leon confirmed testing **1.0 (8) on Samsung Q70AA**, reported almost all Samsung controls working, and instructed the project to prepare the listing and submit. Firmware, exact unconfirmed controls, command counts and reconnect/wake measurements were not supplied. The report does not certify every feature or the future public artifact.
 
-**App Privacy answers remain an owner verification gate.** On-device processing
-alone is not collection under Apple's definition, but retained support reports
-must be evaluated separately. Choosing to share does not by itself establish the
-optional-disclosure exception: all of Apple's conditions must apply, including
-the submission-interface conditions. Check actual support receipt/retention,
-data types (such as Customer Support and diagnostic data), purpose, and linkage
-against the final binary before retaining or changing a **Data Not Collected**
-answer. Apple's opt-in operating-system/TestFlight handling is separate from any
-data the developer receives. No App Store Connect answer is changed by this file.
+[HR-050's decision](../../docs/HR-050-SAMSUNG-SUBMISSION-DECISION.md) explicitly replaces the earlier broad project matrix and blanket qualified-basis prerequisite for this initial owner-directed Samsung submission. Historical 500-command/99%, twenty-cycle and multi-model/network targets are not marked achieved. No manufacturer permission, legal clearance, universal compatibility or guaranteed wake is inferred. Applicable terms/rights and any Apple request remain the publisher's responsibility.
 
-Sources checked October 8, 2026 (Guam):
-[Apple App Privacy details](https://developer.apple.com/app-store/app-privacy-details/)
-and [Manage app privacy](https://developer.apple.com/help/app-store-connect/manage-app-information/manage-app-privacy).
+`public/en-US/` contains the coordinated final public description, subtitle, keywords, promotional text, review notes and URLs. Internal instructions remain separate. Public screenshots must match the public interface and label simulated scenes; an offline demo is not hardware proof. Do not call a proposed recording a completed App Review video.
 
-## Internal TestFlight checklist
+## Privacy and support
 
-1. Pass `./scripts/gate.sh` on the exact release commit.
-2. Pass `./scripts/ios-release-preflight.sh`.
-3. Create the signed archive with `./scripts/ios-release.sh archive`.
-4. Validate it with `./scripts/ios-release-preflight.sh --archive <path>`.
-5. Export with `./scripts/ios-release.sh export <archive-path>`.
-6. Validate the export with both `--archive` and `--export`.
-7. Recheck that build `8` is still unused in the correct App Store Connect record
-   and that only Leon receives internal builds. Match both app and extension
-   identities/build numbers to the reviewed commit and validated artifacts.
-8. Upload the same validated archive with `./scripts/ios-release.sh upload <archive-path> <validated-export-path> <upload-output-path>`.
-   Xcode packages it with the reviewed build number and TestFlight Internal Only
-   option; its receipt is separate from the earlier local IPA hash. Wait for
-   processing, verify export compliance, and confirm the processed build is
-   available to Leon through his existing internal group without new invitations.
+Ordinary control sends commands, text and requests only between the iPhone and selected TV on the local network. Pairing credentials stay in Keychain; TV metadata/preferences stay on the phone. There is no automatic report upload or backend.
 
-## Public-review gates
+Diagnostics are off by default. When enabled, at most 100 semantic events and coarse timings remain in memory. An immutable preview includes app/iOS versions and optional TV model/firmware, but excludes addresses, credentials, device identifiers, TV/Wi-Fi names and entered text. The user chooses whether and where to share through the system share sheet. Support can receive that report and accompanying message/contact details if chosen as the destination.
 
-Do not submit for external TestFlight or public review until all of these are
-complete:
+The owner selected retained voluntary support reports with a defined retention period; the published website policy is the source of truth for its actual duration and deletion handling. These facts remain a website/public-submission gate, not an invented source constant. The coordinated disclosure covers sender name/email, customer-support content, semantic interaction events, coarse performance timing and other diagnostic metadata, linked only through the chosen support context, for App Functionality and never tracking. The main app manifest declares exactly those six types; the stateless extension declares none. Root configured and verified the App Store Connect draft with exactly these six types, each used only for App Functionality, linked to identity in the support context, and not used for tracking. The draft is not yet published; publication requires the truthful production privacy policy. The final published label must still be verified before submission. Do not invent a period or retain **Data Not Collected** solely because sharing is voluntary. Evaluate actual retained support/contact/diagnostic data, purpose and linkage. Apple's optional-disclosure conditions must all apply; this interface is not presumed to qualify. Apple's own platform collection is separate. [Apple App Privacy details](https://developer.apple.com/app-store/app-privacy-details/) were checked October 9, 2026 (Guam).
 
-- Shimizu Technology has documented an authorization basis for distributing each Samsung, Sony,
-  and Vizio local-control integration, or a qualified attorney has documented why the planned use
-  is permitted.
-- The household Samsung Q70AA, Sony, and Vizio pairing, command, relaunch, text-capability, and
-  power evidence is complete.
-- Testing covers the advertised model/firmware range across several home networks.
-- Each advertised model group passes a 500-command soak with at least 99% observed delivery, zero
-  duplicate commands, and no stuck repeat state.
-- Each advertised model group passes at least 20 foreground reconnect cycles, with at least 19
-  reconnecting without re-pairing and normally within two seconds on healthy Wi-Fi.
-- Support and privacy pages are live at the exact metadata URLs.
-- Current screenshots match the final binary; the Release offline demo is reachable
-  through first-launch Help → Try the Remote Offline and is verified without TV contact.
-- App Privacy, age rating, content rights, contact, and trader answers are
-  verified in App Store Connect by the owner.
+## Public candidate and submission checklist — HR-051
 
-Hafa Remote must be described as independent and unaffiliated. Never claim universal brand or
-power-on support without device evidence.
+1. Finish HR-050's coordinated source packet, factual support/privacy pages, owner handling decision and screenshots. Verify the live support/privacy URLs and actual App Store Connect answers; do not replace unknown facts with flags.
+2. Verify the next unused build in the correct app's build and upload inventories. If a native export creates an awaiting-upload reservation, prove it belongs to this exact task/artifact before resuming it; never bump blindly or upload a historical archive.
+3. Update the app, extension and preflight together. Pass the complete current-commit gate, affected native QA, current CodeRabbit coverage and hosted CI; resolve material findings and merge the release ticket.
+4. Recheck the exact merged release source and audience. Use `./scripts/ios-release-preflight.sh --audience public`, then `./scripts/ios-release.sh --audience public archive <archive-path>`. Automatic signing must actually be attempted with the existing authorized account; absence of a local certificate alone is not a proven blocker.
+5. Validate the archive with `--audience public --archive <archive-path>`, export with `--audience public export`, then validate the exact archive and export together. Match bundle/build/team, signatures, entitlements, privacy declarations, public audience and experimental exclusion. App Store packaging must not have Internal Only enabled.
+6. After HR-051 explicitly satisfies the recorded eligibility conditions, upload the same validated archive/export through native tools. Public upload remains closed in HR-050; neither owner authorization alone nor a flavor switch is an artifact receipt.
+7. Wait for processing and verify the current build is valid and App Store eligible. Complete the selected-build, localized packet/screenshots, privacy, age, rights, contact, territories and export-compliance fields. Keep release manual after approval.
+8. Submit the exact selected processed build only when those facts are verified. Retain the actual submission receipt/state; an upload, screenshot save or success-looking API request does not prove review submission or approval. Respond to any review request/rejection with a focused evidence-backed task.
 
-## Build 8 delivery safeguards
+## Internal delivery and credential safeguards
 
-The existing internal group has one tester, Leon, and no external group. Verify
-that scope again before upload. Export and upload options enforce the Apple team,
-automatic signing, internal-only distribution and unchanged build numbering.
-Optional existing API authentication uses `HAFA_ASC_KEY_PATH`, `HAFA_ASC_KEY_ID`
-and `HAFA_ASC_ISSUER_ID` together. Keep key files private outside this repository;
-never commit or print keys or JWTs. Archive/export is not an upload receipt, and
-an upload is not proof of successful processing or owner availability.
+Existing internal TestFlight 1.0 (8) is available through Leon's existing internal group; no current phone installation is implied. Any later internal delivery also needs a new live unused-number check, exact merged source/artifact validation and verified recipient scope. Never reuse build `8` as if it were unused. Default commands select internal; public delivery must pass the explicit public audience and eligibility checks.
+
+Existing API authentication uses `HAFA_ASC_KEY_PATH`, `HAFA_ASC_KEY_ID` and `HAFA_ASC_ISSUER_ID` together. Keep keys private outside Git and never print keys/JWTs. Use only existing authorized credentials; do not create/rotate keys, certificates or access grants. Preserve provenance and processing/submission receipts privately. No external outreach is part of this checklist.

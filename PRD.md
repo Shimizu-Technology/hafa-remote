@@ -1,14 +1,14 @@
 # Hafa Remote
 ## Product Requirements Document
 
-**Version:** 0.5
-**Date:** October 8, 2026
+**Version:** 0.6
+**Date:** October 9, 2026
 **Owner:** Shimizu Technology
-**Status:** Samsung-focused public release preparation; Sony/Vizio internal testing
+**Status:** Owner-authorized Samsung App Store 1.0 submission; Sony/Vizio internal testing
 
 ## Executive summary
 
-Hafa Remote is an iPhone-only remote control for compatible Samsung Tizen TVs on the same local network in its first public release. Its separate internal TestFlight build also tests Sony BRAVIA/Google TV and Vizio SmartCast integrations. It should replace the physical remote for ordinary daily use without an account, advertising, a subscription, or a cloud service. Each brand is a separately tested capability: Samsung remains the proven baseline, while Sony and Vizio stay internal-only until Leon's exact household models complete pairing, command, reconnect, and power testing. A public App Store release is a later decision that depends on real-device reliability and a defensible authorization basis for every local-control protocol distributed in the binary.
+Hafa Remote is an iPhone-only remote control for compatible Samsung Tizen TVs on the same local network in its first public release. Its separate internal TestFlight build also tests Sony BRAVIA/Google TV and Vizio SmartCast integrations. It should replace the physical remote for ordinary daily use without an account, advertising, a subscription, or a cloud service. Each brand is a separately tested capability: Samsung remains the proven baseline, while Sony and Vizio stay internal-only until Leon's exact household models complete pairing, command, reconnect, and power testing. Leon has authorized a Samsung-only App Store submission based on his reported control testing. The initial release decision and its evidence limits are recorded in [HR-050](docs/HR-050-SAMSUNG-SUBMISSION-DECISION.md); no universal compatibility, measured soak result or legal clearance is implied.
 
 ## Product classification
 
@@ -284,7 +284,7 @@ The UI must never send raw protocol keys directly. Only the active brand driver 
 | `isDefault` | SwiftData | At most one default TV |
 | pairing token, client identity, or PSK | Keychain | Brand-scoped, stored separately under `id`; never logged |
 
-No data is synced or transmitted to Shimizu Technology in version one.
+Ordinary TV control does not sync data or upload it to Shimizu Technology. Diagnostics are off by default and remain in memory. A user may explicitly share an immutable redacted report with a chosen destination, including support; the published policy and App Privacy answers must reflect actual support handling.
 
 ## Reliability rules
 
@@ -360,23 +360,21 @@ Before inviting external testers:
 
 ## Public App Store gate
 
-Do not submit until:
+The initial Samsung 1.0 release uses the [owner-directed HR-050 decision](docs/HR-050-SAMSUNG-SUBMISSION-DECISION.md). Earlier three-model-year/three-network, 500-command/99% delivery and 20-cycle/19-success thresholds are historical project benchmarks, not completed measurements or blanket Apple requirements. They remain targets for broader compatibility claims. The owner has explicitly authorized this narrower Samsung submission; no manufacturer permission document or qualified legal clearance is claimed.
 
-- Shimizu Technology has written permission, applicable partner terms, or a qualified legal basis covering every brand-specific control protocol distributed in the binary. If any brand remains unresolved, exclude that driver from the distributed build or stop at personal/internal distribution.
-- Testing covers every advertised brand, at least three model years overall, and at least three home networks; one household unit is evidence for that exact model, not a universal compatibility claim.
-- Pairing and reconnection results are recorded for each model/firmware combination.
-- Each advertised model group completes a 500-command soak with at least 99% observed delivery, zero duplicate commands, and no stuck repeat state.
-- Each advertised model group completes at least 20 foreground reconnect cycles, with at least 19 reconnecting without re-pairing and normally within two seconds on healthy Wi-Fi.
-- Power-on is advertised for a model only after repeated wake tests succeed after at least 30 minutes powered off.
-- No unresolved P0 or P1 defect remains.
-- Unsupported power-on behavior is described per model rather than hidden.
-- The exact App Store name and Shimizu Technology bundle identifier have been reserved.
-- A basic trademark/name check is complete. A preliminary web search found no exact App Store match for **Hafa Remote**, but this is not formal clearance.
-- App Review receives a short pairing/usage video and clear hardware-review notes.
-- A clearly labeled offline demo mode lets App Review inspect the interface and state transitions without pretending to control a television.
-- App metadata says the product is independently developed and not affiliated with Samsung, Sony, or Vizio.
-- The icon and screenshots contain no manufacturer logo or copied remote trade dress.
-- App Privacy answers match the shipped binary; version one should qualify as **Data Not Collected** only if no SDK or feature changes that fact.
+Before submission:
+
+- The public binary is Samsung-only; experimental protocols are excluded and internal records remain intact.
+- Metadata describes compatible Samsung Tizen TVs and conditional features, without an unevidenced model/firmware list, universal support or guaranteed wake.
+- The owner's observed results and unknown build/model/firmware/control details remain distinguishable from automated proof.
+- The integration/terms research and owner decision are recorded; applicable third-party rights and any Apple authorization request are addressed without false attestations.
+- No known unresolved P0/P1 defect is concealed. Current code, UI, privacy, signature, source-exclusion and artifact checks pass on the reviewed release.
+- A fresh live build-number check, exact merged public archive/export, App Store-eligible upload and successful processing are verified.
+- Screenshots match the public interface and label simulated scenes. Hardware-review notes explain local-network access, TV approval and optional behavior; no unrecorded hardware video is claimed.
+- Original artwork, independent/unaffiliated metadata and the reserved Hafa identity are preserved.
+- Live support/privacy pages, actual support handling and App Privacy answers agree. No optional-disclosure exception or Data Not Collected label is assumed from voluntary sharing alone.
+- App Store Connect age, contact, rights, territory and selected-build fields are complete and verified; release remains manual after approval.
+
 
 ## Product success measures
 
@@ -389,7 +387,7 @@ Because version one has no analytics, success is measured through an explicit be
 - Model, firmware, router/network, and iOS version
 - Tester-reported disconnects, failed commands, and crashes
 
-The public-release decision is based on the device matrix and TestFlight crash data, not download projections.
+The initial public-release decision records the owner's Samsung report and explicit submission instruction alongside automated evidence and remaining unknowns. Future model-specific claims use measured device evidence, not download projections.
 
 ## Branding and App Store positioning
 
@@ -421,7 +419,7 @@ These do not block the protocol spike:
 - Whether a later one-time Supporter purchase is worth adding
 - The exact Samsung, Sony, and Vizio model/firmware compatibility claims, which must come from testing
 - Whether a future broadcast Wake-on-LAN path is needed; build 2 uses unicast and requests no multicast entitlement
-- Whether each manufacturer integration has a defensible public-distribution basis; this is the largest public-release blocker
+- Which terms govern the independent Samsung local endpoint, and any authorization Apple requests; owner submission authorization is not legal clearance
 
 ## Reference material
 

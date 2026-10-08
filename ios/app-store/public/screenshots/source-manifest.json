@@ -1,0 +1,67 @@
+[
+  {
+    "stem": "01-welcome",
+    "source": "public-release-first-launch.png",
+    "sourceSHA256": "72ae0b5cf78fe33eae9c94ffbcce802bb9e24466f339e47ff8e5200d07122824",
+    "sourceType": "Actual HR049 PublicRelease simulator capture",
+    "simulatedControl": false,
+    "physicalTVEvidence": false,
+    "file": "01-welcome.png",
+    "width": 1320,
+    "height": 2868,
+    "mode": "RGB",
+    "SHA256": "18db51cdfe7898e14a8bb90efb727888d37a423dff5945e392631b395238308b"
+  },
+  {
+    "stem": "02-offline-demo",
+    "source": "public-release-offline-demo.png",
+    "sourceSHA256": "a1a1bdcce4cf0688d24bf91213ee6dbfedbb97010dcab85fb753f77edf0d27aa",
+    "sourceType": "Actual HR049 PublicRelease simulator capture",
+    "simulatedControl": true,
+    "physicalTVEvidence": false,
+    "file": "02-offline-demo.png",
+    "width": 1320,
+    "height": 2868,
+    "mode": "RGB",
+    "SHA256": "a7ae123afc98c464a9d470915193b4b4104fcdc62ade1d86628139561b396d28"
+  },
+  {
+    "stem": "03-simple-setup",
+    "source": "public-release-samsung-help.png",
+    "sourceSHA256": "479e84a5579efe9ed60436eede3291f9f888af46d060d54d86fc601026c57f08",
+    "sourceType": "Actual HR049 PublicRelease simulator capture",
+    "simulatedControl": false,
+    "physicalTVEvidence": false,
+    "file": "03-simple-setup.png",
+    "width": 1320,
+    "height": 2868,
+    "mode": "RGB",
+    "SHA256": "b3512bd43b62c0a16e87cbac2e9a534689bdb1b7aba9add715b8ae953a7e0f73"
+  },
+  {
+    "stem": "04-help",
+    "source": "public-release-help.png",
+    "sourceSHA256": "9f746dd4243e86cc31fd4ab99801562353c60116c4e4fe399b2d264e7ab2f45b",
+    "sourceType": "Actual HR049 PublicRelease simulator capture",
+    "simulatedControl": false,
+    "physicalTVEvidence": false,
+    "file": "04-help.png",
+    "width": 1320,
+    "height": 2868,
+    "mode": "RGB",
+    "SHA256": "ef6b6b146e2bee1e285a9a1b641aa745cffab8c9d733febc147d7316a5a25d04"
+  },
+  {
+    "stem": "05-sharing",
+    "source": "public-release-diagnostics-off.png",
+    "sourceSHA256": "a1621ee2990f95b0d5aa3440c00cacf828658bb9798b42ffa9cf98384b8a22fb",
+    "sourceType": "Actual HR049 PublicRelease simulator capture",
+    "simulatedControl": false,
+    "physicalTVEvidence": false,
+    "file": "05-sharing.png",
+    "width": 1320,
+    "height": 2868,
+    "mode": "RGB",
+    "SHA256": "5155358c5bff43609b265ec0fd8a796327e1f265c3c5178e01ef9a97d3e8c008"
+  }
+]
