@@ -8,6 +8,7 @@ struct TVSetupView: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Query private var savedTVs: [SavedTV]
     @State private var discovery: TVDiscoveryStore
+    @State private var discoveryCollection: DiagnosticCollectionToken?
     @State private var address = ""
     @State private var manualBrand: TVBrand = .samsung
     @State private var manualFailure: String?
@@ -107,7 +108,7 @@ struct TVSetupView: View {
                 HafaRemoteHelpView()
             }
             .task {
-                discovery.start()
+                startDiscovery()
             }
             .onAppear {
                 preparePairingRepairIfNeeded(for: session.state)
@@ -129,6 +130,12 @@ struct TVSetupView: View {
                 }
             }
             .onChange(of: discovery.state) { _, state in
+                switch state {
+                case .results, .noResults, .permissionDenied, .failed:
+                    session.diagnostics.finishDiscovery(collection: &discoveryCollection)
+                case .idle, .searching:
+                    break
+                }
                 if let announcement = discoveryAnnouncement(for: state) {
                     UIAccessibility.post(notification: .announcement, argument: announcement)
                 }
@@ -252,7 +259,7 @@ struct TVSetupView: View {
                     .foregroundStyle(HafaTheme.secondaryText)
 
                     Button("Scan Again", systemImage: "arrow.clockwise") {
-                        discovery.start()
+                        startDiscovery()
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(HafaTheme.accent)
@@ -296,7 +303,7 @@ struct TVSetupView: View {
                     .font(.subheadline)
                     .foregroundStyle(HafaTheme.secondaryText)
                     Button("Try Again", systemImage: "arrow.clockwise") {
-                        discovery.start()
+                        startDiscovery()
                     }
                     .accessibilityIdentifier("scanAgainButton")
                 }
@@ -495,6 +502,12 @@ struct TVSetupView: View {
         }
     }
 
+    private func startDiscovery() {
+        discoveryCollection = session.diagnostics.captureCollection()
+        session.diagnostics.record(.discoveryStarted, collection: discoveryCollection)
+        discovery.start()
+    }
+
     private func connect(to television: DiscoveredTV) {
         switch SavedTVDiscoveryAssociation.resolve(television, savedTVs: savedTVs) {
         case .newCandidate(let target), .saved(let target):
@@ -585,7 +598,7 @@ struct TVSetupView: View {
                     recoveryTask = Task {
                         await session.disconnect(clearRememberedTV: false)
                         guard !Task.isCancelled else { return }
-                        discovery.start()
+                        startDiscovery()
                     }
                 }
             }

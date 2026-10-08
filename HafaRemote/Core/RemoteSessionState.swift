@@ -15,6 +15,17 @@ enum RemoteSessionState: Equatable, Sendable {
     case failed(RemoteSessionFailure)
 }
 
+/// Ownership is stamped by the producer before an update can enter a consumer queue.
+/// These process-local values are never logged or exported as diagnostics.
+struct RemoteSessionStateUpdate: Equatable, Sendable {
+    let state: RemoteSessionState
+    let requestID: UUID
+    let generation: UUID
+    let producedAt: ContinuousClock.Instant
+    /// Initiation of the causal operation, not the later publication/completion.
+    let activityStartedAt: ContinuousClock.Instant
+}
+
 enum TVRecoveryAction: Hashable, Sendable {
     case retryConnection
     case findTV
@@ -67,4 +78,10 @@ enum RemoteSessionFailure: Equatable, Sendable {
             "Hafa Remote could not complete that request. Try again."
         }
     }
+}
+
+/// Explicit controller ownership used when a provisional request was never admitted.
+struct RemoteSessionProducerOwnership: Sendable {
+    let requestID: UUID
+    let snapshot: RemoteSessionStateUpdate
 }

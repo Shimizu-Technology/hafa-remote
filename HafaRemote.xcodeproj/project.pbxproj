@@ -7,6 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F46100000000000000000009 /* HafaRemoteSupportUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000009 /* HafaRemoteSupportUITests.swift */; };
+		F46100000000000000000001 /* DiagnosticReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000001 /* DiagnosticReport.swift */; };
+		F46100000000000000000002 /* DemoRemoteModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000002 /* DemoRemoteModel.swift */; };
+		F46100000000000000000003 /* DemoRemoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000003 /* DemoRemoteView.swift */; };
+		F46100000000000000000004 /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000004 /* DiagnosticsView.swift */; };
+		F46100000000000000000005 /* HafaSupportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000005 /* HafaSupportView.swift */; };
+		F46100000000000000000006 /* DiagnosticsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000006 /* DiagnosticsTests.swift */; };
+		F46100000000000000000007 /* DemoRemoteTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000007 /* DemoRemoteTests.swift */; };
+		F46100000000000000000008 /* DiagnosticSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000008 /* DiagnosticSessionTests.swift */; };
 		E11000000000000000000001 /* OpenHafaRemoteIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12000000000000000000001 /* OpenHafaRemoteIntent.swift */; };
 		E11000000000000000000002 /* OpenHafaRemoteIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12000000000000000000001 /* OpenHafaRemoteIntent.swift */; };
 		E11000000000000000000003 /* HafaRemoteControlsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E12000000000000000000002 /* HafaRemoteControlsBundle.swift */; };
@@ -122,6 +131,15 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		F46200000000000000000009 /* HafaRemoteSupportUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HafaRemoteUITests/HafaRemoteSupportUITests.swift"; sourceTree = SOURCE_ROOT; };
+		F46200000000000000000001 /* DiagnosticReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticReport.swift; sourceTree = "<group>"; };
+		F46200000000000000000002 /* DemoRemoteModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoRemoteModel.swift; sourceTree = "<group>"; };
+		F46200000000000000000003 /* DemoRemoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoRemoteView.swift; sourceTree = "<group>"; };
+		F46200000000000000000004 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
+		F46200000000000000000005 /* HafaSupportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HafaSupportView.swift; sourceTree = "<group>"; };
+		F46200000000000000000006 /* DiagnosticsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsTests.swift; sourceTree = "<group>"; };
+		F46200000000000000000007 /* DemoRemoteTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoRemoteTests.swift; sourceTree = "<group>"; };
+		F46200000000000000000008 /* DiagnosticSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticSessionTests.swift; sourceTree = "<group>"; };
 		E12000000000000000000001 /* OpenHafaRemoteIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OpenHafaRemoteIntent.swift; sourceTree = "<group>"; };
 		E12000000000000000000002 /* HafaRemoteControlsBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HafaRemoteControlsBundle.swift; sourceTree = "<group>"; };
 		E12000000000000000000003 /* HafaRemoteLauncherControl.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HafaRemoteLauncherControl.swift; sourceTree = "<group>"; };
@@ -236,6 +254,32 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		F46300000000000000000001 /* Diagnostics */ = {
+			isa = PBXGroup;
+			children = (
+				F46200000000000000000001 /* DiagnosticReport.swift */,
+			);
+			path = Diagnostics;
+			sourceTree = "<group>";
+		};
+		F46300000000000000000002 /* Demo */ = {
+			isa = PBXGroup;
+			children = (
+				F46200000000000000000002 /* DemoRemoteModel.swift */,
+				F46200000000000000000003 /* DemoRemoteView.swift */,
+			);
+			path = Demo;
+			sourceTree = "<group>";
+		};
+		F46300000000000000000003 /* Help */ = {
+			isa = PBXGroup;
+			children = (
+				F46200000000000000000004 /* DiagnosticsView.swift */,
+				F46200000000000000000005 /* HafaSupportView.swift */,
+			);
+			path = Help;
+			sourceTree = "<group>";
+		};
 		E13000000000000000000001 /* AppIntents */ = {
 			isa = PBXGroup;
 			children = (
@@ -326,6 +370,7 @@
 		2CF6AD0EE094B893960FF0D4 /* HafaRemoteUITests */ = {
 			isa = PBXGroup;
 			children = (
+				F46200000000000000000009 /* HafaRemoteSupportUITests.swift */,
 				B0D40983FEA4B5F16427D191 /* HafaRemoteConvenienceUITests.swift */,
 				BF2140DF03D411A6556C98D5 /* HafaRemoteUITests.swift */,
 			);
@@ -336,6 +381,8 @@
 		337F0DA81AA0B7019F92F00A /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				F46300000000000000000003 /* Help */,
+				F46300000000000000000002 /* Demo */,
 				D104483FD9922EAAB53F615C /* Setup */,
 				174B2BC669B6814751000017 /* Remote */,
 			);
@@ -388,6 +435,9 @@
 			children = (
 				DC1B7140811741D5954732CE /* SonyPairingOwnershipTests.swift */,
 				750A7CF0E33618AD46DF5A22 /* RemoteConvenienceTests.swift */,
+				F46200000000000000000006 /* DiagnosticsTests.swift */,
+				F46200000000000000000007 /* DemoRemoteTests.swift */,
+				F46200000000000000000008 /* DiagnosticSessionTests.swift */,
 				470B5BF9F811323D35B6050E /* HafaRemoteTests.swift */,
 				7A7000120000000000000002 /* SamsungDiscoveryTests.swift */,
 				C4CE3DE630561FAEADF1D468 /* PrivateIPv4AddressTests.swift */,
@@ -444,6 +494,7 @@
 		C70489893683D638CC55FDDF /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				F46300000000000000000001 /* Diagnostics */,
 				2A781F30B9F124284352D849 /* RemoteCommand.swift */,
 				C44405F91DE5FC74EFF634D3 /* TVDriver.swift */,
 				B1200000000000000000000C /* MultiBrandSessionDriver.swift */,
@@ -676,6 +727,9 @@
 			files = (
 				FB29AFF7B1B245C184921B90 /* SonyPairingOwnershipTests.swift in Sources */,
 				A695047227F2D303EC979F9D /* RemoteConvenienceTests.swift in Sources */,
+				F46100000000000000000006 /* DiagnosticsTests.swift in Sources */,
+				F46100000000000000000007 /* DemoRemoteTests.swift in Sources */,
+				F46100000000000000000008 /* DiagnosticSessionTests.swift in Sources */,
 				D4C49D71FFB313E977E0A762 /* HafaRemoteTests.swift in Sources */,
 				7A7000020000000000000002 /* SamsungDiscoveryTests.swift in Sources */,
 				65327337DFAF7AE7486FCF1C /* PrivateIPv4AddressTests.swift in Sources */,
@@ -700,6 +754,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F46100000000000000000009 /* HafaRemoteSupportUITests.swift in Sources */,
 				A29EFDEA721D13EFE3E949F8 /* HafaRemoteConvenienceUITests.swift in Sources */,
 				506ABD859CC36FF3F83677FC /* HafaRemoteUITests.swift in Sources */,
 			);
@@ -715,6 +770,11 @@
 				6B1CBECF8DC202D4B6852515 /* SonyConveniences.swift in Sources */,
 				2463F3A3300D2C60E255A96F /* SamsungApps.swift in Sources */,
 				399EF7EBE8D7218A848EF5C7 /* RemoteConveniences.swift in Sources */,
+				F46100000000000000000001 /* DiagnosticReport.swift in Sources */,
+				F46100000000000000000002 /* DemoRemoteModel.swift in Sources */,
+				F46100000000000000000003 /* DemoRemoteView.swift in Sources */,
+				F46100000000000000000004 /* DiagnosticsView.swift in Sources */,
+				F46100000000000000000005 /* HafaSupportView.swift in Sources */,
 				AF670AF8B9F1EB53EEAF349B /* HafaRemoteApp.swift in Sources */,
 				E11000000000000000000001 /* OpenHafaRemoteIntent.swift in Sources */,
 				6C519C628890A5AF91F135B9 /* HafaTheme.swift in Sources */,

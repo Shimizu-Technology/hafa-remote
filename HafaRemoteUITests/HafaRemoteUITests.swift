@@ -53,6 +53,9 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(help.waitForExistence(timeout: 5))
         XCTAssertTrue(help.isHittable)
         help.tap()
+        let tvHelp = app.buttons["supportTVHelpButton"]
+        XCTAssertTrue(tvHelp.waitForExistence(timeout: 2))
+        tvHelp.tap()
         XCTAssertTrue(app.navigationBars["Help & About"].waitForExistence(timeout: 2))
         XCTAssertTrue(
             app.staticTexts[
@@ -66,7 +69,9 @@ final class HafaRemoteUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(sonyGuidance.waitForExistence(timeout: 2))
-        app.buttons["Done"].tap()
+        app.navigationBars["Help & About"].buttons["Done"].tap()
+        XCTAssertTrue(app.buttons["openOfflineDemoButton"].waitForExistence(timeout: 2))
+        app.navigationBars["Help"].buttons["Done"].tap()
         XCTAssertTrue(app.buttons["addTVButton"].isHittable)
         app.buttons["addTVButton"].tap()
         let setupHelp = app.buttons["setupHelpButton"]
@@ -935,6 +940,62 @@ final class HafaRemoteUITests: XCTestCase {
             for: NSPredicate(format: "label == %@", "powerOn"),
             evaluatedWith: app.staticTexts["lastRemoteCommand"])
         wait(for: [delivered], timeout: 2)
+    }
+
+    @MainActor
+    func testOfflineDemoIsAvailableBeforePairing() throws {
+        let app = makeApplication()
+        app.launch()
+        app.buttons["homeHelpButton"].tap()
+        let demo = app.buttons["openOfflineDemoButton"]
+        XCTAssertTrue(demo.waitForExistence(timeout: 5))
+        demo.tap()
+        XCTAssertTrue(app.staticTexts["offlineDemoLabel"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["submitSonyPairingCodeButton"].exists)
+        XCTAssertFalse(app.buttons["submitVizioPairingCodeButton"].exists)
+        let volume = app.staticTexts["demoVolumeState"]
+        XCTAssertTrue(volume.label.contains("20"))
+        let louder = app.buttons["demo-volumeUp"]
+        let bar = app.navigationBars["Try the Remote"]
+        for _ in 0..<12 {
+            let top = bar.frame.maxY + 8
+            let bottom = app.frame.maxY - 44
+            if louder.isHittable, louder.frame.minY >= top, louder.frame.maxY <= bottom { break }
+            let movesUp = louder.frame.maxY > bottom
+            let height = bottom - top
+            let from = app.coordinate(
+                withNormalizedOffset: CGVector(
+                    dx: 0.05, dy: (top + height * (movesUp ? 0.75 : 0.25)) / app.frame.height))
+            let to = app.coordinate(
+                withNormalizedOffset: CGVector(
+                    dx: 0.05, dy: (top + height * (movesUp ? 0.35 : 0.65)) / app.frame.height))
+            from.press(forDuration: 0.1, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.2)
+        }
+        XCTAssertTrue(louder.isHittable)
+        XCTAssertGreaterThanOrEqual(louder.frame.minY, bar.frame.maxY + 8)
+        XCTAssertLessThanOrEqual(louder.frame.maxY, app.frame.maxY - 44)
+        louder.tap()
+        let increased = expectation(
+            for: NSPredicate(format: "label CONTAINS %@", "21"), evaluatedWith: volume)
+        wait(for: [increased], timeout: 3)
+    }
+
+    @MainActor
+    func testDiagnosticsAreOptInAndPreviewableBeforeSharing() throws {
+        let app = makeApplication()
+        app.launch()
+        app.buttons["homeHelpButton"].tap()
+        let diagnostics = app.buttons["openDiagnosticsButton"]
+        XCTAssertTrue(diagnostics.waitForExistence(timeout: 5))
+        diagnostics.tap()
+        let toggle = app.switches["diagnosticsToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertEqual(toggle.value as? String, "0")
+        app.buttons["previewDiagnosticsButton"].tap()
+        let preview = app.staticTexts["diagnosticsReportPreview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 5))
+        XCTAssertTrue(preview.label.contains("No events recorded"))
+        XCTAssertTrue(app.buttons["shareDiagnosticsButton"].exists)
     }
 
     @MainActor

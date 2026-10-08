@@ -61,6 +61,7 @@ final class SonyBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
     }
 
     private func publish(_ service: NetService) {
+        guard services[ObjectIdentifier(service)] === service else { return }
         defer { services[ObjectIdentifier(service)] = nil }
         guard service.port == Self.controlPort,
             let address = SamsungBonjourDiscoveryBackend.privateIPv4Address(from: service)
@@ -89,12 +90,14 @@ extension SonyBonjourDiscoveryBackend: NetServiceBrowserDelegate {
         didFind service: NetService,
         moreComing: Bool
     ) {
+        guard self.browser === browser else { return }
         services[ObjectIdentifier(service)] = service
         service.delegate = self
         service.resolve(withTimeout: 5)
     }
 
     func netServiceBrowser(_ browser: NetServiceBrowser, didNotSearch errorDict: [String: NSNumber]) {
+        guard self.browser === browser else { return }
         let handler = eventHandler
         let code = errorDict[NetService.errorCode]?.intValue
         stop()
@@ -108,6 +111,7 @@ extension SonyBonjourDiscoveryBackend: NetServiceDelegate {
     }
 
     func netService(_ sender: NetService, didNotResolve errorDict: [String: NSNumber]) {
+        guard services[ObjectIdentifier(sender)] === sender else { return }
         services[ObjectIdentifier(sender)] = nil
     }
 }
@@ -122,6 +126,7 @@ final class CompositeTVDiscoveryBackend: TVDiscoveryBackend {
 
     private let backends: [any TVDiscoveryBackend]
     private var terminalStates: [Int: TerminalState] = [:]
+    private var scanGeneration = UUID()
     private var eventHandler: (@MainActor @Sendable (TVDiscoveryBackendEvent) -> Void)?
 
     deinit {}
@@ -137,20 +142,25 @@ final class CompositeTVDiscoveryBackend: TVDiscoveryBackend {
         stop()
         terminalStates = [:]
         self.eventHandler = eventHandler
+        let generation = scanGeneration
         for (index, backend) in backends.enumerated() {
+            guard scanGeneration == generation else { break }
             backend.start { [weak self] event in
-                self?.receive(event, from: index)
+                self?.receive(event, from: index, generation: generation)
             }
         }
     }
 
     func stop() {
+        scanGeneration = UUID()
+        eventHandler = nil
         for backend in backends { backend.stop() }
         terminalStates = [:]
         eventHandler = nil
     }
 
-    private func receive(_ event: TVDiscoveryBackendEvent, from index: Int) {
+    private func receive(_ event: TVDiscoveryBackendEvent, from index: Int, generation: UUID) {
+        guard scanGeneration == generation, eventHandler != nil else { return }
         switch event {
         case .found:
             eventHandler?(event)

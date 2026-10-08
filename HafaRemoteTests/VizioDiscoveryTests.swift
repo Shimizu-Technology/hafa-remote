@@ -170,6 +170,47 @@ struct VizioDiscoveryTests {
     }
 
     @MainActor
+    @Test("Queued old browser delegates cannot publish or stop the replacement scan")
+    func discardsOldBrowserProducer() throws {
+        let firstBrowser = FakeVizioServiceBrowser()
+        let secondBrowser = FakeVizioServiceBrowser()
+        let browsers = [firstBrowser, secondBrowser]
+        var browserIndex = 0
+        let recorder = VizioDiscoveryEventRecorder()
+        let candidate = DiscoveredTV(
+            brand: .vizio, reportedIdentifier: "synthetic-vizio-current-scan",
+            displayName: "Synthetic Current TV", modelName: "Synthetic Model",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "203.0.113.46"),
+            controlPort: 7345)
+        let backend = VizioBonjourDiscoveryBackend(
+            makeBrowser: {
+                defer { browserIndex += 1 }
+                return browsers[browserIndex]
+            },
+            startResolution: { _, _ in }, resolveCandidate: { _ in candidate })
+        backend.start { recorder.receive($0) }
+        let oldDelegate = try #require(firstBrowser.delegate)
+        backend.stop()
+        backend.start { recorder.receive($0) }
+        let oldService = fixtureService(name: "Synthetic Old TV")
+        oldDelegate.vizioServiceBrowser(firstBrowser, didFind: oldService)
+        backend.receiveResolvedService(oldService)
+        oldDelegate.vizioServiceBrowser(
+            firstBrowser, didFail: VizioBonjourDiscoveryBackend.policyDeniedErrorCode)
+        #expect(backend.trackedServiceCount == 0)
+        #expect(recorder.found.isEmpty)
+        #expect(recorder.permissionDeniedCount == 0)
+        #expect(secondBrowser.stopCount == 0)
+        let newService = fixtureService(name: "Synthetic Current TV")
+        secondBrowser.emitFound(newService)
+        backend.receiveResolvedService(newService)
+        #expect(recorder.found == [candidate])
+        secondBrowser.emitFailure(code: 1)
+        #expect(recorder.failedCount == 1)
+        backend.stop()
+    }
+
+    @MainActor
     @Test("Local Network policy denial has a distinct event")
     func mapsPolicyDenial() {
         let browser = FakeVizioServiceBrowser()
@@ -223,11 +264,11 @@ private final class FakeVizioServiceBrowser: VizioServiceBrowsing {
     }
 
     func emitFound(_ service: NetService) {
-        delegate?.vizioServiceBrowserDidFind(service)
+        delegate?.vizioServiceBrowser(self, didFind: service)
     }
 
     func emitFailure(code: Int?) {
-        delegate?.vizioServiceBrowserDidFail(errorCode: code)
+        delegate?.vizioServiceBrowser(self, didFail: code)
     }
 }
 

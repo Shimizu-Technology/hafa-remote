@@ -89,6 +89,7 @@ final class TVDiscoveryStore {
     @ObservationIgnored private let backend: any TVDiscoveryBackend
     @ObservationIgnored private let searchDuration: Duration
     @ObservationIgnored private var timeoutTask: Task<Void, Never>?
+    @ObservationIgnored private var scanGeneration = UUID()
     @ObservationIgnored private var identityWaiters: [UUID: IdentityWaiter] = [:]
 
     init(
@@ -111,6 +112,7 @@ final class TVDiscoveryStore {
         stop(resetState: false)
         televisions = []
         state = .searching
+        let generation = scanGeneration
 
         timeoutTask = Task { [weak self, searchDuration] in
             do {
@@ -118,12 +120,12 @@ final class TVDiscoveryStore {
             } catch {
                 return
             }
-            guard !Task.isCancelled else { return }
-            self?.finishSearch()
+            guard !Task.isCancelled, let self, self.scanGeneration == generation else { return }
+            self.finishSearch()
         }
 
         backend.start { [weak self] event in
-            self?.receive(event)
+            self?.receive(event, generation: generation)
         }
     }
 
@@ -163,6 +165,8 @@ final class TVDiscoveryStore {
     }
 
     private func stop(resetState: Bool) {
+        // Invalidate producers before cancellation can synchronously call back.
+        scanGeneration = UUID()
         timeoutTask?.cancel()
         timeoutTask = nil
         backend.stop()
@@ -171,8 +175,8 @@ final class TVDiscoveryStore {
         }
     }
 
-    private func receive(_ event: TVDiscoveryBackendEvent) {
-        guard state == .searching || state == .results else { return }
+    private func receive(_ event: TVDiscoveryBackendEvent, generation: UUID) {
+        guard scanGeneration == generation, state == .searching || state == .results else { return }
 
         switch event {
         case .found(let television):
@@ -370,6 +374,7 @@ final class SamsungBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
 
     private func validate(_ service: NetService) {
         let serviceID = ObjectIdentifier(service)
+        guard services[serviceID] === service else { return }
         guard
             let metadata = SamsungBonjourMetadata(
                 txtRecordData: service.txtRecordData(),
@@ -394,9 +399,11 @@ final class SamsungBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
             do {
                 let deviceInfo = try await deviceInfoProvider.fetchDeviceInfo(at: address)
                 try Task.checkCancellation()
-                guard deviceInfo.supportsTokenAuthentication else { return }
+                guard deviceInfo.supportsTokenAuthentication,
+                    let self, self.validationTasks[serviceID]?.id == operationID
+                else { return }
 
-                self?.eventHandler?(
+                self.eventHandler?(
                     .found(
                         DiscoveredTV(
                             reportedIdentifier: metadata.reportedIdentifier,
@@ -453,6 +460,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceBrowserDelegate {
         didFind service: NetService,
         moreComing: Bool
     ) {
+        guard self.browser === browser else { return }
         let serviceID = ObjectIdentifier(service)
         services[serviceID] = service
         service.delegate = self
@@ -460,6 +468,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceBrowserDelegate {
     }
 
     func netServiceBrowser(_ browser: NetServiceBrowser, didNotSearch errorDict: [String: NSNumber]) {
+        guard self.browser === browser else { return }
         let handler = eventHandler
         let code = errorDict[NetService.errorCode]?.intValue
         stop()
@@ -473,6 +482,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
     }
 
     func netService(_ sender: NetService, didNotResolve errorDict: [String: NSNumber]) {
+        guard services[ObjectIdentifier(sender)] === sender else { return }
         services[ObjectIdentifier(sender)] = nil
     }
 }

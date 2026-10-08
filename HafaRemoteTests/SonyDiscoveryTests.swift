@@ -55,6 +55,92 @@ struct SonyDiscoveryTests {
         #expect(!first.reportedIdentifier.contains("192.168"))
     }
 
+    @Test(
+        "Replaced scan callbacks cannot finish a new scan or acquire its diagnostic lease",
+        arguments: [false, true], ["restart", "stop", "reconsent"])
+    @MainActor
+    func replacedScanCannotPublish(_ useComposite: Bool, _ replacement: String) throws {
+        let backend = HeldDiscoveryBackendFixture()
+        let selectedBackend: any TVDiscoveryBackend =
+            useComposite ? CompositeTVDiscoveryBackend(backends: [backend]) : backend
+        let store = TVDiscoveryStore(backend: selectedBackend, searchDuration: .seconds(30))
+        let recorder = DiagnosticRecorder()
+        recorder.setEnabled(true)
+        var collection = recorder.captureCollection()
+        recorder.record(.discoveryStarted, collection: collection)
+        store.start()
+        let oldCallback = try #require(backend.callbacks.first)
+        if replacement == "stop" { store.stop() }
+        if replacement == "reconsent" {
+            recorder.setEnabled(false)
+            recorder.setEnabled(true)
+        } else {
+            recorder.clear()
+        }
+        collection = recorder.captureCollection()
+        recorder.record(.discoveryStarted, collection: collection)
+        store.start()
+        let currentCallback = try #require(backend.callbacks.last)
+        let oldTV = DiscoveredTV(
+            reportedIdentifier: "synthetic-old-scan-tv", displayName: "Synthetic Old TV",
+            modelName: "Synthetic Model",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.46"))
+        // Project actual store transitions as Setup does, retaining the scan's initiating token.
+        func publish(
+            _ event: TVDiscoveryBackendEvent,
+            through callback: @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void
+        ) {
+            let previous = store.state
+            callback(event)
+            guard store.state != previous else { return }
+            switch store.state {
+            case .results, .noResults, .permissionDenied, .failed:
+                recorder.finishDiscovery(collection: &collection)
+            case .idle, .searching:
+                break
+            }
+        }
+        for event in [TVDiscoveryBackendEvent.found(oldTV), .finished, .permissionDenied, .failed] {
+            publish(event, through: oldCallback)
+        }
+        #expect(store.state == .searching)
+        #expect(store.televisions.isEmpty)
+        #expect(recorder.events.map(\.kind) == [.discoveryStarted])
+        let newTV = DiscoveredTV(
+            reportedIdentifier: "synthetic-current-scan-tv", displayName: "Synthetic Current TV",
+            modelName: "Synthetic Model",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.46"))
+        publish(.found(newTV), through: currentCallback)
+        publish(.found(newTV), through: currentCallback)
+        publish(.finished, through: currentCallback)
+        #expect(store.televisions == [newTV])
+        #expect(store.state == .results)
+        #expect(recorder.events.map(\.kind) == [.discoveryStarted, .discoveryFinished])
+        store.stop()
+    }
+
+    @Test("Composite callbacks retain their producer scan before forwarding to the current handler")
+    @MainActor
+    func compositeRejectsReplacedProducer() throws {
+        let backend = HeldDiscoveryBackendFixture()
+        let composite = CompositeTVDiscoveryBackend(backends: [backend])
+        var oldEventCount = 0
+        var currentEventCount = 0
+        composite.start { _ in oldEventCount += 1 }
+        let oldCallback = try #require(backend.callbacks.first)
+        composite.stop()
+        composite.start { _ in currentEventCount += 1 }
+        let currentCallback = try #require(backend.callbacks.last)
+        oldCallback(.finished)
+        oldCallback(.permissionDenied)
+        oldCallback(.failed)
+        #expect(oldEventCount == 0)
+        #expect(currentEventCount == 0)
+        currentCallback(.finished)
+        #expect(currentEventCount == 1)
+        composite.stop()
+    }
+
     @Test("Composite discovery waits for every brand backend before failing")
     @MainActor
     func compositeWaitsForAllBackends() {
@@ -95,4 +181,16 @@ private final class DiscoveryBackendFixture: TVDiscoveryBackend {
     func emit(_ event: TVDiscoveryBackendEvent) {
         eventHandler?(event)
     }
+}
+
+/// Retains canceled producers deliberately; no network service or household data is used.
+@MainActor
+private final class HeldDiscoveryBackendFixture: TVDiscoveryBackend {
+    private(set) var callbacks: [@MainActor @Sendable (TVDiscoveryBackendEvent) -> Void] = []
+
+    func start(eventHandler: @escaping @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void) {
+        callbacks.append(eventHandler)
+    }
+
+    func stop() {}
 }
