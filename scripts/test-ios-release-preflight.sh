@@ -104,11 +104,57 @@ collected_privacy="$privacy_tmp/collected-data.xcprivacy"
 cp "$valid_privacy" "$collected_privacy"
 plutil -replace NSPrivacyCollectedDataTypes -json '[{}]' "$collected_privacy"
 if output="$("$privacy_validator" "$collected_privacy" 2>&1)"; then
-  echo "Expected a collected-data privacy manifest to fail." >&2
+  echo "Expected an unreviewed collected-data privacy manifest to fail." >&2
   exit 1
 fi
-if [[ "$output" != *"Privacy manifest unexpectedly declares collected data."* ]]; then
+if [[ "$output" != *"App privacy manifest must declare exactly the six reviewed voluntary support data types."* ]]; then
   echo "Unexpected collected-data rejection: $output" >&2
+  exit 1
+fi
+
+# Declaration order is not policy; the same approved rows must remain valid after reordering.
+reordered_support="$privacy_tmp/reordered-support.xcprivacy"
+plutil -convert json -o - "$valid_privacy" | ruby -rjson -e '
+  data = JSON.parse(STDIN.read)
+  data.fetch("NSPrivacyCollectedDataTypes").reverse!
+  puts JSON.generate(data)
+' > "$reordered_support"
+"$privacy_validator" "$reordered_support"
+
+# App support disclosures are exact; rejecting tracking alone is insufficient.
+for boundary in empty missing extra duplicate row-key tracking purpose linkage; do
+  malformed_support="$privacy_tmp/support-$boundary.xcprivacy"
+  ruby -rjson -e '
+    data = JSON.parse(STDIN.read)
+    rows = data.fetch("NSPrivacyCollectedDataTypes")
+    case ARGV.fetch(0)
+    when "empty" then rows.clear
+    when "missing" then rows.pop
+    when "extra"
+      rows << {"NSPrivacyCollectedDataType" => "NSPrivacyCollectedDataTypeDeviceID", "NSPrivacyCollectedDataTypeLinked" => true, "NSPrivacyCollectedDataTypeTracking" => false, "NSPrivacyCollectedDataTypePurposes" => ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]}
+    when "duplicate" then rows[-1] = rows.first.dup
+    when "row-key" then rows.first["SyntheticUnreviewedField"] = false
+    when "tracking" then rows.first["NSPrivacyCollectedDataTypeTracking"] = true
+    when "purpose" then rows.first["NSPrivacyCollectedDataTypePurposes"] << "NSPrivacyCollectedDataTypePurposeAnalytics"
+    when "linkage" then rows.first["NSPrivacyCollectedDataTypeLinked"] = false
+    end
+    puts JSON.generate(data)
+  ' "$boundary" < <(plutil -convert json -o - "$valid_privacy") > "$malformed_support"
+  if output="$("$privacy_validator" "$malformed_support" 2>&1)"; then
+    echo "Expected the $boundary support declaration boundary to fail." >&2
+    exit 1
+  fi
+  if [[ "$output" != *"App privacy manifest must declare exactly the six reviewed voluntary support data types."* ]]; then
+    echo "Unexpected $boundary support rejection: $output" >&2
+    exit 1
+  fi
+done
+if output="$("$privacy_validator" "$valid_privacy" extension 2>&1)"; then
+  echo "Expected support collection in the stateless extension to fail." >&2
+  exit 1
+fi
+if [[ "$output" != *"Control extension must not declare collected data."* ]]; then
+  echo "Unexpected extension support rejection: $output" >&2
   exit 1
 fi
 
@@ -146,8 +192,15 @@ for value in '[]' '[{"NSPrivacyAccessedAPIType":"NSPrivacyAccessedAPICategoryUse
     exit 1
   fi
 done
-if "$privacy_validator" "$valid_privacy" extension >/dev/null 2>&1; then
+extension_app_apis="$privacy_tmp/extension-app-apis.xcprivacy"
+cp "$valid_privacy" "$extension_app_apis"
+plutil -replace NSPrivacyCollectedDataTypes -json '[]' "$extension_app_apis"
+if output="$("$privacy_validator" "$extension_app_apis" extension 2>&1)"; then
   echo "Expected an extension with app preference APIs to fail." >&2
+  exit 1
+fi
+if [[ "$output" != *"Control extension must not declare required-reason APIs."* ]]; then
+  echo "Unexpected extension API rejection: $output" >&2
   exit 1
 fi
 

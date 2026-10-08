@@ -1,10 +1,10 @@
 # Hafa Remote
 ## Build Plan
 
-**Version:** 0.2
-**Last updated:** October 8, 2026
+**Version:** 0.3
+**Last updated:** October 9, 2026
 **Current status:** HR-041 through HR-048 are merged. Version 1.0 build 8 passed the exact merged gate, native archive/export/upload, and Apple processing; it is available to Leon through his existing internal group. On October 8, Leon requested a Samsung-focused public App Store release and confirmed Samsung works for him; Sony and Vizio remain in testing.
-**Current execution frontier:** HR-049 prepares a separate Samsung-only public build without removing the three-brand internal build or experimental saved data. Public submission still requires the final release evidence and decision record; the owner's Samsung report is not a universal-model, firmware, wake, or exact-build certification.
+**Current execution frontier:** HR-049 is merged as `82432eb3`, with both audiences and exclusion/data-preservation proof. Leon now explicitly authorizes the Samsung App Store submission and reports almost all controls working. HR-050 finalizes the coordinated packet and truthful support/privacy facts under the scoped [release decision](docs/HR-050-SAMSUNG-SUBMISSION-DECISION.md); HR-051 delivers the next live-verified unused public candidate. The owner confirmed internal build 1.0 (8) on Samsung Q70AA; unknown firmware, optional controls and numerical soak results are not fabricated.
 
 ## Samsung App Store 1.0 cycle
 
@@ -12,20 +12,20 @@
 
 **Intent:** The public version supports compatible Samsung Tizen TVs. Sony and Vizio continue in the internal TestFlight audience until their acceptance is complete.
 
-- [ ] Add a reproducible public scheme/configuration and explicit audience policy; keep the current internal build and all three-brand tests intact.
-- [ ] Exclude Sony/Vizio discovery, pairing, transports, drivers and experimental protocol modules from the public executable, not only from marketing.
-- [ ] Public discovery, manual setup, restoration, library selection, command routing and credential cleanup accept Samsung only.
-- [ ] Preserve experimental saved records, credentials and per-TV favorites during an internal-to-public upgrade; never restore or mutate an unsupported brand through a Samsung driver.
-- [ ] Make public Help, setup, demo and Bonjour declarations accurately Samsung-scoped. Keep original artwork and semantic controls.
-- [ ] Validate both audiences with meaningful regression tests, the full gate, a public Release simulator build and actual native UI checks. Prove exclusion at build and binary level.
-- [ ] Prepare public preflight checks without opening the submission step while release decisions remain incomplete. Do not invent protocol-rights or hardware approval.
-- [ ] Current CodeRabbit coverage, required CI and all material findings pass; merge under the standing workflow and clean owned resources.
+- [x] Add a reproducible public scheme/configuration and explicit audience policy; keep the current internal build and all three-brand tests intact.
+- [x] Exclude Sony/Vizio discovery, pairing, transports, drivers and experimental protocol modules from the public executable, not only from marketing.
+- [x] Public discovery, manual setup, restoration, library selection, command routing and credential cleanup accept Samsung only.
+- [x] Preserve experimental saved records, credentials and per-TV favorites during an internal-to-public upgrade; never restore or mutate an unsupported brand through a Samsung driver.
+- [x] Make public Help, setup, demo and Bonjour declarations accurately Samsung-scoped. Keep original artwork and semantic controls.
+- [x] Validate both audiences with meaningful regression tests, the full gate, a public Release simulator build and actual native UI checks. Prove exclusion at build and binary level.
+- [x] Prepare public preflight checks without opening the submission step while release decisions remain incomplete. Do not invent protocol-rights or hardware approval.
+- [x] Current CodeRabbit coverage, required CI and all material findings pass; merge under the standing workflow and clean owned resources.
 
 **Acceptance:** A public Samsung build can be inspected and exercised without any experimental TV protocol path, while the internal build retains Sony/Vizio testing and previously saved data. No App Store Connect submission is part of this ticket.
 
 ### HR-050 — Finish Samsung listing, support and privacy materials
 
-**Blockers:** Public screenshot capture depends on HR-049; support-retention wording and App Privacy depend on Leon's actual handling decision.
+**Scope:** App metadata/source packet belongs to the app owner; Root owns actual App Store Connect fields/screenshots, and the website owner owns published pages. The app-source preparation PR may complete independently; HR-050 publication and HR-051 public upload remain gated on actual support-retention duration/deletion wording, live policy URLs and final published privacy verification. The six retained-support disclosure types are confirmed; no duration is assumed.
 
 - [ ] Publish accurate Samsung-focused support/privacy wording that explains optional report sharing and actual support retention.
 - [ ] Prepare public description, subtitle, keywords, review notes and exact public screenshots; list only evidenced compatibility and conditional power behavior.
@@ -48,8 +48,8 @@
 |---|---|---:|---:|
 | Protocol decision | Q70AA pairing, commands, token persistence, and reconnect are proven | 3 days | 3 days |
 | Personal alpha | Daily-driver remote for Leon's Samsung, Sony, and Vizio TVs | 6–10 more days | 2–3 weeks |
-| External TestFlight | Tested setup, diagnostics, and multi-model evidence | 3–5 more days | Only after Samsung authorization gate |
-| App Store 1.0 | Free Samsung-focused public release; other brands remain internal | 3–5 more days | Only after beta and per-brand authorization gates |
+| External TestFlight | Tested setup, diagnostics, and multi-model evidence | 3–5 more days | Broader beta planning target; initial Samsung submission uses HR-050 scope |
+| App Store 1.0 | Free Samsung-focused public release; other brands remain internal | 3–5 more days | Owner-directed HR-050 decision plus current artifact/store readiness |
 
 Estimates assume focused build sessions. Hardware testing and entitlement/App Review waits determine calendar time.
 
@@ -350,6 +350,8 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Phase 3 — External TestFlight
 
+The following broad-beta gates are historical planning targets. For the owner-authorized initial Samsung App Store 1.0 scope, HR-050's explicit decision controls; unchecked hardware counts and distribution documents below are not implied to have been completed.
+
 ### HR-012 — Resolve each brand's distribution basis
 
 **Blockers:** HR-011 go decision
@@ -407,6 +409,8 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Phase 4 — App Store 1.0
 
+The original broad-profile checklists below retain their historical completion states. The initial Samsung release uses the current HR-050 decision and HR-051 delivery conditions; this does not mark the old legal, hardware-video, model-count or measured-soak tasks completed.
+
 ### HR-016 — Reserve and clear the product identity
 
 **Blockers:** App Store go decision
@@ -447,6 +451,8 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## App Store 1.0 definition of done
 
+Historical broad-profile checklist. For this owner-authorized initial Samsung scope, the current HR-050 decision and PRD Public App Store gate supersede the old blanket distribution/matrix prerequisites. Code, artifact, privacy/store truth, material-defect, current-review and CI conditions remain required.
+
 - [ ] The tested brand/model scope is explicit.
 - [ ] Authorization, partner terms, or a documented qualified legal basis covers every distributed brand protocol.
 - [ ] Multiple saved TVs work without credential crossover.
@@ -474,7 +480,7 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 | Risk | Early proof | Mitigation | Release consequence |
 |---|---|---|---|
 | Samsung changes or withholds the local protocol | HR-002 and multi-model beta | Isolate driver, document evidence, avoid universal claims | Stop public release if behavior is not defensible |
-| Samsung does not authorize third-party distribution | HR-012 | Seek partner guidance or qualified legal review before external distribution | Keep the app personal/internal; do not submit publicly |
+| Samsung local-endpoint terms or rights remain uncertain | HR-012 / HR-050 | Record primary-source research and owner scope; address applicable restrictions or Apple requests | Owner-directed Samsung submission is not legal clearance; respond on evidence without false claims |
 | Self-signed device TLS encourages insecure handling | HR-002 security review | Per-device, user-initiated trust; no global bypass | P0 blocker |
 | A target TV does not advertise Samsung Bonjour | HR-007 and hardware matrix | Keep manual-IP recovery and test discovery on every supported model | Exclude models that cannot meet zero-entry setup quality |
 | Wake-on-LAN varies by TV/router/settings | HR-006 and HR-014 | Capability gate and honest messaging | Never market guaranteed power-on |
@@ -486,6 +492,6 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Immediate next action
 
-Complete HR-049's Samsung public build and preserved internal audience: verify both flavors with the canonical gate, actual native QA, current source review and CI, then merge when ready. Public upload remains closed. HR-050 finalizes the Samsung listing, support/privacy handling and release evidence; HR-051 verifies the next unused build and submits only after those decisions and gates are complete. Existing internal TestFlight 1.0 (8) remains available to Leon.
+Complete HR-050's coordinated Samsung packet, support/privacy facts and owner-directed release decision, then HR-051's fresh unused-number check and exact merged public delivery/submission. The earlier broader numerical/qualified-basis project prerequisites are explicitly reconciled for the initial Samsung scope in the release decision, not marked achieved. Current artifact/code/store truth and manual release remain required. Existing internal TestFlight 1.0 (8) remains unchanged.
 
 Historical build 7 evidence: release commit `0c5255f126ae94a00f8de6cc13bffd663b989a3e` passed the local gate (294 tests / 312 executions, 0 failures, 0 skips) and hosted iOS CI. This does not certify the October release.

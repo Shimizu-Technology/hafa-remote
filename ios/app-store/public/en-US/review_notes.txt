@@ -1,1 +1,11 @@
-Samsung-only public build candidate. Sony and Vizio protocol implementations are excluded. No login or test account exists. Help includes an explicitly simulated offline remote for inspection without a TV. Live control requires a compatible Samsung Tizen TV on the same local network, with on-TV approval. A sent command does not prove execution. Public submission remains closed pending the final release evidence and decision record.
+Hafa Remote is an iPhone-only local-network remote for compatible Samsung Tizen TVs. No app account or sign-in is required. It does not require a Samsung or SmartThings cloud account.
+
+WITHOUT TV HARDWARE: From the first-launch screen, tap Help, then Try the Remote Offline. The offline demo is explicitly labeled as simulated; it makes no discovery, pairing or TV command connections. It lets you inspect button/swipe controls and interface feedback. Help also contains TV Help & About, Diagnostics and a previewable support report.
+
+WITH TV HARDWARE: Use a compatible Samsung Tizen TV on the same private, non-guest local network as the iPhone. The phone uses Wi-Fi; the TV may use Wi-Fi or Ethernet. Turn the TV on, choose Add TV, allow iOS Local Network access and select the discovered Samsung TV. Approve Hafa Remote on the TV's connection dialog. If discovery cannot find the TV, use the manual-address fallback under TV not showing up?. Then exercise navigation, volume/mute, Home/Back and supported playback controls.
+
+Optional sources, channel/guide/number controls, text entry and TV-returned app shortcuts vary by model, firmware and TV app. Power-on is conditional on standby/network settings and is not guaranteed; the app distinguishes wake attempts from confirmed reconnection. This public binary excludes Sony and Vizio protocols and setup flows.
+
+Diagnostics are off by default, bounded and in-memory. Sharing requires previewing an immutable redacted report and explicitly choosing a destination in the system share sheet. No automatic upload, tracking, advertisements, subscription or backend is included.
+
+This is an independent app, not affiliated with or endorsed by Samsung Electronics.

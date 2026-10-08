@@ -1,1 +1,1 @@
-Local control for compatible Samsung Tizen TVs, with no account, advertising, or subscription.
+A calm, everyday remote for compatible Samsung Tizen TVs. Control your TV from your iPhone on the same home network—without an account, ads, or a subscription.

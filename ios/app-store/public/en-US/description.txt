@@ -1,1 +1,26 @@
-Hafa Remote is a local iPhone remote for compatible Samsung Tizen TVs. The iPhone and TV must use the same non-guest local network. Controls depend on the model, firmware and available local service. Network wake is conditional and never guaranteed. No universal compatibility or manufacturer affiliation is claimed. This source prepares a public build candidate; final compatibility and listing evidence are reviewed separately.
+Your everyday Samsung TV remote, right on your iPhone.
+
+Hafa Remote brings a calm, simple interface to compatible Samsung Tizen TVs on your home network. No account, advertising, tracking, or subscription.
+
+EVERYDAY CONTROLS
+Navigate menus, use Select, Home and Back, adjust volume and mute, and control playback. Choose button or swipe navigation for comfortable one-handed use.
+
+MORE WHEN YOUR TV SUPPORTS IT
+Open the source menu, use channel, guide and number controls, type into supported text fields, and save shortcuts from the app list returned by your TV. Available controls vary by model, firmware and TV app.
+
+YOUR TVs, TOGETHER
+Save multiple Samsung TVs in My TVs, give them names and optional rooms, and switch between them. Clear connection states and recovery actions help you retry or find a TV again.
+
+SIMPLE LOCAL SETUP
+Connect your iPhone by Wi-Fi and your TV by Wi-Fi or Ethernet to the same non-guest home network. Turn the TV on for first pairing and approve Hafa Remote on the TV. A manual-address fallback is available if discovery cannot find it.
+
+TRY THE INTERFACE OFFLINE
+Help includes a clearly labeled simulated remote. Explore its controls before pairing, without contacting a TV.
+
+SHARING IS YOUR CHOICE
+Pairing credentials and saved TV information stay on your phone during ordinary use. Optional diagnostics are off by default and keep a small, redacted history in memory. Preview a support report before choosing whether and where to share it. Nothing is uploaded automatically.
+
+COMPATIBILITY
+For compatible Samsung Tizen TVs. Features depend on the model, firmware, network and TV app. Power-on depends on the TV's standby and network settings and is not guaranteed. Older pairing variants and Frame Art Mode are not supported.
+
+Hafa Remote is independently developed by Shimizu Technology and is not affiliated with or endorsed by Samsung Electronics.
