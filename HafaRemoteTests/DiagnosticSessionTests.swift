@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Testing
 
 @testable import HafaRemote
@@ -575,33 +576,43 @@ struct DiagnosticAdmissionAndActivityTests {
         let driver = DiagnosticActivityFixture(health: health)
         let recorder = DiagnosticRecorder()
         recorder.setEnabled(true)
-        let store = RemoteSessionStore(
-            controller: RemoteSessionController(driver: driver, clock: clock, configuration: configuration()),
-            diagnostics: recorder)
+        let controller = RemoteSessionController(driver: driver, clock: clock, configuration: configuration())
+        let store = RemoteSessionStore(controller: controller, diagnostics: recorder)
         await store.connect(to: try target("synthetic-a"))
-        await settle { store.connectedTV != nil }
+        await settle(
+            { store.connectedTV != nil }, phase: "original connection",
+            snapshot: { await projectionSnapshot(store, controller: controller, recorder: recorder) })
         await advance(clock, duration: .seconds(17))
         await health.waitUntilStarted()
         clear(recorder, togglesConsent: togglesConsent)
         await health.release()
-        await settle { store.state == .offline }
+        await settle(
+            { store.state == .offline }, phase: "discarded health outcome",
+            snapshot: { await projectionSnapshot(store, controller: controller, recorder: recorder) })
         #expect(recorder.events.isEmpty)
         await store.disconnect()
 
         let freshClock = DiagnosticActivityClock()
         let freshHealth = DiagnosticOwnershipGate()
         let freshDriver = DiagnosticActivityFixture(health: freshHealth)
-        let freshStore = RemoteSessionStore(
-            controller: RemoteSessionController(
-                driver: freshDriver, clock: freshClock, configuration: configuration()), diagnostics: recorder
-        )
+        let freshController = RemoteSessionController(
+            driver: freshDriver, clock: freshClock, configuration: configuration())
+        let freshStore = RemoteSessionStore(controller: freshController, diagnostics: recorder)
         await freshStore.connect(to: try target("synthetic-a"))
-        await settle { freshStore.connectedTV != nil }
+        await settle(
+            { freshStore.connectedTV != nil }, phase: "fresh connection",
+            snapshot: {
+                await projectionSnapshot(freshStore, controller: freshController, recorder: recorder)
+            })
         recorder.clear()
         await advance(freshClock, duration: .seconds(17))
         await freshHealth.waitUntilStarted()
         await freshHealth.release()
-        await settle { freshStore.state == .offline }
+        await settle(
+            { freshStore.state == .offline }, phase: "fresh health outcome",
+            snapshot: {
+                await projectionSnapshot(freshStore, controller: freshController, recorder: recorder)
+            })
         #expect(recorder.events.map(\.kind) == [.connectionUnavailable])
         await freshStore.disconnect()
     }
@@ -692,12 +703,71 @@ struct DiagnosticAdmissionAndActivityTests {
             healthCheckTimeout: .seconds(5), healthCheckRetryDelay: .seconds(18), healthFailureThreshold: 1,
             networkLossGracePeriod: .seconds(19))
     }
-    private func settle(_ predicate: @MainActor () -> Bool) async {
-        for _ in 0..<5000 {
-            if predicate() { return }
-            await Task.yield()
+    /// Wait for observable completion, rather than counting scheduler-dependent executor yields.
+    private func settle(
+        _ predicate: @escaping @MainActor @Sendable () -> Bool,
+        phase: String = "diagnostic projection",
+        snapshot: @escaping @MainActor @Sendable () async -> String = { "" }
+    ) async {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(5))
+        while true {
+            let (changes, continuation) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+            let completed = withObservationTracking {
+                predicate()
+            } onChange: {
+                continuation.yield(())
+            }
+            if completed {
+                continuation.finish()
+                return
+            }
+            if clock.now >= deadline {
+                continuation.finish()
+                Issue.record("Timed out awaiting \(phase). \(await snapshot())")
+                return
+            }
+            let changed = await withTaskGroup(of: Bool.self) { group in
+                group.addTask {
+                    var iterator = changes.makeAsyncIterator()
+                    return await iterator.next() != nil
+                }
+                group.addTask {
+                    do { try await clock.sleep(until: deadline) } catch { return false }
+                    return false
+                }
+                let changed = await group.next() ?? false
+                group.cancelAll()
+                continuation.finish()
+                return changed
+            }
+            if !changed {
+                Issue.record("Timed out awaiting \(phase). \(await snapshot())")
+                return
+            }
         }
-        Issue.record("The deterministic projection did not settle")
+    }
+
+    private func projectionSnapshot(
+        _ store: RemoteSessionStore, controller: RemoteSessionController, recorder: DiagnosticRecorder
+    ) async -> String {
+        func stateName(_ state: RemoteSessionState) -> String {
+            switch state {
+            case .idle: "idle"
+            case .pairing: "pairing"
+            case .connecting: "connecting"
+            case .connected: "connected"
+            case .reconnecting: "reconnecting"
+            case .offline: "offline"
+            case .denied: "denied"
+            case .savedPairingRejected: "saved pairing rejected"
+            case .certificateChanged: "certificate changed"
+            case .unsupported: "unsupported"
+            case .failed: "failed"
+            }
+        }
+        return "Controller: \(stateName(await controller.state)); store: \(stateName(store.state)); "
+            + "enabled: \(recorder.isEnabled); semantic events: \(recorder.events.map(\.kind.rawValue))."
     }
     private func advance(_ clock: DiagnosticActivityClock, duration: Duration) async {
         for _ in 0..<5000 {
