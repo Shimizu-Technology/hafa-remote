@@ -11,7 +11,7 @@ More Controls & Favorites offers features available for the selected TV:
 
 Save multiple TVs, name them, assign optional rooms, and switch through My TVs. Favorites and keyboard preferences belong to their TV. Recovery offers bounded reconnect attempts plus available wake, Retry Connection, and Find TV. A sent request does not confirm what happened on the TV.
 
-Explore first: Help → Try the Remote Offline opens a clearly labeled simulation without contacting a TV. Help → Diagnostics can optionally record recent connection/delivery events in memory. Preview a report before choosing whether and where to share it; nothing is uploaded automatically.
+Explore first: Help → Try the Remote Offline opens a clearly labeled simulation without contacting a TV. Help → Diagnostics can optionally record recent connection, delivery, and lifecycle events in memory. Preview a report before choosing whether and where to share it; nothing is uploaded automatically.
 
 Live control requires your iPhone on Wi-Fi and a compatible TV on Wi-Fi or Ethernet on the same non-guest local network. Add TV searches for available TVs, with manual private-address setup as a fallback. First pairing requires the TV to be on and may require approval or its displayed code. Power-off preserves the saved TV. Power-on depends on the TV's network standby, Remote Start, Quick Start, or mobile-power settings and is not guaranteed. Individual TV apps or secure fields may reject text.
 
