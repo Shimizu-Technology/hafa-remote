@@ -5,10 +5,16 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
+distribution_audience="internal"
 archive_path=""
 export_path=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --audience)
+      distribution_audience="${2:-}"
+      [[ "$distribution_audience" == internal || "$distribution_audience" == public ]] || { echo "Unknown build audience." >&2; exit 1; }
+      shift 2
+      ;;
     --archive)
       archive_path="${2:-}"
       [[ -n "$archive_path" ]] || { echo "--archive requires a path" >&2; exit 1; }
@@ -20,7 +26,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     *)
-      echo "Usage: $0 [--archive /path/to/HafaRemote.xcarchive] [--export /path/to/AppStoreExport]" >&2
+      echo "Usage: $0 [--audience internal|public] [--archive /path/to/HafaRemote.xcarchive] [--export /path/to/AppStoreExport]" >&2
       exit 1
       ;;
   esac
@@ -40,6 +46,7 @@ done
 
 project="HafaRemote.xcodeproj"
 scheme="HafaRemote"
+configuration="Release"
 info_plist="HafaRemote/Resources/Info.plist"
 privacy_manifest="HafaRemote/Resources/PrivacyInfo.xcprivacy"
 entitlements="HafaRemote/Resources/HafaRemote.entitlements"
@@ -56,15 +63,18 @@ for required in "$project/project.pbxproj" "$info_plist" "$privacy_manifest" "$e
   fi
 done
 
-distribution_audience="${HAFA_DISTRIBUTION_AUDIENCE:-internal}"
-if [[ "$distribution_audience" != "internal" ]]; then
-  echo "Public distribution is closed: brand hardware and protocol-rights decisions remain incomplete." >&2
+if [[ -n "${HAFA_DISTRIBUTION_AUDIENCE:-}" && "$HAFA_DISTRIBUTION_AUDIENCE" != "$distribution_audience" ]]; then
+  echo "Ambient audience does not match the explicitly selected build flavor." >&2
   exit 1
 fi
-if [[ "$(plutil -extract HafaDistributionAudience raw "$info_plist" 2>/dev/null || true)" != "internal" ]]; then
-  echo "The release must explicitly identify its internal distribution audience." >&2
-  exit 1
+if [[ "$distribution_audience" == public ]]; then
+  scheme="HafaRemotePublic"
+  configuration="ReleasePublic"
+  info_plist="HafaRemote/Resources/InfoPublic.plist"
+  metadata_path="ios/app-store/public/en-US"
+  export_options="ios/app-store/PublicExportOptions.plist"
 fi
+./scripts/validate-audience-plist.sh "$info_plist" "$distribution_audience"
 
 xcode_version="$(xcodebuild -version | awk 'NR == 1 { print $2 }')"
 xcode_major="${xcode_version%%.*}"
@@ -82,7 +92,7 @@ done
 settings="$(xcodebuild \
   -project "$project" \
   -scheme "$scheme" \
-  -configuration Release \
+  -configuration "$configuration" \
   -destination "generic/platform=iOS" \
   -showBuildSettings)"
 setting() {
@@ -99,6 +109,17 @@ assert_setting() {
   fi
 }
 
+active_conditions="$(setting SWIFT_ACTIVE_COMPILATION_CONDITIONS)"
+if [[ "$distribution_audience" == public ]]; then
+  [[ " $active_conditions " == *" HAFA_PUBLIC_BUILD "* ]] || { echo "Public configuration lacks its compiled flavor condition." >&2; exit 1; }
+  excluded="$(setting EXCLUDED_SOURCE_FILE_NAMES)"
+  for required_pattern in 'Sony*.swift' 'Vizio*.swift' 'MultiBrandSessionDriver.swift' 'RemoteConvenienceUITestHarness.swift'; do
+    [[ " $excluded " == *" $required_pattern "* ]] || { echo "Public configuration lacks experimental source exclusion." >&2; exit 1; }
+  done
+else
+  [[ " $active_conditions " != *" HAFA_PUBLIC_BUILD "* ]] || { echo "Internal configuration contains the public flavor condition." >&2; exit 1; }
+fi
+
 assert_setting PRODUCT_BUNDLE_IDENTIFIER com.shimizutechnology.hafaremote
 assert_setting PRODUCT_NAME "Hafa Remote"
 assert_setting PRODUCT_MODULE_NAME HafaRemote
@@ -112,7 +133,7 @@ assert_setting CODE_SIGN_STYLE Automatic
 control_settings="$(xcodebuild \
   -project "$project" \
   -target HafaRemoteControls \
-  -configuration Release \
+  -configuration "$configuration" \
   -showBuildSettings)"
 control_setting() {
   local key="$1"
@@ -136,16 +157,12 @@ assert_control_setting APPLICATION_EXTENSION_API_ONLY YES
 assert_control_setting SKIP_INSTALL YES
 
 local_network_copy="$(plutil -extract NSLocalNetworkUsageDescription raw "$info_plist")"
-if [[ "$local_network_copy" != *"supported TVs"* ]]; then
+if [[ "$local_network_copy" != *"supported TVs"* && "$local_network_copy" != *"supported Samsung TVs"* ]]; then
   echo "Local-network permission copy must tell people it controls supported TVs." >&2
   exit 1
 fi
 
-bonjour_services="$(plutil -extract NSBonjourServices json -o - "$info_plist")"
-if [[ "$bonjour_services" != '["_androidtvremote2._tcp","_samsungmsf._tcp","_viziocast._tcp"]' ]]; then
-  echo "Bonjour declarations must contain only the verified Samsung, Sony/Google TV, and Vizio services." >&2
-  exit 1
-fi
+./scripts/validate-audience-plist.sh "$info_plist" "$distribution_audience"
 
 if [[ "$(plutil -extract NSAppTransportSecurity.NSAllowsLocalNetworking raw -expect bool "$info_plist")" != "true" ]]; then
   echo "Local-only HTTP capability lookup must be declared explicitly." >&2
@@ -198,7 +215,7 @@ if [[ "$(sips -g hasAlpha "$app_icon" 2>/dev/null | awk '/hasAlpha/ { print $2 }
   exit 1
 fi
 
-"$repo_root/scripts/validate-export-options.sh" "$export_options" export
+"$repo_root/scripts/validate-export-options.sh" "$export_options" export "$distribution_audience"
 
 METADATA_PATH="$metadata_path" ruby <<'RUBY'
 require "uri"
@@ -240,7 +257,7 @@ if [[ -n "$archive_path" ]]; then
   archived_app="$archive_path/Products/$application_path"
   archived_info="$archived_app/Info.plist"
   [[ -d "$archived_app" ]] || { echo "Archived app not found: $archived_app" >&2; exit 1; }
-  [[ "$(plutil -extract HafaDistributionAudience raw "$archived_info")" == "$distribution_audience" ]] || { echo "Archived distribution audience does not match." >&2; exit 1; }
+  ./scripts/validate-audience-plist.sh "$archived_info" "$distribution_audience"
 
   [[ "$(plutil -extract CFBundleIdentifier raw "$archived_info")" == "$(setting PRODUCT_BUNDLE_IDENTIFIER)" ]] || { echo "Archived bundle ID does not match." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleShortVersionString raw "$archived_info")" == "$(setting MARKETING_VERSION)" ]] || { echo "Archived marketing version does not match." >&2; exit 1; }
@@ -257,6 +274,7 @@ if [[ -n "$archive_path" ]]; then
   cleanup_preflight() { rm -rf -- "$preflight_tmp"; }
   trap cleanup_preflight EXIT
   codesign --verify --deep --strict "$archived_app"
+  if [[ "$distribution_audience" == public ]]; then "$repo_root/scripts/validate-public-build.sh" --binary-only "$archived_app"; fi
   "$repo_root/scripts/validate-provisioning-profile.sh" \
     "$archived_app/embedded.mobileprovision" \
     "4T358A5S74.com.shimizutechnology.hafaremote" \
@@ -287,7 +305,7 @@ if [[ -n "$export_path" ]]; then
   exported_app="$(find "$export_tmp/Payload" -maxdepth 1 -type d -name '*.app' -print -quit)"
   [[ -n "$exported_app" ]] || { echo "Exported app bundle is missing." >&2; exit 1; }
   exported_info="$exported_app/Info.plist"
-  [[ "$(plutil -extract HafaDistributionAudience raw "$exported_info")" == "$distribution_audience" ]] || { echo "Exported distribution audience does not match." >&2; exit 1; }
+  ./scripts/validate-audience-plist.sh "$exported_info" "$distribution_audience"
   [[ "$(plutil -extract CFBundleIdentifier raw "$exported_info")" == "$(setting PRODUCT_BUNDLE_IDENTIFIER)" ]] || { echo "Exported bundle ID does not match." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleShortVersionString raw "$exported_info")" == "$(setting MARKETING_VERSION)" ]] || { echo "Exported marketing version does not match." >&2; exit 1; }
   [[ "$(plutil -extract CFBundleVersion raw "$exported_info")" == "$(setting CURRENT_PROJECT_VERSION)" ]] || { echo "Exported build number does not match." >&2; exit 1; }
@@ -298,6 +316,7 @@ if [[ -n "$export_path" ]]; then
   [[ "$(plutil -extract CFBundleVersion raw "$exported_control/Info.plist")" == "$(setting CURRENT_PROJECT_VERSION)" ]] || { echo "Exported control build number does not match." >&2; exit 1; }
   "$repo_root/scripts/validate-privacy-manifest.sh" "$exported_control/PrivacyInfo.xcprivacy" extension
   codesign --verify --deep --strict "$exported_app"
+  if [[ "$distribution_audience" == public ]]; then "$repo_root/scripts/validate-public-build.sh" --binary-only "$exported_app"; fi
   codesign -d --entitlements :- "$exported_app" >"$export_tmp/entitlements.plist" 2>/dev/null
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :application-identifier' "$export_tmp/entitlements.plist")" == "4T358A5S74.com.shimizutechnology.hafaremote" ]] || { echo "Exported application identifier does not match." >&2; exit 1; }
   [[ "$(/usr/libexec/PlistBuddy -c 'Print :get-task-allow' "$export_tmp/entitlements.plist")" == "false" ]] || { echo "Exported app is debuggable." >&2; exit 1; }

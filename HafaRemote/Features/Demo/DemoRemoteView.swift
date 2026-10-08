@@ -40,7 +40,9 @@ struct DemoRemoteView: View {
                     .accessibilityIdentifier("demoSendTextButton")
                 }
                 Text(
-                    "Demo capabilities are simulated. Actual TV controls depend on the model, pairing, and verified protocol support."
+                    TVBuildFlavor.compiled == .samsungPublic
+                        ? "Samsung remote preview. Demo capabilities are simulated; actual controls depend on the TV model, pairing, and verified protocol support."
+                        : "Demo capabilities are simulated. Actual TV controls depend on the model, pairing, and verified protocol support."
                 )
                 .font(.footnote)
                 .foregroundStyle(HafaTheme.secondaryText)

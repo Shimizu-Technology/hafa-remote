@@ -76,6 +76,12 @@ final class SavedTV: CustomStringConvertible {
         TVBrand(rawValue: brandRawValue) ?? .samsung
     }
 
+    /// Preserve unknown/experimental records without reinterpreting them as Samsung.
+    var isSupportedInCurrentBuild: Bool {
+        guard let persistedBrand = TVBrand(rawValue: brandRawValue) else { return false }
+        return TVDistributionPolicy.current.permits(persistedBrand)
+    }
+
     var stableDeviceKey: String {
         stableDeviceID ?? "\(brand.rawValue):\(reportedDeviceID)"
     }

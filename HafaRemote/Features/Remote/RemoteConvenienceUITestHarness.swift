@@ -1,4 +1,4 @@
-#if DEBUG
+#if DEBUG && !HAFA_PUBLIC_BUILD
     import Observation
     import SwiftUI
 

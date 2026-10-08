@@ -85,19 +85,26 @@ struct TVCapabilityEvidence: Equatable, Sendable {
     }
 }
 
-/// Public distribution starts closed until model/firmware hardware and protocol rights are approved.
+/// Build exposure is separate from hardware evidence and permission to submit.
 enum TVDistributionPolicy: Equatable, Sendable {
     case internalCandidate
     case publicRelease
+    case unavailable
 
-    static var current: TVDistributionPolicy {
-        Bundle.main.object(forInfoDictionaryKey: "HafaDistributionAudience") as? String == "internal"
-            ? .internalCandidate : .publicRelease
+    static var current: Self {
+        guard TVBuildFlavor.isConfigured else { return .unavailable }
+        return TVBuildFlavor.compiled == .samsungPublic ? .publicRelease : .internalCandidate
     }
 
+    var permittedBrands: [TVBrand] { TVBrand.allCases.filter(permits) }
+
     func permits(_ brand: TVBrand) -> Bool {
-        // No brand currently has a completed public distribution decision.
-        self == .internalCandidate
+        switch self {
+        case .unavailable: false
+        case .publicRelease: brand == .samsung
+        case .internalCandidate:
+            TVBuildFlavor.compiled == .internalTesting || brand == .samsung
+        }
     }
 }
 

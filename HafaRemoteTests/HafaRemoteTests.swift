@@ -28,11 +28,11 @@ struct HafaRemoteTests {
     }
 
     @Test(
-        "Every unresolved brand is denied public distribution and available for internal testing",
+        "Internal builds expose testing brands; the public product admits Samsung only",
         arguments: TVBrand.allCases)
     func distributionRequiresExplicitInternalAudience(brand: TVBrand) {
         #expect(TVDistributionPolicy.internalCandidate.permits(brand))
-        #expect(!TVDistributionPolicy.publicRelease.permits(brand))
+        #expect(TVDistributionPolicy.publicRelease.permits(brand) == (brand == .samsung))
     }
 
     @Test("A connected socket defaults to unknown screen power without hardware verification")

@@ -63,19 +63,27 @@ final class RemoteSessionStore {
     }
 
     convenience init() {
+        guard TVBuildFlavor.isConfigured else {
+            self.init(controller: RemoteSessionController(driver: DisabledRemoteSessionDriver()))
+            return
+        }
         let samsung = SamsungPairingCoordinator(
             deviceInfoProvider: SamsungDeviceInfoClient(),
             credentialStore: KeychainSamsungPairingCredentialStore(),
             transport: SamsungCommandTransport()
         )
-        let driver = MultiBrandSessionDriver(
-            samsung: samsung,
-            sony: SonyPairingCoordinator(),
-            vizio: VizioPairingCoordinator(
-                credentialStore: KeychainVizioPairingCredentialStore()
+        #if HAFA_PUBLIC_BUILD
+            self.init(controller: RemoteSessionController(driver: samsung))
+        #else
+            let driver = MultiBrandSessionDriver(
+                samsung: samsung,
+                sony: SonyPairingCoordinator(),
+                vizio: VizioPairingCoordinator(
+                    credentialStore: KeychainVizioPairingCredentialStore()
+                )
             )
-        )
-        self.init(controller: RemoteSessionController(driver: driver))
+            self.init(controller: RemoteSessionController(driver: driver))
+        #endif
     }
 
     var connectedTV: ConnectedTV? {
@@ -334,6 +342,9 @@ final class RemoteSessionStore {
         reportedDeviceID: String? = nil,
         brand: TVBrand = .samsung
     ) async throws {
+        guard TVDistributionPolicy.current.permits(brand) else {
+            throw RemoteCredentialRemovalError.unsupported
+        }
         projectionRevision &+= 1
         acceptsConnectedTVUpdates = false
         lastConnectedTV = nil
@@ -351,6 +362,9 @@ final class RemoteSessionStore {
         reportedDeviceID: String? = nil,
         brand: TVBrand = .samsung
     ) async throws {
+        guard TVDistributionPolicy.current.permits(brand) else {
+            throw RemoteCredentialRemovalError.unsupported
+        }
         try await controller.removePairingCredential(
             for: addressText,
             reportedDeviceID: reportedDeviceID,

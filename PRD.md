@@ -1,20 +1,21 @@
 # Hafa Remote
 ## Product Requirements Document
 
-**Version:** 0.4
-**Date:** October 7, 2026
+**Version:** 0.5
+**Date:** October 8, 2026
 **Owner:** Shimizu Technology
-**Status:** Three-brand internal TestFlight candidate; household hardware validation pending
+**Status:** Samsung-focused public release preparation; Sony/Vizio internal testing
 
 ## Executive summary
 
-Hafa Remote is an iPhone-only remote control for compatible Samsung, Sony, and Vizio smart TVs on the same local network. It should replace the physical remote for ordinary daily use without an account, advertising, a subscription, or a cloud service. Each brand is a separately tested capability: Samsung remains the proven baseline, while Sony and Vizio stay internal-only until Leon's exact household models complete pairing, command, reconnect, and power testing. A public App Store release is a later decision that depends on real-device reliability and a defensible authorization basis for every local-control protocol distributed in the binary.
+Hafa Remote is an iPhone-only remote control for compatible Samsung Tizen TVs on the same local network in its first public release. Its separate internal TestFlight build also tests Sony BRAVIA/Google TV and Vizio SmartCast integrations. It should replace the physical remote for ordinary daily use without an account, advertising, a subscription, or a cloud service. Each brand is a separately tested capability: Samsung remains the proven baseline, while Sony and Vizio stay internal-only until Leon's exact household models complete pairing, command, reconnect, and power testing. A public App Store release is a later decision that depends on real-device reliability and a defensible authorization basis for every local-control protocol distributed in the binary.
 
 ## Product classification
 
 - **Profile:** Public consumer utility, beginning as a personal/internal alpha
 - **Platform:** iPhone only
-- **Initial TV platforms:** Compatible Samsung Tizen, Sony BRAVIA/Google TV, and Vizio SmartCast televisions, enabled only after per-model validation
+- **Public 1.0 platform:** Compatible Samsung Tizen televisions, with evidenced model/capability limits
+- **Internal experimental platforms:** Sony BRAVIA/Google TV and Vizio SmartCast, separately gated pending acceptance
 - **Connectivity:** Same local network; the iPhone uses Wi-Fi and the TV may use Wi-Fi or Ethernet
 - **Backend:** None
 - **Account:** None
@@ -58,7 +59,7 @@ The core job is: **Open Hafa Remote, select the intended television if necessary
 
 Commands use a reviewed allowlist. Factory, service-menu, hospitality, reset, and other potentially destructive keys are never included.
 
-The October implementation and internal TestFlight acceptance criteria are recorded in [the readiness plan](docs/APP-STORE-READINESS-PLAN.md). Implemented protocol support, negotiated/session-observed capabilities and physical hardware validation are distinct. Internal testing may expose supported experimental paths with honest limitations; public compatibility remains behind the hardware and distribution gates below.
+The October implementation and internal TestFlight acceptance criteria are recorded in [the readiness plan](docs/APP-STORE-READINESS-PLAN.md). Leon requested a Samsung-focused public release on October 8; HR-049 through HR-051 in BUILD_PLAN.md define that cycle. Public builds must omit experimental Sony/Vizio protocol modules and preserve, without using or deleting, their existing internal-test records and credentials. Implemented protocol support, negotiated/session-observed capabilities and physical hardware validation are distinct. Internal testing may expose supported experimental paths with honest limitations; public compatibility remains behind the hardware and distribution gates below.
 
 ### Compatibility policy
 
@@ -118,7 +119,7 @@ The main session state machine must represent at least:
 
 1. Hafa Remote explains that the iPhone and TV must be on the same non-guest local network; the iPhone uses Wi-Fi, while the TV may use Wi-Fi or Ethernet.
 2. The user taps **Add TV**; the setup sheet immediately searches and this user action triggers the iOS local-network permission request.
-3. The app shows verified Samsung, Sony, and Vizio devices with their reported name, brand, and model when available.
+3. The public build shows verified Samsung candidates with their reported name and model when available. The separate internal build also tests Sony and Vizio discovery.
 4. The user chooses a TV.
 5. The app establishes the brand-specific secure local connection and requests on-TV approval or a short PIN when that protocol requires it.
 6. Hafa Remote stores only the resulting brand-scoped credential in Keychain.
