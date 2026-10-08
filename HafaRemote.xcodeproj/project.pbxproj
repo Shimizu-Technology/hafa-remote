@@ -993,24 +993,6 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		0744408173E279DED5EAE14A /* DebugPublic */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 4T358A5S74;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote.tests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hafa Remote.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hafa Remote";
-			};
-			name = DebugPublic;
-		};
 		197B971B2729416562AF958E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1512,25 +1494,6 @@
 			};
 			name = Release;
 		};
-		C51EE45728848513E8577931 /* ReleasePublic */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 4T358A5S74;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.shimizutechnology.hafaremote.tests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Hafa Remote.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Hafa Remote";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = ReleasePublic;
-		};
 		CC82DDC05517FD85C0F23C9E /* ReleasePublic */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1805,8 +1768,6 @@
 			buildConfigurations = (
 				514876F4C3750B210F427744 /* Release */,
 				78AD9266EA5BECEED06EB641 /* Debug */,
-				0744408173E279DED5EAE14A /* DebugPublic */,
-				C51EE45728848513E8577931 /* ReleasePublic */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

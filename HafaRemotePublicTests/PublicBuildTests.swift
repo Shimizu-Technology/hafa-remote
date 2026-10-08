@@ -224,13 +224,17 @@ private actor PublicBoundaryProbeDriver: RemoteSessionDriving {
 @MainActor
 private final class PublicDiscoveryFixture: TVDiscoveryBackend {
     func start(eventHandler: @escaping @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void) {
+        guard let address = try? PrivateIPv4Address(documentationAddressForTesting: "192.0.2.49") else {
+            Issue.record("The synthetic documentation address must be valid")
+            return
+        }
         for brand in TVBrand.allCases {
             eventHandler(
                 .found(
                     DiscoveredTV(
                         brand: brand, reportedIdentifier: "synthetic-\(brand.rawValue)",
                         displayName: "Synthetic TV", modelName: "Synthetic model",
-                        address: try! PrivateIPv4Address(documentationAddressForTesting: "192.0.2.49"))))
+                        address: address)))
         }
         eventHandler(.finished)
     }

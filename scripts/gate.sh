@@ -109,6 +109,7 @@ xcodebuild -project HafaRemote.xcodeproj -scheme HafaRemotePublic -configuration
   -destination 'generic/platform=iOS Simulator' -derivedDataPath "$public_release_data" -quiet build \
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- "CC=$repo_root/scripts/xcode-clang-probe.sh"
 ./scripts/validate-public-build.sh "$public_release_data/Build/Products/ReleasePublic-iphonesimulator/Hafa Remote.app" "$public_release_data"
+./scripts/test-public-build-validation.sh "$public_release_data/Build/Products/ReleasePublic-iphonesimulator/Hafa Remote.app" "$public_release_data"
 
 echo "Testing the Samsung public product and preserved internal data"
 public_data="$work_dir/PublicDebugDerivedData"
