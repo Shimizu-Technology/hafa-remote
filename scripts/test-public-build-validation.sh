@@ -54,7 +54,7 @@ expect_rejection 'No actual app compiler input list was found' \
   "$fixture_dir/clean.app" "$fixture_dir/EmptyDerivedData"
 
 # Synthetic input/map files are negative fixtures only; actual positive proof uses the real build.
-inputs="$fixture_dir/NegativeDerivedData/Build/Intermediates.noindex"
+inputs="$fixture_dir/NegativeDerivedData/Build/Intermediates.noindex/Objects-normal/arm64"
 mkdir -p "$inputs"
 printf 'SamsungPairingCoordinator.swift\nTVBuildFlavor.swift\n/Protocols/Sony/SonyTLSChannel.swift\n' \
   > "$inputs/Hafa Remote.SwiftFileList"
@@ -66,4 +66,32 @@ expect_rejection 'No public app link map was found' \
 printf 'VizioHTTPSClient.o\n' > "$inputs/Hafa Remote-LinkMap-normal-arm64.txt"
 expect_rejection 'Experimental driver object entered public linking' \
   "$fixture_dir/clean.app" "$fixture_dir/NegativeDerivedData"
+# Remove one actual binary architecture's evidence while retaining the other architecture(s).
+python3 - "$app" "$derived_data" "$fixture_dir" <<'PYFIXTURE'
+from pathlib import Path
+import plistlib, shutil, subprocess, sys
+app, actual, fixtures = map(Path, sys.argv[1:])
+info = plistlib.loads((app / 'Info.plist').read_bytes())
+omitted = subprocess.check_output(
+    ['xcrun', 'lipo', '-archs', str(app / info['CFBundleExecutable'])], text=True).split()[0]
+for name, omit_inputs in [('MissingArchitectureInputs', True), ('MissingArchitectureMap', False)]:
+    destination = fixtures / name
+    destination.mkdir()
+    for item in (actual / 'Build/Intermediates.noindex').rglob('*'):
+        if not item.is_file():
+            continue
+        is_input = item.name == 'Hafa Remote.SwiftFileList'
+        is_map = item.name.startswith('Hafa Remote-LinkMap-') and item.suffix == '.txt'
+        if not (is_input or is_map):
+            continue
+        if omit_inputs and is_input and item.parent.name == omitted:
+            continue
+        if not omit_inputs and item.name == f'Hafa Remote-LinkMap-normal-{omitted}.txt':
+            continue
+        target = destination / item.relative_to(actual)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(item, target)
+PYFIXTURE
+expect_rejection 'compiler' "$app" "$fixture_dir/MissingArchitectureInputs"
+expect_rejection 'link map' "$app" "$fixture_dir/MissingArchitectureMap"
 echo 'Optimized public artifact validation fixtures passed.'

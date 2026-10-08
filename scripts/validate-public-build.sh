@@ -10,7 +10,7 @@ derived_data="${2:-}"
 codesign --verify --deep --strict "$app"
 python3 - "$app" "$derived_data" "$mode" <<'PY'
 from pathlib import Path
-import plistlib, sys
+import plistlib, subprocess, sys
 
 def require(condition, message):
     if not condition:
@@ -32,6 +32,14 @@ if mode == "full":
         require(not any(token in text for token in ['/Protocols/Sony/', '/Protocols/Vizio/', 'MultiBrandSessionDriver.swift', 'RemoteConvenienceUITestHarness.swift']), 'Experimental source entered public compilation')
     maps = list((derived / 'Build/Intermediates.noindex').rglob('Hafa Remote-LinkMap-*.txt'))
     require(maps, 'No public app link map was found')
+    architectures = subprocess.check_output(
+        ['xcrun', 'lipo', '-archs', str(app / info['CFBundleExecutable'])], text=True).split()
+    require(architectures, 'No executable architecture was found')
+    for architecture in architectures:
+        require(any(item.parent.name == architecture for item in inputs),
+                f'Public compiler evidence missing for architecture: {architecture}')
+        require(any(item.name == f'Hafa Remote-LinkMap-normal-{architecture}.txt' for item in maps),
+                f'Public link map evidence missing for architecture: {architecture}')
     for item in maps:
         require(not any(token in item.read_text() for token in ['SonyPairingCoordinator.o', 'SonyTLSChannel.o', 'VizioPairingCoordinator.o', 'VizioHTTPSClient.o', 'MultiBrandSessionDriver.o']), 'Experimental driver object entered public linking')
 binary = (app / info['CFBundleExecutable']).read_bytes()
