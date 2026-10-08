@@ -151,4 +151,21 @@ if "$privacy_validator" "$valid_privacy" extension >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "iOS release preflight fixture tests passed"
+
+# Audience identity, service declarations and packaging may not be mixed across flavors.
+audience_validator="$repo_root/scripts/validate-audience-plist.sh"
+"$audience_validator" "$repo_root/HafaRemote/Resources/Info.plist" internal
+"$audience_validator" "$repo_root/HafaRemote/Resources/InfoPublic.plist" public
+if "$audience_validator" "$repo_root/HafaRemote/Resources/Info.plist" public >/dev/null 2>&1; then echo 'Internal plist admitted as public.' >&2; exit 1; fi
+if "$audience_validator" "$repo_root/HafaRemote/Resources/InfoPublic.plist" internal >/dev/null 2>&1; then echo 'Public plist admitted as internal.' >&2; exit 1; fi
+public_options="$repo_root/ios/app-store/PublicExportOptions.plist"
+"$export_validator" "$public_options" export public
+if "$export_validator" "$public_options" export internal >/dev/null 2>&1; then echo 'Public packaging admitted for internal delivery.' >&2; exit 1; fi
+if "$export_validator" "$repo_root/ios/app-store/ExportOptions.plist" export public >/dev/null 2>&1; then echo 'Internal-only packaging admitted for public delivery.' >&2; exit 1; fi
+wrong_services="$privacy_tmp/wrong-public-services.plist"
+cp "$repo_root/HafaRemote/Resources/InfoPublic.plist" "$wrong_services"
+plutil -replace NSBonjourServices -json '["_samsungmsf._tcp","_viziocast._tcp"]' "$wrong_services"
+if "$audience_validator" "$wrong_services" public >/dev/null 2>&1; then echo 'Experimental service admitted in public metadata.' >&2; exit 1; fi
+if "$repo_root/scripts/ios-release.sh" --audience public upload synthetic-archive synthetic-export >/dev/null 2>&1; then echo 'Public upload gate was opened by flavor selection.' >&2; exit 1; fi
+
+echo "iOS release preflight fixture tests passed for both audiences"

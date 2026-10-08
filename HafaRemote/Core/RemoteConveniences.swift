@@ -25,22 +25,24 @@ enum TVConvenienceError: LocalizedError, Equatable, Sendable {
 
 enum SonyAppLink: String, CaseIterable, Codable, Sendable {
     case youtube, netflix, primeVideo, disneyPlus
-    var value: String {
-        switch self {
-        case .youtube: "https://www.youtube.com"
-        case .netflix: "netflix://"
-        case .primeVideo: "https://app.primevideo.com"
-        case .disneyPlus: "https://www.disneyplus.com"
+    #if !HAFA_PUBLIC_BUILD
+        var value: String {
+            switch self {
+            case .youtube: "https://www.youtube.com"
+            case .netflix: "netflix://"
+            case .primeVideo: "https://app.primevideo.com"
+            case .disneyPlus: "https://www.disneyplus.com"
+            }
         }
-    }
-    var name: String {
-        switch self {
-        case .youtube: "YouTube"
-        case .netflix: "Netflix"
-        case .primeVideo: "Prime Video"
-        case .disneyPlus: "Disney+"
+        var name: String {
+            switch self {
+            case .youtube: "YouTube"
+            case .netflix: "Netflix"
+            case .primeVideo: "Prime Video"
+            case .disneyPlus: "Disney+"
+            }
         }
-    }
+    #endif
 }
 
 enum TVAppTarget: Codable, Equatable, Hashable, Sendable {
@@ -78,9 +80,12 @@ struct TVAppShortcut: Codable, Equatable, Identifiable, Sendable {
         self.target = target
     }
 
-    static var sonyConfiguredLinks: [Self] {
-        SonyAppLink.allCases.compactMap { try? Self(name: $0.name, target: .sony($0)) }
-    }
+    #if !HAFA_PUBLIC_BUILD
+        static var sonyConfiguredLinks: [Self] {
+            SonyAppLink.allCases.compactMap { try? Self(name: $0.name, target: .sony($0)) }
+        }
+    #endif
+
 }
 
 struct TVInputSource: Equatable, Identifiable, Sendable {

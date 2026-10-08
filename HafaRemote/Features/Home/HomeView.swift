@@ -20,17 +20,20 @@ struct HomeView: View {
     @State private var pendingWakeAttempt: PendingWakeAttempt?
 
     private let wakeService: any SamsungTVWaking
+    private let savedTargetResolver: @MainActor (SavedTV) -> TVConnectionTarget?
 
     init(
         session: RemoteSessionStore = RemoteSessionStore(),
         discovery: TVDiscoveryStore = TVDiscoveryStore(),
         networkMonitor: LocalNetworkMonitor = LocalNetworkMonitor(),
-        wakeService: any SamsungTVWaking = SamsungWakeOnLANService()
+        wakeService: any SamsungTVWaking = SamsungWakeOnLANService(),
+        savedTargetResolver: @escaping @MainActor (SavedTV) -> TVConnectionTarget? = { $0.connectionTarget }
     ) {
         _session = State(initialValue: session)
         _discovery = State(initialValue: discovery)
         _networkMonitor = State(initialValue: networkMonitor)
         self.wakeService = wakeService
+        self.savedTargetResolver = savedTargetResolver
     }
 
     /// Builds the current saved-TV, restoration, setup, or remote presentation.
@@ -118,7 +121,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: $isShowingMyTVs) {
             MyTVsView(
-                savedTVs: savedTVs,
+                savedTVs: supportedSavedTVs,
                 selectedDeviceKey: selection.selectedDeviceKey,
                 connectedDeviceKey: session.connectedTV?.stableDeviceKey,
                 isSwitching: selection.isSwitching,
@@ -153,7 +156,7 @@ struct HomeView: View {
         .task(id: savedTVRevision) {
             backfillLegacySavedTVsIfNeeded()
             let reconciled = await SavedTVPendingRemovalRecovery.reconcile(
-                savedTVs,
+                supportedSavedTVs,
                 in: modelContext
             ) { savedTV in
                 try await session.removePairingCredential(
@@ -288,7 +291,7 @@ struct HomeView: View {
         .navigationTitle("Hafa Remote")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { helpButton }
-            if !savedTVs.isEmpty {
+            if !supportedSavedTVs.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
                     myTVsButton
                 }
@@ -319,7 +322,7 @@ struct HomeView: View {
                         .multilineTextAlignment(.center)
                 }
 
-                if let savedTV = savedTVs.first {
+                if let savedTV = selectableSavedTVs.first {
                     Text(savedTV.displayName)
                         .font(.subheadline)
                         .foregroundStyle(HafaTheme.secondaryText)
@@ -385,7 +388,8 @@ struct HomeView: View {
         }
         await restoration.restore(
             from: selectableSavedTVs,
-            skipBecauseConnectionWasInitiated: session.hasInitiatedConnection
+            skipBecauseConnectionWasInitiated: session.hasInitiatedConnection,
+            targetForSavedTV: savedTargetResolver
         ) { target in
             await session.connect(to: target)
         }
@@ -396,8 +400,10 @@ struct HomeView: View {
         return selectableSavedTVs.first(where: { $0.stableDeviceKey == selectedDeviceKey })
     }
 
+    private var supportedSavedTVs: [SavedTV] { savedTVs.filter(\.isSupportedInCurrentBuild) }
+
     private var selectableSavedTVs: [SavedTV] {
-        savedTVs.filter { !$0.pendingCredentialRemoval }
+        supportedSavedTVs.filter { !$0.pendingCredentialRemoval }
     }
 
     private var savedTVRevision: String {
@@ -417,7 +423,7 @@ struct HomeView: View {
             }
             return selectedSavedTV.rememberedTV
         }
-        return session.lastConnectedTV
+        return session.lastConnectedTV.flatMap { TVDistributionPolicy.current.permits($0.brand) ? $0 : nil }
     }
 
     private var isPresentedTVConnected: Bool {
@@ -434,6 +440,7 @@ struct HomeView: View {
     }
 
     private func select(_ savedTV: SavedTV) {
+        guard savedTV.isSupportedInCurrentBuild else { return }
         guard let target = savedTV.connectionTarget else {
             alert = HomeAlert(
                 title: "Can't Connect",
@@ -475,6 +482,7 @@ struct HomeView: View {
 
     /// Removes a saved TV while disrupting the active session only when that TV owns it.
     private func forget(_ savedTV: SavedTV) async throws {
+        guard savedTV.isSupportedInCurrentBuild else { throw TVSessionDriverError.unsupportedBrand }
         let removedKey = savedTV.stableDeviceKey
         let remainingTVs = selectableSavedTVs.filter { $0.stableDeviceKey != removedKey }
         let selectedBeforeRemoval = selectedSavedTV
@@ -712,9 +720,9 @@ struct HomeView: View {
     }
 
     private func backfillLegacySavedTVsIfNeeded() {
-        let recordsNeedingBackfill = savedTVs.filter { $0.stableDeviceID == nil }
+        let recordsNeedingBackfill = supportedSavedTVs.filter { $0.stableDeviceID == nil }
         guard !recordsNeedingBackfill.isEmpty else { return }
-        SavedTVLegacyIdentityMigration.apply(to: savedTVs, in: modelContext)
+        SavedTVLegacyIdentityMigration.apply(to: supportedSavedTVs, in: modelContext)
         do {
             try modelContext.save()
         } catch {
@@ -1068,6 +1076,7 @@ struct HafaRemoteHelpView: View {
                     Button("Done") {
                         dismiss()
                     }
+                    .accessibilityIdentifier("tvHelpDoneButton")
                 }
             }
         }
@@ -1092,14 +1101,16 @@ struct HafaRemoteHelpView: View {
                     Text("Choose Allow when the TV asks to approve Hafa Remote.")
                         .foregroundStyle(HafaTheme.secondaryText)
                 }
-                LabeledContent("Sony") {
-                    Text("Enter the six-character code shown on the TV.")
-                        .foregroundStyle(HafaTheme.secondaryText)
-                }
-                LabeledContent("Vizio") {
-                    Text("Enter the four-digit PIN shown on the TV.")
-                        .foregroundStyle(HafaTheme.secondaryText)
-                }
+                #if !HAFA_PUBLIC_BUILD
+                    LabeledContent("Sony") {
+                        Text("Enter the six-character code shown on the TV.")
+                            .foregroundStyle(HafaTheme.secondaryText)
+                    }
+                    LabeledContent("Vizio") {
+                        Text("Enter the four-digit PIN shown on the TV.")
+                            .foregroundStyle(HafaTheme.secondaryText)
+                    }
+                #endif
                 Text("Local pairing varies by model. A brand name alone does not guarantee compatibility.")
                     .font(.footnote)
                     .foregroundStyle(HafaTheme.secondaryText)
@@ -1397,6 +1408,7 @@ final class SavedTVRestorationCoordinator {
     func restore(
         from savedTVs: [SavedTV],
         skipBecauseConnectionWasInitiated: Bool = false,
+        targetForSavedTV: @MainActor (SavedTV) -> TVConnectionTarget? = { $0.connectionTarget },
         connect: @MainActor (TVConnectionTarget) async throws -> Void
     ) async {
         guard !didAttempt else { return }
@@ -1404,7 +1416,7 @@ final class SavedTVRestorationCoordinator {
             didAttempt = true
             return
         }
-        guard let target = savedTVs.first?.connectionTarget else { return }
+        guard let savedTV = savedTVs.first, let target = targetForSavedTV(savedTV) else { return }
         didAttempt = true
 
         isRestoring = true

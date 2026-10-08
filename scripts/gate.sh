@@ -9,11 +9,12 @@ echo "Running credential scan"
 ./scripts/scan-secrets.sh
 
 echo "Checking Swift formatting"
-xcrun swift-format lint --strict --recursive HafaRemote HafaRemoteControls HafaRemoteTests HafaRemoteUITests
+xcrun swift-format lint --strict --recursive HafaRemote HafaRemoteControls HafaRemoteTests HafaRemoteUITests HafaRemotePublicTests HafaRemotePublicUITests
 
 echo "Checking release configuration"
 ./scripts/test-ios-release-preflight.sh
 ./scripts/ios-release-preflight.sh
+./scripts/ios-release-preflight.sh --audience public
 ./scripts/test-xcode-clang-probe.sh
 
 if [[ "$(uname -s)" != "Darwin" ]] || ! command -v xcodebuild >/dev/null 2>&1; then
@@ -102,4 +103,25 @@ xcrun simctl install "$simulator_id" "$app_path"
 xcrun simctl launch --terminate-running-process "$simulator_id" "$bundle_id"
 xcrun simctl terminate "$simulator_id" "$bundle_id"
 
+echo "Building the public Release flavor and validating executable exclusion"
+public_release_data="$work_dir/PublicReleaseDerivedData"
+xcodebuild -project HafaRemote.xcodeproj -scheme HafaRemotePublic -configuration ReleasePublic \
+  -destination 'generic/platform=iOS Simulator' -derivedDataPath "$public_release_data" -quiet build \
+  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- "CC=$repo_root/scripts/xcode-clang-probe.sh"
+./scripts/validate-public-build.sh "$public_release_data/Build/Products/ReleasePublic-iphonesimulator/Hafa Remote.app" "$public_release_data"
+./scripts/test-public-build-validation.sh "$public_release_data/Build/Products/ReleasePublic-iphonesimulator/Hafa Remote.app" "$public_release_data"
+
+echo "Testing the Samsung public product and preserved internal data"
+public_data="$work_dir/PublicDebugDerivedData"
+xcodebuild -project HafaRemote.xcodeproj -scheme HafaRemotePublic -configuration DebugPublic \
+  -destination "platform=iOS Simulator,id=$simulator_id" -derivedDataPath "$public_data" \
+  -resultBundlePath "$work_dir/HafaRemotePublicTests.xcresult" -parallel-testing-enabled NO \
+  -collect-test-diagnostics never -quiet test CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
+  "CC=$repo_root/scripts/xcode-clang-probe.sh"
+public_app="$public_data/Build/Products/DebugPublic-iphonesimulator/Hafa Remote.app"
+codesign --verify --deep --strict "$public_app"
+./scripts/validate-audience-plist.sh "$public_app/Info.plist" public
+xcrun simctl install "$simulator_id" "$public_app"
+xcrun simctl launch --terminate-running-process "$simulator_id" "$bundle_id"
+xcrun simctl terminate "$simulator_id" "$bundle_id"
 echo "Gate passed"

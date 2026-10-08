@@ -44,14 +44,22 @@ struct TVSetupView: View {
         discovery: TVDiscoveryStore = TVDiscoveryStore()
     ) {
         self.session = session
-        self.initialTarget = initialTarget
-        self.initialAddress = initialTarget?.address.rawValue ?? initialAddress
+        let permittedInitialTarget = initialTarget.flatMap {
+            TVDistributionPolicy.current.permits($0.brand) ? $0 : nil
+        }
+        let discardsInitialTarget = initialTarget != nil && permittedInitialTarget == nil
+        self.initialTarget = permittedInitialTarget
+        self.initialAddress =
+            discardsInitialTarget ? "" : (permittedInitialTarget?.address.rawValue ?? initialAddress)
         self.initialReportedDeviceID =
-            initialTarget?.expectedSavedDeviceID ?? initialTarget?.reportedDeviceID ?? initialReportedDeviceID
-        _address = State(initialValue: initialTarget?.address.rawValue ?? initialAddress)
-        _selectedBrand = State(initialValue: initialTarget?.brand)
-        _manualBrand = State(initialValue: initialTarget?.brand ?? .samsung)
-        _selectedTarget = State(initialValue: initialTarget)
+            discardsInitialTarget
+            ? nil
+            : (permittedInitialTarget?.expectedSavedDeviceID ?? permittedInitialTarget?.reportedDeviceID
+                ?? initialReportedDeviceID)
+        _address = State(initialValue: self.initialAddress)
+        _selectedBrand = State(initialValue: permittedInitialTarget?.brand)
+        _manualBrand = State(initialValue: permittedInitialTarget?.brand ?? .samsung)
+        _selectedTarget = State(initialValue: permittedInitialTarget)
         _discovery = State(initialValue: discovery)
     }
 
@@ -386,13 +394,17 @@ struct TVSetupView: View {
                 // claim the hit area of neighboring text fields and repair actions.
                 Group {
                     Text(
-                        "Choose the TV brand, then enter its private address from the TV network settings. Samsung asks for approval, Sony shows a pairing code, and Vizio shows a PIN."
+                        TVBuildFlavor.compiled == .samsungPublic
+                            ? "Enter your Samsung TV's private address from its network settings. Choose Allow when the TV asks to approve Hafa Remote."
+                            : "Choose the TV brand, then enter its private address from the TV network settings. Samsung asks for approval, Sony shows a pairing code, and Vizio shows a PIN."
                     )
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(HafaTheme.secondaryText)
 
                     Picker("TV Brand", selection: $manualBrand) {
-                        ForEach(TVBrand.allCases, id: \.self) { brand in Text(brand.displayName).tag(brand) }
+                        ForEach(TVDistributionPolicy.current.permittedBrands, id: \.self) { brand in
+                            Text(brand.displayName).tag(brand)
+                        }
                     }
                     .disabled(isBusy)
                     .frame(minHeight: 44)

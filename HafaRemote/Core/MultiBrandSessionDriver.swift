@@ -343,29 +343,6 @@ actor PairingCodeBroker {
     }
 }
 
-enum MultiBrandSessionDriverError: LocalizedError, Equatable, Sendable {
-    case unsupportedBrand
-    case notConnected
-    case pairingCodeNotExpected
-    case pairingCodeAlreadyRequested
-    case missingStableIdentity
-
-    var errorDescription: String? {
-        switch self {
-        case .unsupportedBrand:
-            "That TV brand is not enabled in this build."
-        case .notConnected:
-            "Connect to a TV before sending a command."
-        case .pairingCodeNotExpected:
-            "The TV is not waiting for a pairing code."
-        case .pairingCodeAlreadyRequested:
-            "A TV pairing code is already being requested."
-        case .missingStableIdentity:
-            "Find the TV again before removing its saved pairing."
-        }
-    }
-}
-
 #if DEBUG
     actor SonyPairingUIFixtureDriver: RemoteSessionDriving {
         nonisolated var brand: TVBrand { .sony }

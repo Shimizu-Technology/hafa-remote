@@ -6,9 +6,28 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 usage() {
-  echo "Usage: $0 archive [output.xcarchive] | export <archive.xcarchive> [output-directory] | upload <archive.xcarchive> <validated-export-directory> [upload-output-directory]" >&2
+  echo "Usage: $0 [--audience internal|public] archive [output.xcarchive] | export <archive.xcarchive> [output-directory] | upload <archive.xcarchive> <validated-export-directory> [upload-output-directory]" >&2
   exit 1
 }
+
+audience="internal"
+configuration="Release"
+scheme="HafaRemote"
+export_options="ios/app-store/ExportOptions.plist"
+if [[ "${1:-}" == "--audience" ]]; then
+  audience="${2:-}"
+  [[ "$audience" == internal || "$audience" == public ]] || usage
+  shift 2
+fi
+if [[ "$audience" == public ]]; then
+  configuration="ReleasePublic"
+  scheme="HafaRemotePublic"
+  export_options="ios/app-store/PublicExportOptions.plist"
+fi
+if [[ "$audience" == public && "${1:-}" == upload ]]; then
+  echo "Public upload is closed until HR-051's release evidence and decision are complete." >&2
+  exit 1
+fi
 
 authentication_args=()
 if [[ -n "${HAFA_ASC_KEY_PATH:-}${HAFA_ASC_KEY_ID:-}${HAFA_ASC_ISSUER_ID:-}" ]]; then
@@ -28,18 +47,18 @@ case "$command_name" in
   archive)
     archive_path="${2:-$repo_root/build/HafaRemote.xcarchive}"
     mkdir -p "$(dirname "$archive_path")"
-    ./scripts/ios-release-preflight.sh
+    ./scripts/ios-release-preflight.sh --audience "$audience"
     xcodebuild \
       -project HafaRemote.xcodeproj \
-      -scheme HafaRemote \
-      -configuration Release \
+      -scheme "$scheme" \
+      -configuration "$configuration" \
       -destination "generic/platform=iOS" \
       -archivePath "$archive_path" \
       -allowProvisioningUpdates \
       ${authentication_args[@]+"${authentication_args[@]}"} \
       archive \
       "CC=$repo_root/scripts/xcode-clang-probe.sh"
-    ./scripts/ios-release-preflight.sh --archive "$archive_path"
+    ./scripts/ios-release-preflight.sh --audience "$audience" --archive "$archive_path"
     echo "Validated archive: $archive_path"
     ;;
   export)
@@ -47,15 +66,15 @@ case "$command_name" in
     [[ -n "$archive_path" ]] || usage
     export_path="${3:-$repo_root/build/AppStoreExport}"
     mkdir -p "$export_path"
-    ./scripts/ios-release-preflight.sh --archive "$archive_path"
+    ./scripts/ios-release-preflight.sh --audience "$audience" --archive "$archive_path"
     xcodebuild \
       -exportArchive \
       -archivePath "$archive_path" \
       -exportPath "$export_path" \
-      -exportOptionsPlist ios/app-store/ExportOptions.plist \
+      -exportOptionsPlist "$export_options" \
       -allowProvisioningUpdates \
       ${authentication_args[@]+"${authentication_args[@]}"}
-    ./scripts/ios-release-preflight.sh --archive "$archive_path" --export "$export_path"
+    ./scripts/ios-release-preflight.sh --audience "$audience" --archive "$archive_path" --export "$export_path"
     echo "Validated App Store export: $export_path"
     ;;
   upload)
@@ -63,12 +82,12 @@ case "$command_name" in
     export_path="${3:-}"
     [[ -n "$archive_path" && -n "$export_path" ]] || usage
     upload_path="${4:-$repo_root/build/InternalUpload}"
-    ./scripts/ios-release-preflight.sh --archive "$archive_path" --export "$export_path"
+    ./scripts/ios-release-preflight.sh --audience "$audience" --archive "$archive_path" --export "$export_path"
     mkdir -p "$upload_path"
     upload_options="$upload_path/UploadOptions.plist"
-    cp ios/app-store/ExportOptions.plist "$upload_options"
+    cp "$export_options" "$upload_options"
     plutil -replace destination -string upload "$upload_options"
-    ./scripts/validate-export-options.sh "$upload_options" upload
+    ./scripts/validate-export-options.sh "$upload_options" upload "$audience"
     # Xcode packages the same validated archive, preserving its build and internal-only audience.
     # Its delivery receipt is separate from the earlier local IPA's hash.
     xcodebuild \

@@ -208,8 +208,11 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
     }
 
     @MainActor private func panGutter(in app: XCUIApplication, upward: Bool) {
-        let from = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.7))
-        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: upward ? 0.45 : 0.9))
+        // Stay inside the scroll view's 20pt content inset, outside interactive rows.
+        // On a Pro Max, 10% of the screen lands on the navigation-mode picker.
+        let origin = app.coordinate(withNormalizedOffset: .zero)
+        let from = origin.withOffset(CGVector(dx: 8, dy: app.frame.height * 0.7))
+        let to = origin.withOffset(CGVector(dx: 8, dy: app.frame.height * (upward ? 0.45 : 0.9)))
         from.press(forDuration: 0.1, thenDragTo: to, withVelocity: .slow, thenHoldForDuration: 0.2)
     }
 

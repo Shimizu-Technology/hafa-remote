@@ -57,7 +57,7 @@ extension RemoteSessionDriving {
     }
 
     func submitPairingCode(_ code: String) async throws {
-        throw MultiBrandSessionDriverError.pairingCodeNotExpected
+        throw TVSessionDriverError.pairingCodeNotExpected
     }
 }
 
@@ -87,6 +87,12 @@ extension SamsungPairingCoordinator: RemoteSessionDriving {
             target: target,
             onWaitingForApproval: onWaitingForApproval
         )
+    }
+
+    /// The public composition uses this concrete witness; never discard the saved stable identity.
+    func forget(addressText: String, reportedDeviceID: String?, brand: TVBrand) async throws {
+        guard brand == .samsung else { throw RemoteCredentialRemovalError.unsupported }
+        try await forget(addressText: addressText, reportedDeviceID: reportedDeviceID)
     }
 
     /// Bridges the generic session boundary to Samsung's non-destructive credential API.
@@ -274,7 +280,7 @@ actor RemoteSessionController {
         activityStartedAt: ContinuousClock.Instant = .now
     ) async {
         guard !Task.isCancelled else { return }
-        guard driver.supports(target.brand) else {
+        guard TVDistributionPolicy.current.permits(target.brand), driver.supports(target.brand) else {
             stateRequestID = requestID
             generation = UUID()
             targetAddressText = nil
@@ -514,7 +520,9 @@ actor RemoteSessionController {
             commandTasks[commandID] = nil
             if error is TVConvenienceError { throw error }
             // A rejected optional request does not establish that ordinary TV controls are unavailable.
-            if isConvenienceRequest, error is VizioProtocolError { throw TVConvenienceError.unavailable }
+            #if !HAFA_PUBLIC_BUILD
+                if isConvenienceRequest, error is VizioProtocolError { throw TVConvenienceError.unavailable }
+            #endif
             if optionalFeature, let timeout = error as? RemoteSessionControllerError, case .timedOut = timeout
             {
                 throw TVConvenienceError.timedOut
@@ -610,6 +618,9 @@ actor RemoteSessionController {
         reportedDeviceID: String? = nil,
         brand: TVBrand = .samsung
     ) async throws {
+        guard TVDistributionPolicy.current.permits(brand) else {
+            throw RemoteCredentialRemovalError.unsupported
+        }
         let activityStartedAt = ContinuousClock.now
         try await waitForPairingRemoval()
         try Task.checkCancellation()
@@ -697,6 +708,9 @@ actor RemoteSessionController {
         reportedDeviceID: String? = nil,
         brand: TVBrand = .samsung
     ) async throws {
+        guard TVDistributionPolicy.current.permits(brand) else {
+            throw RemoteCredentialRemovalError.unsupported
+        }
         try await waitForPairingRemoval()
         try Task.checkCancellation()
         let removalID = UUID()
@@ -963,55 +977,97 @@ actor RemoteSessionController {
         if let timeoutError = error as? RemoteSessionControllerError {
             transition(to: .failed(.timedOut(timeoutError.operation)), activityStartedAt: activityStartedAt)
             scheduleReconnect(generation: requestedGeneration, activityStartedAt: activityStartedAt)
-        } else if error as? SamsungConnectionError == .pairingTimedOut {
+            return
+        }
+        if error as? SamsungConnectionError == .pairingTimedOut {
             transition(to: .failed(.timedOut(.connect)), activityStartedAt: activityStartedAt)
             scheduleReconnect(generation: requestedGeneration, activityStartedAt: activityStartedAt)
-        } else if error as? SonyPairingCoordinatorError == .pairingTimedOut
-            || error as? SonyPairingCoordinatorError == .remoteHandshakeTimedOut
-        {
-            transition(to: .failed(.timedOut(.connect)), activityStartedAt: activityStartedAt)
-            scheduleReconnect(generation: requestedGeneration, activityStartedAt: activityStartedAt)
-        } else if error as? TVDriverError == .savedDeviceIdentityMismatch {
+            return
+        }
+        #if !HAFA_PUBLIC_BUILD
+            if error as? SonyPairingCoordinatorError == .pairingTimedOut
+                || error as? SonyPairingCoordinatorError == .remoteHandshakeTimedOut
+            {
+                transition(to: .failed(.timedOut(.connect)), activityStartedAt: activityStartedAt)
+                scheduleReconnect(generation: requestedGeneration, activityStartedAt: activityStartedAt)
+                return
+            }
+        #endif
+        if error as? TVDriverError == .savedDeviceIdentityMismatch {
             transition(to: .failed(.savedDeviceIdentityMismatch), activityStartedAt: activityStartedAt)
-        } else if error as? SamsungConnectionError == .denied {
+            return
+        }
+        if error as? SamsungConnectionError == .denied {
             transition(to: .denied, activityStartedAt: activityStartedAt)
-        } else if error as? SamsungPairingCoordinatorError == .savedPairingRejected {
+            return
+        }
+        if error as? SamsungPairingCoordinatorError == .savedPairingRejected {
             transition(to: .savedPairingRejected, activityStartedAt: activityStartedAt)
-        } else if error as? SamsungPairingCoordinatorError == .certificateChanged {
+            return
+        }
+        if error as? SamsungPairingCoordinatorError == .certificateChanged {
             transition(to: .certificateChanged, activityStartedAt: activityStartedAt)
-        } else if error as? SonyPairingCoordinatorError == .certificateChanged
-            || error as? SonyTLSChannelError == .certificateChanged
-        {
-            transition(to: .certificateChanged, activityStartedAt: activityStartedAt)
-        } else if error as? SonyPairingCoordinatorError == .pairingRejected,
-            connectionTarget?.brand == .sony,
-            connectionTarget?.expectedSavedDeviceID != nil
-        {
-            // A rejected saved credential requires deliberate record-scoped repair.
-            // Keep its expected identity out of the fresh-pairing manual fallback.
-            transition(to: .savedPairingRejected, activityStartedAt: activityStartedAt)
-        } else if error as? SonyPairingCoordinatorError == .invalidPairingCode
-            || error as? SonyPairingCoordinatorError == .pairingRejected
-            || error as? VizioPairingCoordinatorError == .pinRejected
-        {
-            transition(to: .denied, activityStartedAt: activityStartedAt)
-        } else if error as? VizioPairingCoordinatorError == .savedPairingRejected {
-            transition(to: .savedPairingRejected, activityStartedAt: activityStartedAt)
-        } else if error as? VizioPairingCoordinatorError == .unrecognizedDeviceInfo {
-            transition(to: .failed(.unrecognizedDeviceInfo(.vizio)), activityStartedAt: activityStartedAt)
-        } else if error as? VizioPairingCoordinatorError == .certificateChanged
-            || error as? VizioPairingCoordinatorError == .deviceIdentityChanged
-            || error as? VizioHTTPSClientError == .certificateChanged
-        {
-            transition(to: .certificateChanged, activityStartedAt: activityStartedAt)
-        } else if Self.isUnsupportedError(error) {
+            return
+        }
+        #if !HAFA_PUBLIC_BUILD
+            if error as? SonyPairingCoordinatorError == .certificateChanged
+                || error as? SonyTLSChannelError == .certificateChanged
+            {
+                transition(to: .certificateChanged, activityStartedAt: activityStartedAt)
+                return
+            }
+        #endif
+        #if !HAFA_PUBLIC_BUILD
+            if error as? SonyPairingCoordinatorError == .pairingRejected,
+                connectionTarget?.brand == .sony,
+                connectionTarget?.expectedSavedDeviceID != nil
+            {
+                // A rejected saved credential requires deliberate record-scoped repair.
+                // Keep its expected identity out of the fresh-pairing manual fallback.
+                transition(to: .savedPairingRejected, activityStartedAt: activityStartedAt)
+                return
+            }
+        #endif
+        #if !HAFA_PUBLIC_BUILD
+            if error as? SonyPairingCoordinatorError == .invalidPairingCode
+                || error as? SonyPairingCoordinatorError == .pairingRejected
+                || error as? VizioPairingCoordinatorError == .pinRejected
+            {
+                transition(to: .denied, activityStartedAt: activityStartedAt)
+                return
+            }
+        #endif
+        #if !HAFA_PUBLIC_BUILD
+            if error as? VizioPairingCoordinatorError == .savedPairingRejected {
+                transition(to: .savedPairingRejected, activityStartedAt: activityStartedAt)
+                return
+            }
+        #endif
+        #if !HAFA_PUBLIC_BUILD
+            if error as? VizioPairingCoordinatorError == .unrecognizedDeviceInfo {
+                transition(to: .failed(.unrecognizedDeviceInfo(.vizio)), activityStartedAt: activityStartedAt)
+                return
+            }
+        #endif
+        #if !HAFA_PUBLIC_BUILD
+            if error as? VizioPairingCoordinatorError == .certificateChanged
+                || error as? VizioPairingCoordinatorError == .deviceIdentityChanged
+                || error as? VizioHTTPSClientError == .certificateChanged
+            {
+                transition(to: .certificateChanged, activityStartedAt: activityStartedAt)
+                return
+            }
+        #endif
+        if Self.isUnsupportedError(error) {
             transition(to: .unsupported, activityStartedAt: activityStartedAt)
-        } else if Self.isOfflineError(error) {
+            return
+        }
+        if Self.isOfflineError(error) {
             transition(to: .offline, activityStartedAt: activityStartedAt)
             scheduleReconnect(generation: requestedGeneration, activityStartedAt: activityStartedAt)
-        } else {
-            transition(to: .failed(.unexpected), activityStartedAt: activityStartedAt)
+            return
         }
+        transition(to: .failed(.unexpected), activityStartedAt: activityStartedAt)
     }
 
     /// Scheduling is an outcome of the original failure, not a newly executed attempt.
@@ -1316,13 +1372,17 @@ actor RemoteSessionController {
         if let error = error as? SamsungConnectionError {
             return error == .notConnected
         }
-        if let error = error as? SonyTLSChannelError {
-            return error == .connectionClosed
-        }
-        if let error = error as? VizioHTTPSClientError {
-            return error == .notConnected
-        }
-        if let error = error as? MultiBrandSessionDriverError {
+        #if !HAFA_PUBLIC_BUILD
+            if let error = error as? SonyTLSChannelError {
+                return error == .connectionClosed
+            }
+        #endif
+        #if !HAFA_PUBLIC_BUILD
+            if let error = error as? VizioHTTPSClientError {
+                return error == .notConnected
+            }
+        #endif
+        if let error = error as? TVSessionDriverError {
             return error == .notConnected
         }
         return false
@@ -1421,23 +1481,34 @@ actor RemoteSessionController {
     }
 
     private static func isUnsupportedError(_ error: Error) -> Bool {
-        error as? SamsungPairingCoordinatorError == .unsupportedTokenAuthentication
-            || error as? SonyPairingCoordinatorError == .unsupportedDevice
-            || error as? VizioPairingCoordinatorError == .invalidTarget
-            || error as? MultiBrandSessionDriverError == .unsupportedBrand
+        if error as? SamsungPairingCoordinatorError == .unsupportedTokenAuthentication
+            || error as? TVSessionDriverError == .unsupportedBrand
+        {
+            return true
+        }
+        #if !HAFA_PUBLIC_BUILD
+            return error as? SonyPairingCoordinatorError == .unsupportedDevice
+                || error as? VizioPairingCoordinatorError == .invalidTarget
+        #else
+            return false
+        #endif
     }
 
     private static func isOfflineError(_ error: Error) -> Bool {
         if let error = error as? SamsungConnectionError {
             return error == .unavailable || error == .notConnected
         }
-        if let error = error as? SonyTLSChannelError {
-            return error == .unavailable || error == .connectionClosed
-        }
-        if let error = error as? VizioHTTPSClientError {
-            return error == .unavailable || error == .notConnected
-        }
-        if let error = error as? MultiBrandSessionDriverError {
+        #if !HAFA_PUBLIC_BUILD
+            if let error = error as? SonyTLSChannelError {
+                return error == .unavailable || error == .connectionClosed
+            }
+        #endif
+        #if !HAFA_PUBLIC_BUILD
+            if let error = error as? VizioHTTPSClientError {
+                return error == .unavailable || error == .notConnected
+            }
+        #endif
+        if let error = error as? TVSessionDriverError {
             return error == .notConnected
         }
         return false

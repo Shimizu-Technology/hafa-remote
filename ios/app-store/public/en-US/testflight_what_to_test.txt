@@ -1,0 +1,1 @@
+Samsung public build preparation: inspect unpaired Help, offline demo and manual setup; verify only Samsung is offered. Test synthetic mixed saved records: restore Samsung only and retain unsupported records, pending deletions and favorites. Household/model/firmware acceptance remains a separate release prerequisite.

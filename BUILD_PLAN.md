@@ -2,9 +2,45 @@
 ## Build Plan
 
 **Version:** 0.2
-**Last updated:** October 7, 2026
-**Current status:** HR-041 through HR-047 are merged; HR-048 prepares version 1.0 build 8 after authenticated App Store Connect records confirmed builds 1–7 already used. Current archive/upload/processing evidence remains required.
-**Current execution frontier:** Complete HR-048 on the exact reviewed merge commit: canonical gate, signed archive and IPA preflight, actual internal-only upload, successful processing and Leon’s existing internal access. Build 8 was verified unused through the existing authorized API credential; historical build 7 evidence does not certify this candidate.
+**Last updated:** October 8, 2026
+**Current status:** HR-041 through HR-048 are merged. Version 1.0 build 8 passed the exact merged gate, native archive/export/upload, and Apple processing; it is available to Leon through his existing internal group. On October 8, Leon requested a Samsung-focused public App Store release and confirmed Samsung works for him; Sony and Vizio remain in testing.
+**Current execution frontier:** HR-049 prepares a separate Samsung-only public build without removing the three-brand internal build or experimental saved data. Public submission still requires the final release evidence and decision record; the owner's Samsung report is not a universal-model, firmware, wake, or exact-build certification.
+
+## Samsung App Store 1.0 cycle
+
+### HR-049 — Separate Samsung public and three-brand internal builds
+
+**Intent:** The public version supports compatible Samsung Tizen TVs. Sony and Vizio continue in the internal TestFlight audience until their acceptance is complete.
+
+- [ ] Add a reproducible public scheme/configuration and explicit audience policy; keep the current internal build and all three-brand tests intact.
+- [ ] Exclude Sony/Vizio discovery, pairing, transports, drivers and experimental protocol modules from the public executable, not only from marketing.
+- [ ] Public discovery, manual setup, restoration, library selection, command routing and credential cleanup accept Samsung only.
+- [ ] Preserve experimental saved records, credentials and per-TV favorites during an internal-to-public upgrade; never restore or mutate an unsupported brand through a Samsung driver.
+- [ ] Make public Help, setup, demo and Bonjour declarations accurately Samsung-scoped. Keep original artwork and semantic controls.
+- [ ] Validate both audiences with meaningful regression tests, the full gate, a public Release simulator build and actual native UI checks. Prove exclusion at build and binary level.
+- [ ] Prepare public preflight checks without opening the submission step while release decisions remain incomplete. Do not invent protocol-rights or hardware approval.
+- [ ] Current CodeRabbit coverage, required CI and all material findings pass; merge under the standing workflow and clean owned resources.
+
+**Acceptance:** A public Samsung build can be inspected and exercised without any experimental TV protocol path, while the internal build retains Sony/Vizio testing and previously saved data. No App Store Connect submission is part of this ticket.
+
+### HR-050 — Finish Samsung listing, support and privacy materials
+
+**Blockers:** Public screenshot capture depends on HR-049; support-retention wording and App Privacy depend on Leon's actual handling decision.
+
+- [ ] Publish accurate Samsung-focused support/privacy wording that explains optional report sharing and actual support retention.
+- [ ] Prepare public description, subtitle, keywords, review notes and exact public screenshots; list only evidenced compatibility and conditional power behavior.
+- [ ] Keep Sony/Vizio experimental status in internal instructions rather than advertised public features.
+- [ ] Record Apple's requirements, Samsung primary-source interoperability/terms evidence, and the unresolved distribution-basis question without claiming a blanket manufacturer-letter requirement or legal clearance.
+- [ ] Record Leon's hardware report with the known build/model/features and keep unobserved acceptance pending.
+
+### HR-051 — Deliver and submit the Samsung App Store candidate
+
+**Blockers:** HR-049 and HR-050, public release decision/remaining evidence, truthful privacy/store answers.
+
+- [ ] Verify the next unused build, create the exact reviewed merged public archive/export and App Store-eligible upload, and confirm processing.
+- [ ] Complete final App Store Connect listing, privacy, age rating, rights, contact and territory checks against the final artifact.
+- [ ] Submit only after the project release gates and owner decisions are met; retain actual submission receipts. Keep release manual after Apple approval.
+
 
 ## Delivery targets
 
@@ -13,7 +49,7 @@
 | Protocol decision | Q70AA pairing, commands, token persistence, and reconnect are proven | 3 days | 3 days |
 | Personal alpha | Daily-driver remote for Leon's Samsung, Sony, and Vizio TVs | 6–10 more days | 2–3 weeks |
 | External TestFlight | Tested setup, diagnostics, and multi-model evidence | 3–5 more days | Only after Samsung authorization gate |
-| App Store 1.0 | Free mixed-brand public release | 3–5 more days | Only after beta and per-brand authorization gates |
+| App Store 1.0 | Free Samsung-focused public release; other brands remain internal | 3–5 more days | Only after beta and per-brand authorization gates |
 
 Estimates assume focused build sessions. Hardware testing and entitlement/App Review waits determine calendar time.
 
@@ -450,6 +486,6 @@ Estimates assume focused build sessions. Hardware testing and entitlement/App Re
 
 ## Immediate next action
 
-HR-041 through HR-047 are merged. Finish HR-048 build 8 current-head review, canonical gate and CI, then merge when ready. Gate the exact merged release commit; create and preflight its signed archive and exported IPA. Recheck that build 8 is unused and Leon is the only internal recipient, upload with TestFlight Internal Only enforced, then verify Apple processing and existing owner access. The phone acceptance journeys are recorded in `ios/app-store/en-US/testflight_what_to_test.txt`.
+Complete HR-049's Samsung public build and preserved internal audience: verify both flavors with the canonical gate, actual native QA, current source review and CI, then merge when ready. Public upload remains closed. HR-050 finalizes the Samsung listing, support/privacy handling and release evidence; HR-051 verifies the next unused build and submits only after those decisions and gates are complete. Existing internal TestFlight 1.0 (8) remains available to Leon.
 
 Historical build 7 evidence: release commit `0c5255f126ae94a00f8de6cc13bffd663b989a3e` passed the local gate (294 tests / 312 executions, 0 failures, 0 skips) and hosted iOS CI. This does not certify the October release.

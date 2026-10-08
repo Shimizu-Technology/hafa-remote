@@ -4,17 +4,14 @@ import Testing
 @testable import HafaRemote
 
 struct MultiBrandSessionDriverTests {
-    @Test("Public routing refuses every unresolved brand before opening a transport")
+    @Test("Public routing admits Samsung and refuses experimental targets before opening a transport")
     func publicPolicyBlocksUnresolvedDrivers() async throws {
         let driver = MultiBrandSessionDriver(
             samsung: MultiBrandSamsungFixture(), sony: MultiBrandSonyFixture(),
             vizio: MultiBrandVizioFixture(),
             distributionPolicy: .publicRelease
         )
-        for brand in TVBrand.allCases { #expect(!driver.supports(brand)) }
-        await #expect(throws: MultiBrandSessionDriverError.unsupportedBrand) {
-            try await driver.connect(addressText: "192.0.2.46") {}
-        }
+        for brand in TVBrand.allCases { #expect(driver.supports(brand) == (brand == .samsung)) }
         let target = TVConnectionTarget(
             brand: .sony, reportedDeviceID: "synthetic-tv",
             address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.46"), controlPort: 6466

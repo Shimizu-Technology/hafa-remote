@@ -96,16 +96,20 @@ final class TVDiscoveryStore {
         backend: (any TVDiscoveryBackend)? = nil,
         searchDuration: Duration = .seconds(8)
     ) {
-        self.backend =
-            backend
-            ?? CompositeTVDiscoveryBackend(
-                backends: [
-                    SamsungBonjourDiscoveryBackend(),
-                    SonyBonjourDiscoveryBackend(),
-                    VizioBonjourDiscoveryBackend(),
-                ]
-            )
+        self.backend = backend ?? Self.defaultBackend()
         self.searchDuration = searchDuration
+    }
+
+    private static func defaultBackend() -> any TVDiscoveryBackend {
+        guard TVBuildFlavor.isConfigured else { return DisabledTVDiscoveryBackend() }
+        #if HAFA_PUBLIC_BUILD
+            return SamsungBonjourDiscoveryBackend()
+        #else
+            return CompositeTVDiscoveryBackend(backends: [
+                SamsungBonjourDiscoveryBackend(), SonyBonjourDiscoveryBackend(),
+                VizioBonjourDiscoveryBackend(),
+            ])
+        #endif
     }
 
     func start() {
@@ -180,6 +184,7 @@ final class TVDiscoveryStore {
 
         switch event {
         case .found(let television):
+            guard TVDistributionPolicy.current.permits(television.brand) else { return }
             if var endpointIndex = televisions.firstIndex(where: {
                 $0.brand == television.brand && $0.address == television.address
                     && $0.controlPort == television.controlPort

@@ -16,7 +16,9 @@ struct HafaRemoteApp: App {
     /// Builds the app's root scene.
     var body: some Scene {
         WindowGroup {
-            #if DEBUG
+            #if HAFA_PUBLIC_BUILD && DEBUG
+                PublicBuildUITestRoot()
+            #elseif DEBUG
                 if ProcessInfo.processInfo.arguments.contains("-ui-testing-saved-sony-alias") {
                     SavedSonyAssociationUITestHarness(mode: .unique)
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-colliding-sony-alias") {
@@ -121,7 +123,7 @@ struct HafaRemoteApp: App {
     }
 }
 
-#if DEBUG
+#if DEBUG && !HAFA_PUBLIC_BUILD
     /// Exercises actual setup association and error projection with no network or Keychain.
     private struct SavedSonyAssociationUITestHarness: View {
         enum Mode { case unique, colliding, fresh }
