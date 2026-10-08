@@ -36,11 +36,11 @@ Previews render directly from the vector source at 20, 40, 60, 120, and 180 pixe
 The validated PNG SHA-256 is `22feaff50af5677b7a6b96a1743f2c14aa86a4bf87429a6b9029dd6d59b6c2ec`.
 
 The original artwork and generator remain unchanged during the release-QA phase.
-Signed build-for-testing, bundle-seal verification, release preflight, and static
-checks passed. Computer use verified the installed icon's silhouette and contrast
-on SpringBoard and in Settings → Apps. Native screenshots are preserved at
-`/tmp/hafa-hr047-validation/springboard-icon.png` and
-`/tmp/hafa-hr047-validation/settings-apps-icon.png`.
+Earlier build-for-testing and static checks are historical preparation evidence.
+Current integrated computer use verified the installed icon's silhouette in
+[SpringBoard search](evidence/HR-047/icon-springboard-search.png) and
+[Settings → Apps](evidence/HR-047/icon-settings-apps.png). The actual Release
+build, gate, accessibility evidence and limitations are recorded in the release QA.
 
 No protocol or hardware-support behavior changes. Updated internal-candidate
 notes and privacy/tooling evidence are in [release QA](HR-047-RELEASE-QA.md).
