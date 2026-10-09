@@ -109,4 +109,67 @@ printf 'Second synthetic artifact.\n' > "$fixture_dir/export/Other.ipa"
 expect_rejection valid 'exactly one validated IPA'
 if output="$(HAFA_PUBLIC_RELEASE_EVIDENCE= "$repo_root/scripts/ios-release.sh" --audience public upload synthetic-archive synthetic-export 2>&1)"; then echo 'Public upload opened without factual evidence.' >&2; exit 1; fi
 if [[ "$output" != *"Public upload requires actual verified release evidence"* ]]; then echo 'Public upload failed before its intended missing-evidence boundary.' >&2; exit 1; fi
-echo 'Public upload source/artifact/policy/privacy evidence fixtures passed.'
+# Exercise the real public command path with isolated external-tool stubs only.
+# The real signed preflight has its own suite; no fixture calls Apple or carries a credential.
+rm "$fixture_dir/export/Other.ipa"
+harness="$fixture_dir/command-harness"
+mkdir -p "$harness/scripts" "$harness/bin"
+cp "$repo_root/scripts/ios-release.sh" "$repo_root/scripts/validate-public-upload-readiness.sh" "$repo_root/scripts/archive-content-sha256.rb" "$harness/scripts/"
+cat > "$harness/scripts/ios-release-preflight.sh" <<'SH'
+#!/usr/bin/env bash
+printf 'preflight\n' >> "$HR_FIXTURE_ORDER"
+if [[ "${HR_FIXTURE_PREFLIGHT_FAIL:-0}" == 1 ]]; then echo 'Synthetic signed preflight rejected.' >&2; exit 1; fi
+SH
+cat > "$harness/bin/git" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == -C ]]; then shift 2; fi
+case "${1:-}" in
+  diff) [[ "${HR_FIXTURE_DIRTY:-0}" == 0 ]] ;;
+  rev-parse)
+    if [[ "${2:-}" == HEAD ]]; then printf '%s\n' "$HR_FIXTURE_COMMIT"; else printf '%s\n' "$HR_FIXTURE_TREE"; fi ;;
+  *) exit 1 ;;
+esac
+SH
+cat > "$harness/bin/xcrun" <<'SH'
+#!/usr/bin/env bash
+if [[ "${1:-}" == --sdk && "${2:-}" == macosx && "${3:-}" == --show-sdk-path ]]; then exec /usr/bin/xcrun "$@"; fi
+[[ "${1:-}" == altool ]] || { echo 'Unexpected native fixture command.' >&2; exit 1; }
+printf 'native\n' >> "$HR_FIXTURE_ORDER"
+printf '%s\0' "$@" > "$HR_FIXTURE_NATIVE_ARGS"
+SH
+# Bypass local Ruby version-manager startup, which probes xcrun before running Ruby.
+ln -s /usr/bin/ruby "$harness/bin/ruby"
+chmod +x "$harness/scripts/ios-release-preflight.sh" "$harness/bin/git" "$harness/bin/xcrun"
+export HR_FIXTURE_COMMIT="$(git -C "$repo_root" rev-parse HEAD)"
+export HR_FIXTURE_TREE="$(git -C "$repo_root" rev-parse HEAD^{tree})"
+export HR_FIXTURE_ORDER="$fixture_dir/order.log" HR_FIXTURE_NATIVE_ARGS="$fixture_dir/native-args.json"
+printf 'Synthetic auth fixture; not a private key.\n' > "$fixture_dir/SyntheticAuth.p8"
+run_public_command() {
+  PATH="$harness/bin:$PATH" HAFA_PUBLIC_RELEASE_EVIDENCE="$fixture_dir/${1:-valid}.json" \
+    HAFA_ASC_KEY_PATH="$fixture_dir/SyntheticAuth.p8" HAFA_ASC_KEY_ID=synthetic-key HAFA_ASC_ISSUER_ID=synthetic-issuer \
+    "$harness/scripts/ios-release.sh" --audience public upload "$fixture_dir/archive" "$fixture_dir/export" "$fixture_dir/unused-upload-directory"
+}
+run_public_command valid
+ruby -rjson - "$fixture_dir" <<'RUBY'
+folder = ARGV.first
+actual = File.binread(File.join(folder, "native-args.json")).split("\0")
+expected = ["altool", "--upload-package", File.join(folder, "export", "Synthetic.ipa"), "--api-key", "synthetic-key", "--api-issuer", "synthetic-issuer", "--p8-file-path", File.join(folder, "SyntheticAuth.p8"), "--output-format", "json"]
+abort "Public delivery did not consume the exact receipt-validated IPA." unless actual == expected
+abort "Public delivery did not run signed preflight first." unless File.read(File.join(folder, "order.log")) == "preflight\nnative\n"
+abort "Public delivery unexpectedly created an Xcode re-export." if File.exist?(File.join(folder, "unused-upload-directory"))
+RUBY
+expect_command_rejection() {
+  local name="$1" expected="$2"
+  rm -f "$HR_FIXTURE_ORDER" "$HR_FIXTURE_NATIVE_ARGS"
+  if run_public_command "$name" > "$fixture_dir/command-rejection.log" 2>&1; then echo "Unsafe public command accepted: $name" >&2; exit 1; fi
+  if ! grep -Fq -- "$expected" "$fixture_dir/command-rejection.log"; then cat "$fixture_dir/command-rejection.log" >&2; exit 1; fi
+  if [[ -f "$HR_FIXTURE_NATIVE_ARGS" ]]; then echo 'Rejected public command reached native delivery.' >&2; exit 1; fi
+}
+expect_command_rejection draft-policy 'verified live privacy policy and actual retention statement'
+expect_command_rejection wrong-artifact 'does not match the validated IPA bytes'
+expect_command_rejection wrong-archive 'does not match the validated archive contents'
+HR_FIXTURE_PREFLIGHT_FAIL=1 expect_command_rejection valid 'Synthetic signed preflight rejected.'
+HR_FIXTURE_DIRTY=1 expect_command_rejection valid 'Public upload source must be tracked clean.'
+rm "$fixture_dir/SyntheticAuth.p8"
+expect_command_rejection valid 'All three existing App Store Connect key parameters are required.'
+echo 'Public upload source/artifact/policy/privacy evidence and exact-IPA command fixtures passed.'

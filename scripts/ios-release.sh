@@ -87,6 +87,17 @@ case "$command_name" in
     ./scripts/ios-release-preflight.sh --audience "$audience" --archive "$archive_path" --export "$export_path"
     if [[ "$audience" == public ]]; then
       ./scripts/validate-public-upload-readiness.sh "$HAFA_PUBLIC_RELEASE_EVIDENCE" "$export_path" "$archive_path"
+      [[ -f "${HAFA_ASC_KEY_PATH:-}" && -n "${HAFA_ASC_KEY_ID:-}" && -n "${HAFA_ASC_ISSUER_ID:-}" ]] || {
+        echo "Public IPA delivery requires the existing authorized App Store Connect API key parameters." >&2
+        exit 1
+      }
+      ipa_path="$(ruby -e 'puts Dir.glob(File.join(ARGV.first, "*.ipa")).select { |path| File.file?(path) }.fetch(0)' "$export_path")"
+      # Deliver these exact validated bytes; archive/export signing remains native Xcode.
+      xcrun altool --upload-package "$ipa_path" \
+        --api-key "$HAFA_ASC_KEY_ID" --api-issuer "$HAFA_ASC_ISSUER_ID" \
+        --p8-file-path "$HAFA_ASC_KEY_PATH" --output-format json
+      echo "Validated public IPA delivery completed; verify Apple processing and App Store eligibility separately."
+      exit 0
     fi
     mkdir -p "$upload_path"
     upload_options="$upload_path/UploadOptions.plist"
