@@ -23,11 +23,12 @@ receipt = {
 # Fingerprint is location/timestamp independent but binds every path, byte and link target.
 archive = File.join(folder, "archive")
 original = ArchiveContentDigest.sha256(archive)
+original_mode = File.stat(File.join(archive, "Application")).mode & 0o7777
 File.utime(Time.now - 3600, Time.now - 3600, File.join(archive, "Application"))
 abort "Archive fingerprint incorrectly includes timestamps." unless ArchiveContentDigest.sha256(archive) == original
 File.chmod(0o755, File.join(archive, "Application"))
 abort "Archive fingerprint missed a permission change." if ArchiveContentDigest.sha256(archive) == original
-File.chmod(0o644, File.join(archive, "Application"))
+File.chmod(original_mode, File.join(archive, "Application"))
 File.rename(File.join(archive, "Application"), File.join(archive, "Renamed"))
 abort "Archive fingerprint missed a relative-path change." if ArchiveContentDigest.sha256(archive) == original
 File.rename(File.join(archive, "Renamed"), File.join(archive, "Application"))

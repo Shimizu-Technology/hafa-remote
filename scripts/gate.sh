@@ -13,7 +13,10 @@ xcrun swift-format lint --strict --recursive HafaRemote HafaRemoteControls HafaR
 
 echo "Checking release configuration"
 ./scripts/test-ios-release-preflight.sh
-./scripts/test-public-upload-readiness.sh
+(
+  umask 077
+  ./scripts/test-public-upload-readiness.sh
+)
 ./scripts/ios-release-preflight.sh
 ./scripts/ios-release-preflight.sh --audience public
 ./scripts/test-xcode-clang-probe.sh
