@@ -159,14 +159,143 @@ final class HafaRemoteUITests: XCTestCase {
         for _ in 0..<5 where !detail.isHittable { panSetupGutter(in: app, upward: true) }
         XCTAssertTrue(detail.exists)
         XCTAssertTrue(detail.label.contains(detailText))
-        XCTAssertFalse(app.staticTexts["No TVs were found in this search."].exists)
+        XCTAssertTrue(
+            app.staticTexts.matching(
+                NSPredicate(format: "label BEGINSWITH %@", "Check the search details below.")
+            ).firstMatch.exists)
         let scan = app.buttons["scanAgainButton"]
         for _ in 0..<5 where !scan.isHittable { panSetupGutter(in: app, upward: false) }
         XCTAssertTrue(scan.isHittable)
         scan.tap()
         XCTAssertTrue(app.buttons["discoveredTVButton"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["discoveredTVButton"].label.contains("Vizio"))
-        XCTAssertFalse(detail.exists)
+        XCTAssertTrue(detail.label.contains("TV found."))
+    }
+
+    /// Returning to Wi-Fi finds the TV without reentering its address or tapping Scan Again.
+    @MainActor
+    func testWiFiReturnAutomaticallyDiscoversVizio() throws {
+        let app = makeApplication()
+        app.launchArguments += ["-ui-testing-wifi-recovery", "-ui-testing-wifi-offline"]
+        app.launch()
+        app.buttons["addTVButton"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["setupWiFiRecovery"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["wifiFixtureScans"].label, "0")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Wi-Fi unavailable waits for automatic recovery"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        XCTAssertFalse(app.buttons["discoveredTVButton"].exists)
+        app.buttons["wifiFixtureRestore"].tap()
+        let tv = app.buttons["discoveredTVButton"]
+        XCTAssertTrue(tv.waitForExistence(timeout: 5))
+        XCTAssertTrue(tv.label.contains("Vizio"))
+        XCTAssertEqual(app.staticTexts["wifiFixtureScans"].label, "1")
+        app.buttons["wifiFixtureRestore"].tap()
+        XCTAssertEqual(app.staticTexts["wifiFixtureScans"].label, "1")
+        XCTAssertFalse(app.descendants(matching: .any)["setupWiFiRecovery"].firstMatch.exists)
+    }
+
+    /// Returning from Settings or another app rechecks discovery without a Wi-Fi status change.
+    @MainActor
+    func testSetupForegroundReturnAutomaticallyRescans() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-wifi-recovery")
+        app.launch()
+        app.buttons["addTVButton"].tap()
+        XCTAssertTrue(app.buttons["discoveredTVButton"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["wifiFixtureScans"].label, "1")
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        let count = app.staticTexts["wifiFixtureScans"]
+        expectation(for: NSPredicate(format: "label == %@", "2"), evaluatedWith: count)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.buttons["discoveredTVButton"].exists)
+    }
+
+    /// A found Sony remains selectable while the bounded search continues for Vizio.
+    @MainActor
+    func testEarlySonyResultKeepsSearchProgressVisible() throws {
+        let app = makeApplication()
+        app.launchArguments += [
+            "-ui-testing-wifi-recovery", "-ui-testing-wifi-partial", "-ui-testing-wifi-advertised",
+            "-ui-testing-wifi-hold",
+        ]
+        app.launch()
+        app.buttons["addTVButton"].tap()
+        let tv = app.buttons["discoveredTVButton"]
+        XCTAssertTrue(tv.waitForExistence(timeout: 5))
+        XCTAssertTrue(tv.isEnabled)
+        XCTAssertTrue(tv.label.contains("Sony"))
+        XCTAssertTrue(app.descendants(matching: .any)["additionalTVSearchProgress"].firstMatch.exists)
+        XCTAssertFalse(app.buttons["scanAgainButton"].exists)
+        app.buttons["wifiFixtureFinish"].tap()
+        XCTAssertTrue(app.buttons["scanAgainButton"].waitForExistence(timeout: 5))
+        let detail = app.descendants(matching: .any)["discoveryDetail-vizio"].firstMatch
+        for _ in 0..<4 where !detail.isHittable { panSetupGutter(in: app, upward: true) }
+        XCTAssertTrue(detail.label.contains("A TV announced itself"))
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Partial discovery preserves missing Vizio guidance"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    /// Missing Vizio guidance and explicit rescan remain available beside a healthy Sony.
+    @MainActor
+    func testPartialResultsCanRescanForMissingVizio() throws {
+        for advertised in [false, true] {
+            let app = makeApplication()
+            app.launchArguments += ["-ui-testing-wifi-recovery", "-ui-testing-wifi-partial"]
+            if advertised { app.launchArguments.append("-ui-testing-wifi-advertised") }
+            app.launch()
+            app.buttons["addTVButton"].tap()
+            XCTAssertTrue(app.buttons["discoveredTVButton"].waitForExistence(timeout: 5))
+            XCTAssertTrue(app.buttons["discoveredTVButton"].label.contains("Sony"))
+            let detail = app.descendants(matching: .any)["discoveryDetail-vizio"].firstMatch
+            for _ in 0..<4 where !detail.isHittable { panSetupGutter(in: app, upward: true) }
+            XCTAssertTrue(detail.exists)
+            XCTAssertTrue(
+                detail.label.contains(advertised ? "A TV announced itself" : "Not found during this search"))
+            let scan = app.buttons["scanAgainButton"]
+            for _ in 0..<4 where !scan.isHittable { panSetupGutter(in: app, upward: false) }
+            scan.tap()
+            let vizio = app.buttons.matching(
+                NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "discoveredTVButton", "Vizio")
+            ).firstMatch
+            XCTAssertTrue(vizio.waitForExistence(timeout: 5))
+            XCTAssertEqual(app.buttons.matching(identifier: "discoveredTVButton").count, 2)
+            app.terminate()
+        }
+    }
+
+    /// A path hint never clears entered PIN digits or starts a competing discovery scan.
+    @MainActor
+    func testWiFiHintsPreserveVizioPINEntry() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-wifi-recovery")
+        app.launch()
+        app.buttons["addTVButton"].tap()
+        let tv = app.buttons["discoveredTVButton"]
+        XCTAssertTrue(tv.waitForExistence(timeout: 5))
+        tv.tap()
+        let code = app.textFields["vizioPairingCodeField"]
+        XCTAssertTrue(code.waitForExistence(timeout: 5))
+        code.tap()
+        code.typeText("12")
+        app.buttons["wifiFixtureDisconnect"].tap()
+        app.buttons["wifiFixtureRestore"].tap()
+        XCTAssertEqual(code.value as? String, "12")
+        XCTAssertEqual(app.staticTexts["wifiFixtureScans"].label, "1")
+        XCTAssertFalse(app.descendants(matching: .any)["discoveryDetail-vizio"].firstMatch.exists)
+        code.tap()
+        code.typeText("34")
+        let submit = app.buttons["submitVizioPairingCodeButton"]
+        waitForPairingEntry(code, value: "1234", submit: submit)
+        submit.tap()
+        let connection = app.staticTexts["wifiFixtureConnection"]
+        expectation(for: NSPredicate(format: "label == %@", "Connected"), evaluatedWith: connection)
+        waitForExpectations(timeout: 5)
     }
 
     @MainActor
@@ -256,7 +385,21 @@ final class HafaRemoteUITests: XCTestCase {
         let error = app.staticTexts["setupErrorMessage"]
         XCTAssertTrue(error.waitForExistence(timeout: 3))
         XCTAssertTrue(error.label.contains("Sony pairing code was not accepted"))
-        XCTAssertTrue(app.buttons["manualSetupButton"].exists)
+        let manual = app.buttons["manualSetupButton"]
+        for _ in 0..<6 where !manual.isHittable { panSetupGutter(in: app, upward: true) }
+        XCTAssertTrue(manual.isHittable)
+        manual.tap()
+        XCTAssertEqual(manual.value as? String, "Expanded")
+        let picker = app.buttons["manualTVBrandPicker"]
+        for _ in 0..<5 where !picker.isHittable { panSetupGutter(in: app, upward: true) }
+        XCTAssertTrue(picker.isHittable)
+        XCTAssertTrue(picker.isEnabled)
+        picker.tap()
+        app.buttons["Sony"].tap()
+        let address = app.textFields["tvIPAddressField"]
+        for _ in 0..<5 where !address.isHittable { panSetupGutter(in: app, upward: true) }
+        XCTAssertTrue(address.isHittable)
+        XCTAssertTrue(address.isEnabled)
         XCTAssertFalse(app.staticTexts["savedTVManagementRecoveryMessage"].exists)
         XCTAssertEqual(app.staticTexts["sonyAssociationExpectedIdentity"].label, "none")
         XCTAssertEqual(app.staticTexts["sonyAssociationConnectionAttempts"].label, "1")

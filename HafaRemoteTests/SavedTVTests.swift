@@ -1009,6 +1009,76 @@ struct SavedTVTests {
 
     @MainActor
     @Test(
+        "Saved address recovery rejects loss of foreground eligibility before scanning or connecting",
+        arguments: [false, true])
+    func recoveryRechecksEligibility(afterResolution: Bool) async throws {
+        let cached = TVConnectionTarget(
+            brand: .vizio, reportedDeviceID: "synthetic-eligible-tv",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "203.0.113.50"),
+            controlPort: 7345, expectedSavedDeviceID: "synthetic-eligible-tv")
+        let moved = DiscoveredTV(
+            brand: .vizio, reportedIdentifier: "synthetic-eligible-alias",
+            displayName: "Synthetic TV", modelName: "Synthetic Vizio",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "203.0.113.51"),
+            controlPort: 7345)
+        var eligible = true
+        var resolverCalls = 0
+        let recovery = SavedTVAddressRecoveryCoordinator(
+            discovery: TVDiscoveryStore(
+                backend: SavedTVRecoveryDiscoveryBackend(events: [.found(moved), .finished])),
+            resolveUnaliasedTarget: { _, _ in
+                resolverCalls += 1
+                eligible = false
+                return moved.connectionTarget
+            })
+        recovery.recover(
+            stableDeviceKey: "vizio:synthetic-eligible-tv", cachedTarget: cached,
+            canRecover: { eligible },
+            connect: { _ in Issue.record("An ineligible recovery must never connect") }
+        )
+        if !afterResolution { eligible = false }
+        await waitForSelectionState { !recovery.isRecovering }
+        #expect(resolverCalls == (afterResolution ? 1 : 0))
+        recovery.recover(
+            stableDeviceKey: "vizio:synthetic-eligible-tv", cachedTarget: cached,
+            canRecover: { eligible },
+            connect: { _ in Issue.record("Recovery cannot restart while ineligible") }
+        )
+        #expect(!recovery.isRecovering)
+    }
+
+    @MainActor
+    @Test("An alias-free manual Vizio record can recover through verified serial resolution")
+    func manualVizioAddressRecoveryUsesIdentityResolver() async throws {
+        let serial = "synthetic-manual-saved-vizio"
+        let cached = TVConnectionTarget(
+            brand: .vizio, reportedDeviceID: serial,
+            address: try PrivateIPv4Address(documentationAddressForTesting: "203.0.113.40"),
+            controlPort: 7345, expectedSavedDeviceID: serial)
+        let moved = DiscoveredTV(
+            brand: .vizio, reportedIdentifier: "synthetic-distinct-advertisement",
+            displayName: "Synthetic Moved TV", modelName: "Synthetic Vizio",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "203.0.113.41"), controlPort: 7345
+        )
+        var resolverCalls = 0
+        let recovery = SavedTVAddressRecoveryCoordinator(
+            discovery: TVDiscoveryStore(
+                backend: SavedTVRecoveryDiscoveryBackend(events: [.found(moved), .finished])),
+            resolveUnaliasedTarget: { candidates, remembered in
+                resolverCalls += 1
+                #expect(candidates == [moved.connectionTarget])
+                #expect(remembered == cached)
+                return moved.connectionTarget.expectingSavedIdentity(serial)
+            })
+        var connected: [TVConnectionTarget] = []
+        recovery.recover(stableDeviceKey: "vizio:\(serial)", cachedTarget: cached) { connected.append($0) }
+        await waitForSelectionState { !recovery.isRecovering }
+        #expect(resolverCalls == 1)
+        #expect(connected == [moved.connectionTarget.expectingSavedIdentity(serial)])
+    }
+
+    @MainActor
+    @Test(
         "Saved-TV rediscovery binds candidate aliases to the remembered identity",
         arguments: [TVBrand.sony, .vizio])
     func recoveryKeepsSavedIdentityWhenAliasDiffers(brand: TVBrand) async throws {

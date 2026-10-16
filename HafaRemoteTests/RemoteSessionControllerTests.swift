@@ -1114,14 +1114,16 @@ struct RemoteSessionControllerTests {
         #expect(await clock.pendingSleeps.isEmpty)
     }
 
-    @Test("One transient health failure keeps the remote connected")
+    @Test("One transient health failure keeps the remote connected", .timeLimit(.minutes(1)))
     func transientHealthFailureKeepsSessionConnected() async throws {
         let tv = try testTV(
             address: "192.168.10.20",
             reportedDeviceID: "synthetic-tv-a",
             model: "TEST_MODEL_A"
         )
-        let clock = ManualRemoteSessionClock()
+        let (registeredSleeps, sleepRegistration) = AsyncStream<Duration>.makeStream()
+        defer { sleepRegistration.finish() }
+        let clock = ManualRemoteSessionClock(onSleepRegistered: { sleepRegistration.yield($0) })
         let driver = MockRemoteSessionDriver(
             outcomes: [.success(tv: tv, announcesPairing: false)],
             healthFailures: [.unavailable]
@@ -1132,19 +1134,23 @@ struct RemoteSessionControllerTests {
             configuration: testConfiguration(
                 reconnectDelays: [.seconds(2)],
                 healthCheckInterval: .seconds(5),
-                healthCheckTimeout: .seconds(9)
+                healthCheckTimeout: .seconds(9),
+                healthCheckRetryDelay: .seconds(3)
             )
         )
 
         await session.connect(to: tv.address.rawValue)
         await resume(clock: clock, duration: .seconds(5))
-        await waitUntil { await driver.healthCheckCallCount == 1 }
+        // The mock call begins before the controller handles its failure. Wait for
+        // the durable retry registration, rather than racing a short polling deadline.
+        // Three seconds uniquely identifies this retry; teardown uses one second.
+        let retry = await registeredSleeps.first { $0 == .seconds(3) }
+        #expect(retry == .seconds(3))
 
         #expect(await session.state == .connected(tv))
         #expect(await driver.healthCheckCallCount == 1)
         #expect(await driver.connectCallCount == 1)
         #expect(await driver.activeSessionDisconnectCallCount == 0)
-        await waitUntil { await clock.pendingSleeps.contains(.seconds(1)) }
         await session.disconnect()
     }
 
@@ -1658,6 +1664,55 @@ struct RemoteSessionControllerTests {
         #expect(await session.state == .connected(tv))
         #expect(await driver.connectCallCount == 2)
         await waitUntil { await clock.pendingSleeps.isEmpty }
+    }
+
+    @Test("Wi-Fi path hints do not restart an active handshake or pairing", arguments: [false, true])
+    func pathHintsPreserveConnectionAttempt(_ pairing: Bool) async throws {
+        let driver = SuspendedRemoteSessionDriver(announcesPairing: pairing)
+        let controller = RemoteSessionController(driver: driver)
+        var starts = driver.connectionStarts.makeAsyncIterator()
+        let target = TVConnectionTarget(
+            brand: .samsung, reportedDeviceID: "synthetic-path-hint-tv",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.40"),
+            controlPort: 8002)
+        let attempt = Task { await controller.connect(to: target) }
+        _ = await starts.next()
+        await controller.networkReachabilityChanged(isReachable: false)
+        await controller.networkReachabilityChanged(isReachable: true)
+        #expect(await driver.connectionStartCount == 1)
+        #expect(await driver.cancelledConnectionCount == 0)
+        #expect(await controller.state == (pairing ? .pairing : .connecting))
+        await controller.disconnect()
+        await attempt.value
+        #expect(await driver.cancelledConnectionCount == 1)
+    }
+
+    @Test("A held handshake failure uses the latest Wi-Fi hint for retry", arguments: [false, true])
+    func handshakeFailureRespectsLatestPath(_ restored: Bool) async throws {
+        let driver = SuspendedRemoteSessionDriver()
+        let clock = ManualRemoteSessionClock()
+        let controller = RemoteSessionController(
+            driver: driver, clock: clock,
+            configuration: testConfiguration(reconnectDelays: [.seconds(30)]))
+        let target = TVConnectionTarget(
+            brand: .samsung, reportedDeviceID: "synthetic-latest-path-tv",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.40"),
+            controlPort: 8002)
+        var starts = driver.connectionStarts.makeAsyncIterator()
+        let attempt = Task { await controller.connect(to: target) }
+        _ = await starts.next()
+        await controller.networkReachabilityChanged(isReachable: false)
+        if restored { await controller.networkReachabilityChanged(isReachable: true) }
+        await driver.failPendingConnection()
+        await attempt.value
+        #expect(await controller.state == (restored ? .reconnecting(attempt: 1) : .offline))
+        if restored {
+            await resume(clock: clock, duration: .seconds(30))
+            await waitUntil { await driver.connectionStartCount == 2 }
+        } else {
+            #expect(await driver.connectionStartCount == 1)
+        }
+        await controller.disconnect()
     }
 
     @Test("A brief Wi-Fi path flap does not tear down a connected TV")
@@ -2476,6 +2531,12 @@ private actor SuspendedRemoteSessionDriver: RemoteSessionDriving {
 
     func disconnect() {}
 
+    func failPendingConnection() {
+        let pending = Array(continuations.values)
+        continuations.removeAll()
+        for continuation in pending { continuation.resume(throwing: SamsungConnectionError.unavailable) }
+    }
+
     private func cancel(_ id: UUID) {
         guard let continuation = continuations.removeValue(forKey: id) else { return }
         cancelledConnectionCount += 1
@@ -2887,9 +2948,14 @@ private actor ManualRemoteSessionClock: RemoteSessionClock {
 
     private var sleepers: [Sleeper] = []
     private let beforeCancellationCleanup: @Sendable () async -> Void
+    private let onSleepRegistered: @Sendable (Duration) -> Void
 
-    init(beforeCancellationCleanup: @escaping @Sendable () async -> Void = {}) {
+    init(
+        onSleepRegistered: @escaping @Sendable (Duration) -> Void = { _ in },
+        beforeCancellationCleanup: @escaping @Sendable () async -> Void = {}
+    ) {
         self.beforeCancellationCleanup = beforeCancellationCleanup
+        self.onSleepRegistered = onSleepRegistered
     }
 
     var pendingSleeps: [Duration] {
@@ -2909,6 +2975,7 @@ private actor ManualRemoteSessionClock: RemoteSessionClock {
                         Sleeper(
                             id: id, duration: duration, continuation: continuation,
                             cancellation: cancellation))
+                    onSleepRegistered(duration)
                 }
             }
         } onCancel: { [weak self] in

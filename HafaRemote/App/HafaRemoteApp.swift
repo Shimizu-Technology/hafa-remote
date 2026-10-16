@@ -19,7 +19,9 @@ struct HafaRemoteApp: App {
             #if HAFA_PUBLIC_BUILD && DEBUG
                 PublicBuildUITestRoot()
             #elseif DEBUG
-                if ProcessInfo.processInfo.arguments.contains("-ui-testing-saved-sony-alias") {
+                if ProcessInfo.processInfo.arguments.contains("-ui-testing-wifi-recovery") {
+                    TVSetupWiFiUITestHarness()
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-saved-sony-alias") {
                     SavedSonyAssociationUITestHarness(mode: .unique)
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-colliding-sony-alias") {
                     SavedSonyAssociationUITestHarness(mode: .colliding)

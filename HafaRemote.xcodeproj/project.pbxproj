@@ -97,6 +97,9 @@
 		F46100000000000000000009 /* HafaRemoteSupportUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F46200000000000000000009 /* HafaRemoteSupportUITests.swift */; };
 		FB29AFF7B1B245C184921B90 /* SonyPairingOwnershipTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC1B7140811741D5954732CE /* SonyPairingOwnershipTests.swift */; };
 		FB5C5C1D306B1699622CB34F /* RemoteConvenienceUITestHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = 967E3B3BB9D829FEEC07E343 /* RemoteConvenienceUITestHarness.swift */; };
+		25B1A421F4ED4F1B9EE54726 /* TVSetupDiscoveryLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82C33B4F8104F28A52AABD0 /* TVSetupDiscoveryLifecycle.swift */; };
+		7693C6754A4945C4B684359F /* TVSetupWiFiUITestHarness.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEC71EFC7ACE40F4A70778AB /* TVSetupWiFiUITestHarness.swift */; };
+		E3C612888A654BE1971C49A7 /* TVSetupDiscoveryLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7632BC3C18241BD8AF05309 /* TVSetupDiscoveryLifecycleTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -246,6 +249,9 @@
 		FD21C56485650437D59630CC /* SamsungProtocolCodec.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SamsungProtocolCodec.swift; sourceTree = "<group>"; };
 		FD45115A7F75732FC44A6EB2 /* RemoteConveniences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HafaRemote/Core/RemoteConveniences.swift; sourceTree = SOURCE_ROOT; };
 		FDB311AC70B3A824C5DAA1C6 /* HafaRemotePublicUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HafaRemotePublicUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E82C33B4F8104F28A52AABD0 /* TVSetupDiscoveryLifecycle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TVSetupDiscoveryLifecycle.swift; sourceTree = "<group>"; };
+		CEC71EFC7ACE40F4A70778AB /* TVSetupWiFiUITestHarness.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TVSetupWiFiUITestHarness.swift; sourceTree = "<group>"; };
+		D7632BC3C18241BD8AF05309 /* TVSetupDiscoveryLifecycleTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TVSetupDiscoveryLifecycleTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -395,6 +401,7 @@
 		788EB1518D6036019F1270CC /* HafaRemoteTests */ = {
 			isa = PBXGroup;
 			children = (
+				D7632BC3C18241BD8AF05309 /* TVSetupDiscoveryLifecycleTests.swift */,
 				DC1B7140811741D5954732CE /* SonyPairingOwnershipTests.swift */,
 				750A7CF0E33618AD46DF5A22 /* RemoteConvenienceTests.swift */,
 				F46200000000000000000006 /* DiagnosticsTests.swift */,
@@ -488,6 +495,7 @@
 		C70489893683D638CC55FDDF /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				E82C33B4F8104F28A52AABD0 /* TVSetupDiscoveryLifecycle.swift */,
 				F46300000000000000000001 /* Diagnostics */,
 				2A781F30B9F124284352D849 /* RemoteCommand.swift */,
 				C44405F91DE5FC74EFF634D3 /* TVDriver.swift */,
@@ -516,6 +524,7 @@
 		D104483FD9922EAAB53F615C /* Setup */ = {
 			isa = PBXGroup;
 			children = (
+				CEC71EFC7ACE40F4A70778AB /* TVSetupWiFiUITestHarness.swift */,
 				10AAEEB17C3074710C8B3AD8 /* SamsungSetupView.swift */,
 			);
 			name = Setup;
@@ -858,6 +867,7 @@
 				C11000000000000000000008 /* VizioPairingCoordinatorTests.swift in Sources */,
 				B11000000000000000000006 /* SonyTLSChannelTests.swift in Sources */,
 				C1100000000000000000000A /* VizioDiscoveryTests.swift in Sources */,
+				E3C612888A654BE1971C49A7 /* TVSetupDiscoveryLifecycleTests.swift in Sources */,
 				B1100000000000000000000B /* SonyDiscoveryTests.swift in Sources */,
 				B1100000000000000000000D /* MultiBrandSessionDriverTests.swift in Sources */,
 			);
@@ -918,6 +928,7 @@
 				174B2BC669B6814751000006 /* RemoteControlView.swift in Sources */,
 				275B2BC669B6814751000001 /* SavedTV.swift in Sources */,
 				275B2BC669B6814751000002 /* LocalNetworkMonitor.swift in Sources */,
+				25B1A421F4ED4F1B9EE54726 /* TVSetupDiscoveryLifecycle.swift in Sources */,
 				11DFB409FF879A160B1AB3C4 /* PrivateIPv4Address.swift in Sources */,
 				3802FE2339022BC3629CF923 /* SamsungPairingCredential.swift in Sources */,
 				854D9E6D373AC5EC05814B57 /* SamsungDeviceInfo.swift in Sources */,
@@ -941,6 +952,7 @@
 				B11000000000000000000005 /* SonyTLSChannel.swift in Sources */,
 				C11000000000000000000009 /* VizioDiscovery.swift in Sources */,
 				2D3D3C2CF9409A3568772E68 /* SamsungSetupView.swift in Sources */,
+				7693C6754A4945C4B684359F /* TVSetupWiFiUITestHarness.swift in Sources */,
 				880522F74890DAA0E4419B1C /* TVBuildFlavor.swift in Sources */,
 				CB62AF37D344F3970E844318 /* CompositeTVDiscoveryBackend.swift in Sources */,
 				171E7E17CB55F60A3B72A3A6 /* PublicBuildUITestHarness.swift in Sources */,
@@ -1001,7 +1013,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = HafaRemote/Resources/HafaRemote.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = 4T358A5S74;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1272,7 +1284,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = HafaRemote/Resources/HafaRemote.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = 4T358A5S74;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1554,7 +1566,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = 4T358A5S74;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HafaRemoteControls/Info.plist;
@@ -1581,7 +1593,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 10;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = 4T358A5S74;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = HafaRemoteControls/Info.plist;

@@ -8,6 +8,18 @@
 
 ## Samsung App Store 1.0 cycle
 
+### HR-053 — Recover discovery automatically when home Wi-Fi returns
+
+**Owner request:** Research, implement and review automatic setup/saved-TV recovery, then deliver the next internal TestFlight build for household testing.
+
+- [ ] Share Wi-Fi path hints with setup; explain unavailable Wi-Fi without confusing permission denial or TV compatibility.
+- [ ] Resume one fresh scan after Wi-Fi/foreground return, preserving active pairing, manual drafts and identity, and rejecting work after dismissal.
+- [ ] Keep mixed-brand search progress, missing-brand guidance and rescan available beside healthy results.
+- [ ] Verify saved pairing reuse and existing session recovery; pass both audience gates and affected native journeys.
+- [ ] Obtain current-head review/CI, merge and verify the next internal-only build's Apple processing and existing tester availability.
+
+**Acceptance and evidence:** [HR-053](docs/HR-053-WIFI-RECOVERY.md). This improves local discovery and recovery; it does not add cellular/cloud control or certify the household command/standby matrix. Leon explicitly authorizes this internal TestFlight delivery. Final tested-source and release receipts belong in the PR acceptance record.
+
 ### HR-052 — Make mixed-brand discovery and recovery actionable
 
 **Owner request:** October 16: investigate and improve Sony/Vizio household compatibility. The public Samsung release boundary remains unchanged until each model passes hardware acceptance.

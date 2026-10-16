@@ -6,8 +6,13 @@ struct TVSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @Query private var savedTVs: [SavedTV]
     @State private var discovery: TVDiscoveryStore
+    @State private var networkMonitor: LocalNetworkMonitor
+    @State private var discoveryLifecycle = TVSetupDiscoveryLifecycle()
+    @State private var isDiscoveryForeground = true
+    @State private var hasAttemptedSetupConnection = false
     @State private var discoveryCollection: DiagnosticCollectionToken?
     @State private var address = ""
     @State private var manualBrand: TVBrand = .samsung
@@ -42,7 +47,8 @@ struct TVSetupView: View {
         initialAddress: String = "",
         initialReportedDeviceID: String? = nil,
         initialTarget: TVConnectionTarget? = nil,
-        discovery: TVDiscoveryStore = TVDiscoveryStore()
+        discovery: TVDiscoveryStore = TVDiscoveryStore(),
+        networkMonitor: LocalNetworkMonitor = .applicationMonitor()
     ) {
         self.session = session
         let permittedInitialTarget = initialTarget.flatMap {
@@ -63,6 +69,7 @@ struct TVSetupView: View {
         _usesLegacyVizioConnection = State(initialValue: permittedInitialTarget?.controlPort == 9000)
         _selectedTarget = State(initialValue: permittedInitialTarget)
         _discovery = State(initialValue: discovery)
+        _networkMonitor = State(initialValue: networkMonitor)
     }
 
     var body: some View {
@@ -74,9 +81,13 @@ struct TVSetupView: View {
                         .foregroundStyle(HafaTheme.secondaryText)
                         .accessibilityIdentifier("tvBuildSupportDescription")
                 }
-                discoverySection
-                if showsSearchDetails {
-                    searchDetailsSection
+                if networkMonitor.isReachable == false {
+                    wifiRecoverySection
+                } else if !(hasAttemptedSetupConnection && isBusy) {
+                    discoverySection
+                    if showsSearchDetails {
+                        searchDetailsSection
+                    }
                 }
                 connectionStatusSection
                 if !requiresSavedTVManagement { manualSetupSection }
@@ -127,12 +138,17 @@ struct TVSetupView: View {
                 HafaRemoteHelpView()
             }
             .task {
-                startDiscovery()
+                isDiscoveryForeground = scenePhase != .background
+                applyDiscoveryAction(
+                    discoveryLifecycle.appear(
+                        wifi: networkMonitor.isReachable, foreground: isDiscoveryForeground,
+                        blocked: blocksAutomaticDiscovery))
             }
             .onAppear {
                 preparePairingRepairIfNeeded(for: session.state)
             }
             .onDisappear {
+                discoveryLifecycle.disappear()
                 discovery.stop()
                 connectionTaskID = nil
                 connectionTask?.cancel()
@@ -148,13 +164,24 @@ struct TVSetupView: View {
                     await session.disconnect(clearRememberedTV: false)
                 }
             }
-            .onChange(of: discovery.state) { _, state in
-                switch state {
-                case .results, .noResults, .permissionDenied, .failed:
+            .onChange(of: networkMonitor.isReachable) { _, _ in
+                updateDiscoveryAvailability()
+            }
+            .onChange(of: blocksAutomaticDiscovery) { _, _ in
+                updateDiscoveryAvailability()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                // System permission dialogs also cause .inactive; they must not restart setup.
+                if phase == .background { isDiscoveryForeground = false }
+                if phase == .active { isDiscoveryForeground = true }
+                updateDiscoveryAvailability()
+            }
+            .onChange(of: discovery.isSearching) { _, searching in
+                if !searching {
                     session.diagnostics.finishDiscovery(collection: &discoveryCollection)
-                case .idle, .searching:
-                    break
                 }
+            }
+            .onChange(of: discovery.state) { _, state in
                 if let announcement = discoveryAnnouncement(for: state) {
                     UIAccessibility.post(notification: .announcement, argument: announcement)
                 }
@@ -204,6 +231,23 @@ struct TVSetupView: View {
         discovery.hasSearchIssues
             || (discovery.state == .noResults
                 && discovery.progress.contains { $0.stage == .advertised })
+            || (discovery.state == .results && !discovery.isSearching
+                && TVDistributionPolicy.current.permittedBrands.contains { brand in
+                    !discovery.televisions.contains { $0.brand == brand }
+                })
+    }
+
+    private var wifiRecoverySection: some View {
+        Section {
+            Label("Connect to home Wi-Fi", systemImage: "wifi.exclamationmark")
+                .font(.headline)
+            Text(
+                "A Wi-Fi connection is unavailable. Connect this iPhone to the same home network as your TV. Your TV can use Wi-Fi or Ethernet. Hafa Remote will search again automatically."
+            )
+            .foregroundStyle(HafaTheme.secondaryText)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("setupWiFiRecovery")
     }
 
     @ViewBuilder
@@ -280,6 +324,16 @@ struct TVSetupView: View {
                     )
                     .accessibilityHint("Connects Hafa Remote to this TV")
                     .accessibilityIdentifier("discoveredTVButton")
+                }
+                if discovery.isSearching {
+                    ProgressView("Looking for more TVs…")
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("additionalTVSearchProgress")
+                } else {
+                    Button("Scan Again", systemImage: "arrow.clockwise") { startDiscovery() }
+                        .frame(minHeight: 44)
+                        .disabled(isBusy)
+                        .accessibilityIdentifier("scanAgainButton")
                 }
             } header: {
                 Text("Nearby TVs")
@@ -483,7 +537,10 @@ struct TVSetupView: View {
                         }
                         .frame(minHeight: 44)
                     }
-                    .disabled(isBusy || address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        isBusy || networkMonitor.isReachable == false
+                            || address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
                     .accessibilityIdentifier("connectToTVButton")
 
                     if canForgetPairing {
@@ -563,6 +620,33 @@ struct TVSetupView: View {
     }
 
     private func startDiscovery() {
+        applyDiscoveryAction(
+            discoveryLifecycle.requestSearch(
+                wifi: networkMonitor.isReachable, foreground: isDiscoveryForeground,
+                blocked: blocksAutomaticDiscovery))
+    }
+
+    private var blocksAutomaticDiscovery: Bool {
+        isBusy || connectionTaskID != nil || repairTaskID != nil || recoveryTask != nil
+            || isChoosingSavedTV || (hasAttemptedSetupConnection && session.canSendCommands)
+    }
+
+    private func updateDiscoveryAvailability() {
+        applyDiscoveryAction(
+            discoveryLifecycle.update(
+                wifi: networkMonitor.isReachable, foreground: isDiscoveryForeground,
+                blocked: blocksAutomaticDiscovery))
+    }
+
+    private func applyDiscoveryAction(_ action: TVSetupDiscoveryLifecycle.Action) {
+        switch action {
+        case .none: return
+        case .stop:
+            discovery.stop()
+            session.diagnostics.finishDiscovery(collection: &discoveryCollection)
+            return
+        case .start: break
+        }
         discoveryCollection = session.diagnostics.captureCollection()
         session.diagnostics.record(.discoveryStarted, collection: discoveryCollection)
         let collection = discoveryCollection
@@ -587,6 +671,8 @@ struct TVSetupView: View {
     }
 
     private func beginConnection(to television: DiscoveredTV, target: TVConnectionTarget) {
+        hasAttemptedSetupConnection = true
+        discoveryLifecycle.selectTV()
         resetPairingCodeSubmission()
         selectedTV = television
         selectedBrand = television.brand
@@ -601,6 +687,8 @@ struct TVSetupView: View {
     }
 
     private func connectManually() {
+        hasAttemptedSetupConnection = true
+        discoveryLifecycle.selectTV()
         resetPairingCodeSubmission()
         selectedTV = nil
         selectedBrand = manualBrand
@@ -663,6 +751,8 @@ struct TVSetupView: View {
                     recoveryTask = Task {
                         await session.disconnect(clearRememberedTV: false)
                         guard !Task.isCancelled else { return }
+                        hasAttemptedSetupConnection = false
+                        recoveryTask = nil
                         startDiscovery()
                     }
                 }
