@@ -1134,7 +1134,8 @@ struct RemoteSessionControllerTests {
             configuration: testConfiguration(
                 reconnectDelays: [.seconds(2)],
                 healthCheckInterval: .seconds(5),
-                healthCheckTimeout: .seconds(9)
+                healthCheckTimeout: .seconds(9),
+                healthCheckRetryDelay: .seconds(3)
             )
         )
 
@@ -1142,8 +1143,9 @@ struct RemoteSessionControllerTests {
         await resume(clock: clock, duration: .seconds(5))
         // The mock call begins before the controller handles its failure. Wait for
         // the durable retry registration, rather than racing a short polling deadline.
-        let retry = await registeredSleeps.first { $0 == .seconds(1) }
-        #expect(retry == .seconds(1))
+        // Three seconds uniquely identifies this retry; teardown uses one second.
+        let retry = await registeredSleeps.first { $0 == .seconds(3) }
+        #expect(retry == .seconds(3))
 
         #expect(await session.state == .connected(tv))
         #expect(await driver.healthCheckCallCount == 1)
