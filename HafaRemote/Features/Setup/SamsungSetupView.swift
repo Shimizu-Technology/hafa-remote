@@ -75,7 +75,7 @@ struct TVSetupView: View {
                         .accessibilityIdentifier("tvBuildSupportDescription")
                 }
                 discoverySection
-                if discovery.hasSearchIssues {
+                if showsSearchDetails {
                     searchDetailsSection
                 }
                 connectionStatusSection
@@ -200,6 +200,12 @@ struct TVSetupView: View {
         }
     }
 
+    private var showsSearchDetails: Bool {
+        discovery.hasSearchIssues
+            || (discovery.state == .noResults
+                && discovery.progress.contains { $0.stage == .advertised })
+    }
+
     @ViewBuilder
     private var discoverySection: some View {
         switch discovery.state {
@@ -288,7 +294,7 @@ struct TVSetupView: View {
                         .font(.headline)
 
                     Text(
-                        discovery.hasSearchIssues
+                        showsSearchDetails
                             ? "Check the search details below. Keep the TV on and on the same home network, without guest Wi-Fi isolation."
                             : "No TVs were found in this search. Keep the TV on and on the same home network, without guest Wi-Fi isolation."
                     )

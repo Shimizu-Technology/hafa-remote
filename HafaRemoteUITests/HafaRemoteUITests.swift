@@ -132,18 +132,34 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(addressField.waitForExistence(timeout: 2))
     }
 
-    /// Persisted discovery aliases must carry authenticated identity into deliberate saved-TV repair.
+    /// Failed resolution remains visible until a fresh scan recovers the candidate.
     @MainActor
     func testUnresolvedVizioExplainsFailureAndFreshScanRecovers() throws {
+        assertVizioDiscoveryRecovery(
+            launchArgument: "-ui-testing-discovery-issues",
+            detailText: "connection details could not be read")
+    }
+
+    /// An advertisement without a completed resolution must not be described as no TV found.
+    @MainActor
+    func testAdvertisedVizioWithoutResolutionShowsRecoveryDetails() throws {
+        assertVizioDiscoveryRecovery(
+            launchArgument: "-ui-testing-discovery-advertised",
+            detailText: "A TV announced itself, but setup did not finish")
+    }
+
+    @MainActor
+    private func assertVizioDiscoveryRecovery(launchArgument: String, detailText: String) {
         let app = makeApplication()
-        app.launchArguments.append("-ui-testing-discovery-issues")
+        app.launchArguments.append(launchArgument)
         app.launch()
         app.buttons["addTVButton"].tap()
         XCTAssertTrue(app.staticTexts["tvBuildSupportDescription"].waitForExistence(timeout: 5))
         let detail = app.descendants(matching: .any)["discoveryDetail-vizio"].firstMatch
         for _ in 0..<5 where !detail.isHittable { panSetupGutter(in: app, upward: true) }
         XCTAssertTrue(detail.exists)
-        XCTAssertTrue(detail.label.contains("connection details could not be read"))
+        XCTAssertTrue(detail.label.contains(detailText))
+        XCTAssertFalse(app.staticTexts["No TVs were found in this search."].exists)
         let scan = app.buttons["scanAgainButton"]
         for _ in 0..<5 where !scan.isHittable { panSetupGutter(in: app, upward: false) }
         XCTAssertTrue(scan.isHittable)

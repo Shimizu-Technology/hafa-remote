@@ -607,6 +607,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
             case noResults
             case noResultsThenTelevision
             case resolutionFailureThenTelevision
+            case advertisementThenTelevision
         }
 
         private let fixture: Fixture
@@ -635,11 +636,13 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
                 } else {
                     publishTelevision(brand: .samsung, to: eventHandler)
                 }
-            case .resolutionFailureThenTelevision:
+            case .resolutionFailureThenTelevision, .advertisementThenTelevision:
                 if startCount == 1 {
-                    for stage in [
-                        TVDiscoveryStage.browsing, .advertised, .resolutionFailed, .resolutionRetrying,
-                    ] {
+                    var stages: [TVDiscoveryStage] = [.browsing, .advertised]
+                    if case .resolutionFailureThenTelevision = fixture {
+                        stages += [.resolutionFailed, .resolutionRetrying]
+                    }
+                    for stage in stages {
                         eventHandler(.progress(TVDiscoveryProgress(brand: .vizio, stage: stage)))
                     }
                     eventHandler(.finished)
