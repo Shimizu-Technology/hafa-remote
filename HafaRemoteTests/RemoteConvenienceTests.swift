@@ -595,6 +595,17 @@ struct RemoteConvenienceTests {
         #expect(throws: TVDriverError.savedDeviceIdentityMismatch) {
             try repaired.validateConnectedIdentity(other)
         }
+        let explicitLegacy = ManualTVTargetFactory.target(address: moved, brand: .vizio, vizioPort: 9000)
+        #expect(explicitLegacy.controlPort == 9000)
+        #expect(explicitLegacy.expectedSavedDeviceID == nil)
+        let explicitStandard = ManualTVTargetFactory.target(
+            address: moved, brand: .vizio, savedTarget: saved, vizioPort: 7345)
+        #expect(explicitStandard.controlPort == 7345)
+        #expect(explicitStandard.expectedSavedDeviceID == saved.expectedSavedDeviceID)
+        #expect(
+            ManualTVTargetFactory.target(address: moved, brand: .vizio, vizioPort: 443).controlPort == 7345)
+        #expect(
+            ManualTVTargetFactory.target(address: moved, brand: .sony, vizioPort: 9000).controlPort == 6466)
     }
 
     @Test("A queued convenience is cancelled when TV selection changes")

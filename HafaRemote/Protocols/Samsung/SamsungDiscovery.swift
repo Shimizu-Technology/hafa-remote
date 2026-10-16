@@ -56,9 +56,29 @@ enum TVDiscoveryState: Equatable, Sendable {
 
 enum TVDiscoveryBackendEvent: Sendable {
     case found(DiscoveredTV)
+    case progress(TVDiscoveryProgress)
     case finished
     case permissionDenied
     case failed
+}
+
+/// Reviewed categories only: never carries service names, TXT data or network identifiers.
+enum TVDiscoveryStage: String, CaseIterable, Sendable {
+    case browsing = "Search started"
+    case advertised = "TV advertisement found"
+    case resolved = "TV service resolved"
+    case resolutionFailed = "TV service could not be resolved"
+    case resolutionRetrying = "Retrying TV service resolution"
+    case endpointRejected = "TV endpoint was not supported"
+    case browserFailed = "Brand search failed"
+    case permissionDenied = "Local Network access denied"
+    case candidateReady = "Pairing candidate found"
+    case noAdvertisement = "No TV advertisement found"
+}
+
+struct TVDiscoveryProgress: Hashable, Sendable {
+    let brand: TVBrand
+    let stage: TVDiscoveryStage
 }
 
 @MainActor
@@ -85,16 +105,19 @@ final class TVDiscoveryStore {
 
     private(set) var state: TVDiscoveryState = .idle
     private(set) var televisions: [DiscoveredTV] = []
+    private(set) var progress: [TVDiscoveryProgress] = []
+    private(set) var isSearching = false
 
     @ObservationIgnored private let backend: any TVDiscoveryBackend
     @ObservationIgnored private let searchDuration: Duration
     @ObservationIgnored private var timeoutTask: Task<Void, Never>?
     @ObservationIgnored private var scanGeneration = UUID()
     @ObservationIgnored private var identityWaiters: [UUID: IdentityWaiter] = [:]
+    @ObservationIgnored private var progressHandler: (@MainActor (TVDiscoveryProgress) -> Void)?
 
     init(
         backend: (any TVDiscoveryBackend)? = nil,
-        searchDuration: Duration = .seconds(8)
+        searchDuration: Duration = .seconds(12)
     ) {
         self.backend = backend ?? Self.defaultBackend()
         self.searchDuration = searchDuration
@@ -112,9 +135,12 @@ final class TVDiscoveryStore {
         #endif
     }
 
-    func start() {
+    func start(onProgress: (@MainActor (TVDiscoveryProgress) -> Void)? = nil) {
         stop(resetState: false)
         televisions = []
+        progress = []
+        progressHandler = onProgress
+        isSearching = true
         state = .searching
         let generation = scanGeneration
 
@@ -171,6 +197,8 @@ final class TVDiscoveryStore {
     private func stop(resetState: Bool) {
         // Invalidate producers before cancellation can synchronously call back.
         scanGeneration = UUID()
+        isSearching = false
+        progressHandler = nil
         timeoutTask?.cancel()
         timeoutTask = nil
         backend.stop()
@@ -183,8 +211,12 @@ final class TVDiscoveryStore {
         guard scanGeneration == generation, state == .searching || state == .results else { return }
 
         switch event {
+        case .progress(let update):
+            recordProgress(update)
         case .found(let television):
             guard TVDistributionPolicy.current.permits(television.brand) else { return }
+            recordProgress(TVDiscoveryProgress(brand: television.brand, stage: .candidateReady))
+            guard scanGeneration == generation else { return }
             if var endpointIndex = televisions.firstIndex(where: {
                 $0.brand == television.brand && $0.address == television.address
                     && $0.controlPort == television.controlPort
@@ -232,19 +264,78 @@ final class TVDiscoveryStore {
             finishSearch()
         case .permissionDenied:
             stop(resetState: false)
-            state = .permissionDenied
+            state = televisions.isEmpty ? .permissionDenied : .results
             finishIdentityWaiters()
         case .failed:
             stop(resetState: false)
-            state = .failed
+            state = televisions.isEmpty ? .failed : .results
             finishIdentityWaiters()
         }
     }
 
     private func finishSearch() {
+        let generation = scanGeneration
+        for brand in TVDistributionPolicy.current.permittedBrands {
+            let observed = stages(for: brand)
+            if observed.isEmpty || observed == [.browsing] {
+                recordProgress(TVDiscoveryProgress(brand: brand, stage: .noAdvertisement))
+                guard scanGeneration == generation else { return }
+            }
+        }
+        let hasPermissionFailure = progress.contains { $0.stage == .permissionDenied }
+        let hasBrowserFailure = progress.contains { $0.stage == .browserFailed }
         stop(resetState: false)
-        state = televisions.isEmpty ? .noResults : .results
+        if !televisions.isEmpty {
+            state = .results
+        } else if hasPermissionFailure {
+            state = .permissionDenied
+        } else if hasBrowserFailure {
+            state = .failed
+        } else {
+            state = .noResults
+        }
         finishIdentityWaiters()
+    }
+
+    private func recordProgress(_ update: TVDiscoveryProgress) {
+        guard TVDistributionPolicy.current.permits(update.brand), !progress.contains(update) else { return }
+        progress.append(update)
+        progressHandler?(update)
+    }
+
+    func stages(for brand: TVBrand) -> Set<TVDiscoveryStage> {
+        Set(progress.filter { $0.brand == brand }.map(\.stage))
+    }
+
+    var hasSearchIssues: Bool {
+        progress.contains {
+            [.resolutionFailed, .endpointRejected, .browserFailed, .permissionDenied].contains($0.stage)
+        }
+    }
+
+    func searchDetail(for brand: TVBrand) -> String {
+        let stages = stages(for: brand)
+        if stages.contains(.candidateReady) {
+            return "TV found. Selecting it checks its identity and pairing support."
+        }
+        if stages.contains(.permissionDenied) { return "Allow Local Network access in iPhone Settings." }
+        if stages.contains(.browserFailed) { return "Search could not start. Try scanning again." }
+        if isSearching, stages.contains(.resolutionRetrying) {
+            return "Reading this TV's connection details again…"
+        }
+        if stages.contains(.resolutionFailed) {
+            return
+                "A TV announced itself, but its connection details could not be read. Scan again or try its TV address."
+        }
+        if stages.contains(.endpointRejected) {
+            return
+                "A TV was found, but its connection could not be accepted. Check compatibility or try its TV address."
+        }
+        if isSearching { return "Searching for TVs…" }
+        if stages.contains(.advertised) {
+            return "A TV announced itself, but setup did not finish. Scan again or try its TV address."
+        }
+        return "Not found during this search."
     }
 
     private func resolveIdentityWaiters(with television: DiscoveredTV) {
@@ -356,25 +447,26 @@ final class SamsungBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
         let browser = NetServiceBrowser()
         browser.delegate = self
         self.browser = browser
+        eventHandler(.progress(TVDiscoveryProgress(brand: .samsung, stage: .browsing)))
+        guard self.browser === browser else { return }
         browser.searchForServices(ofType: Self.serviceType, inDomain: "local.")
     }
 
     func stop() {
-        browser?.stop()
-        browser?.delegate = nil
+        let oldBrowser = browser
+        let oldServices = Array(services.values)
+        let oldOperations = Array(validationTasks.values)
         browser = nil
-
-        for service in services.values {
-            service.stop()
-            service.delegate = nil
-        }
         services.removeAll()
-
-        for operation in validationTasks.values {
-            operation.task.cancel()
-        }
         validationTasks.removeAll()
         eventHandler = nil
+        oldBrowser?.delegate = nil
+        oldBrowser?.stop()
+        for service in oldServices {
+            service.delegate = nil
+            service.stop()
+        }
+        for operation in oldOperations { operation.task.cancel() }
     }
 
     private func validate(_ service: NetService) {
@@ -388,8 +480,11 @@ final class SamsungBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
             let address = Self.privateIPv4Address(from: service)
         else {
             services[serviceID] = nil
+            eventHandler?(.progress(TVDiscoveryProgress(brand: .samsung, stage: .endpointRejected)))
             return
         }
+        eventHandler?(.progress(TVDiscoveryProgress(brand: .samsung, stage: .resolved)))
+        guard services[serviceID] === service else { return }
 
         validationTasks[serviceID]?.task.cancel()
         let operationID = UUID()
@@ -404,9 +499,12 @@ final class SamsungBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
             do {
                 let deviceInfo = try await deviceInfoProvider.fetchDeviceInfo(at: address)
                 try Task.checkCancellation()
-                guard deviceInfo.supportsTokenAuthentication,
-                    let self, self.validationTasks[serviceID]?.id == operationID
-                else { return }
+                guard let self, self.validationTasks[serviceID]?.id == operationID else { return }
+                guard deviceInfo.supportsTokenAuthentication else {
+                    self.eventHandler?(
+                        .progress(TVDiscoveryProgress(brand: .samsung, stage: .endpointRejected)))
+                    return
+                }
 
                 self.eventHandler?(
                     .found(
@@ -419,8 +517,10 @@ final class SamsungBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
                     )
                 )
             } catch {
-                // A service advertisement is only a candidate. Invalid, stale,
-                // or unsupported devices are omitted without exposing details.
+                guard !Task.isCancelled, let self, self.validationTasks[serviceID]?.id == operationID else {
+                    return
+                }
+                self.eventHandler?(.progress(TVDiscoveryProgress(brand: .samsung, stage: .endpointRejected)))
             }
         }
         validationTasks[serviceID] = ValidationOperation(id: operationID, task: task)
@@ -468,6 +568,8 @@ extension SamsungBonjourDiscoveryBackend: NetServiceBrowserDelegate {
         guard self.browser === browser else { return }
         let serviceID = ObjectIdentifier(service)
         services[serviceID] = service
+        eventHandler?(.progress(TVDiscoveryProgress(brand: .samsung, stage: .advertised)))
+        guard self.browser === browser, services[serviceID] === service else { return }
         service.delegate = self
         service.resolve(withTimeout: 5)
     }
@@ -476,7 +578,9 @@ extension SamsungBonjourDiscoveryBackend: NetServiceBrowserDelegate {
         guard self.browser === browser else { return }
         let handler = eventHandler
         let code = errorDict[NetService.errorCode]?.intValue
+        let stage: TVDiscoveryStage = code == Self.policyDeniedErrorCode ? .permissionDenied : .browserFailed
         stop()
+        handler?(.progress(TVDiscoveryProgress(brand: .samsung, stage: stage)))
         handler?(code == Self.policyDeniedErrorCode ? .permissionDenied : .failed)
     }
 }
@@ -489,6 +593,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
     func netService(_ sender: NetService, didNotResolve errorDict: [String: NSNumber]) {
         guard services[ObjectIdentifier(sender)] === sender else { return }
         services[ObjectIdentifier(sender)] = nil
+        eventHandler?(.progress(TVDiscoveryProgress(brand: .samsung, stage: .resolutionFailed)))
     }
 }
 
@@ -501,6 +606,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
             case vizioTelevision
             case noResults
             case noResultsThenTelevision
+            case resolutionFailureThenTelevision
         }
 
         private let fixture: Fixture
@@ -529,6 +635,17 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
                 } else {
                     publishTelevision(brand: .samsung, to: eventHandler)
                 }
+            case .resolutionFailureThenTelevision:
+                if startCount == 1 {
+                    for stage in [
+                        TVDiscoveryStage.browsing, .advertised, .resolutionFailed, .resolutionRetrying,
+                    ] {
+                        eventHandler(.progress(TVDiscoveryProgress(brand: .vizio, stage: stage)))
+                    }
+                    eventHandler(.finished)
+                } else {
+                    publishTelevision(brand: .vizio, to: eventHandler)
+                }
             }
         }
 
@@ -538,7 +655,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
             brand: TVBrand,
             to eventHandler: @escaping @MainActor @Sendable (TVDiscoveryBackendEvent) -> Void
         ) {
-            guard let address = try? PrivateIPv4Address("192.168.10.20") else {
+            guard let address = try? PrivateIPv4Address(documentationAddressForTesting: "192.0.2.20") else {
                 eventHandler(.failed)
                 return
             }

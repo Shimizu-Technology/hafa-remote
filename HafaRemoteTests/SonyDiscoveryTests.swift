@@ -4,6 +4,88 @@ import Testing
 @testable import HafaRemote
 
 struct SonyDiscoveryTests {
+    @MainActor
+    @Test(
+        "A progress-triggered replacement scan rejects the old candidate and completion",
+        arguments: [TVDiscoveryStage.candidateReady, .noAdvertisement])
+    func progressCannotContaminateReplacement(_ stage: TVDiscoveryStage) throws {
+        let backend = HeldDiscoveryBackendFixture()
+        let store = TVDiscoveryStore(backend: backend)
+        store.start { update in
+            if update.stage == stage { store.start() }
+        }
+        let old = try #require(backend.callbacks.first)
+        if stage == .candidateReady {
+            old(
+                .found(
+                    DiscoveredTV(
+                        brand: .samsung, reportedIdentifier: "synthetic-replaced-candidate",
+                        displayName: "Synthetic Old TV", modelName: "Synthetic Model",
+                        address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.53"))))
+        } else {
+            old(.finished)
+        }
+        #expect(backend.callbacks.count == 2)
+        #expect(store.state == .searching)
+        #expect(store.isSearching)
+        #expect(store.televisions.isEmpty)
+        #expect(store.progress.isEmpty)
+        store.stop()
+    }
+
+    @Test("A partial live browser failure survives the scan timeout without hiding healthy TVs")
+    @MainActor
+    func partialFailureSurvivesLiveBrowserTimeout() async throws {
+        let failed = DiscoveryBackendFixture()
+        let healthy = DiscoveryBackendFixture()
+        let store = TVDiscoveryStore(
+            backend: CompositeTVDiscoveryBackend(backends: [failed, healthy]),
+            searchDuration: .milliseconds(10))
+        store.start()
+        failed.emit(.progress(TVDiscoveryProgress(brand: .vizio, stage: .browserFailed)))
+        failed.emit(.failed)
+        #expect(store.state == .searching)
+        for _ in 0..<100 where store.state == .searching {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(store.state == .failed)
+        #expect(store.stages(for: .vizio) == [.browserFailed])
+        #expect(store.searchDetail(for: .vizio).contains("could not start"))
+
+        store.start()
+        #expect(store.progress.isEmpty)
+        failed.emit(.progress(TVDiscoveryProgress(brand: .vizio, stage: .resolutionFailed)))
+        healthy.emit(
+            .found(
+                DiscoveredTV(
+                    brand: .samsung, reportedIdentifier: "synthetic-healthy", displayName: "Synthetic TV",
+                    modelName: "Synthetic Model",
+                    address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.52"))))
+        #expect(store.state == .results)
+        #expect(store.hasSearchIssues)
+        #expect(store.televisions.count == 1)
+        #expect(store.searchDetail(for: .vizio).contains("could not be read"))
+        store.stop()
+    }
+
+    @Test("A discovered but unresolved TV has a different recovery from no advertisement")
+    @MainActor
+    func unresolvedCandidateAndNoAdvertisementStayDistinct() {
+        let backend = DiscoveryBackendFixture()
+        let store = TVDiscoveryStore(backend: backend)
+        var updates: [TVDiscoveryProgress] = []
+        store.start { updates.append($0) }
+        let failure = TVDiscoveryProgress(brand: .vizio, stage: .resolutionFailed)
+        backend.emit(.progress(failure))
+        backend.emit(.progress(failure))
+        backend.emit(.finished)
+        #expect(store.state == .noResults)
+        #expect(updates.filter { $0 == failure }.count == 1)
+        #expect(store.searchDetail(for: .vizio).contains("announced itself"))
+        #expect(store.searchDetail(for: .sony) == "Not found during this search.")
+        store.stop()
+    }
+
     @Test("A moved Sony candidate can locate a saved TV without replacing its authenticated identity")
     @MainActor
     func locatesSavedDiscoveryAliasAfterAddressChange() async throws {
@@ -100,11 +182,16 @@ struct SonyDiscoveryTests {
                 break
             }
         }
-        for event in [TVDiscoveryBackendEvent.found(oldTV), .finished, .permissionDenied, .failed] {
+        for event in [
+            TVDiscoveryBackendEvent.found(oldTV),
+            .progress(TVDiscoveryProgress(brand: .vizio, stage: .resolutionFailed)),
+            .finished, .permissionDenied, .failed,
+        ] {
             publish(event, through: oldCallback)
         }
         #expect(store.state == .searching)
         #expect(store.televisions.isEmpty)
+        #expect(store.progress.isEmpty)
         #expect(recorder.events.map(\.kind) == [.discoveryStarted])
         let newTV = DiscoveredTV(
             reportedIdentifier: "synthetic-current-scan-tv", displayName: "Synthetic Current TV",
@@ -150,7 +237,7 @@ struct SonyDiscoveryTests {
         var terminalEvents = 0
         composite.start { event in
             switch event {
-            case .found: break
+            case .found, .progress: break
             case .finished, .permissionDenied, .failed: terminalEvents += 1
             }
         }
@@ -162,6 +249,34 @@ struct SonyDiscoveryTests {
         #expect(terminalEvents == 1)
         #expect(first.stopCount > 0)
         #expect(second.stopCount > 0)
+    }
+
+    @Test(
+        "A terminal brand failure preserves another brand's selectable candidate", arguments: [false, true])
+    @MainActor
+    func compositeTerminalFailurePreservesCandidates(permissionDenied: Bool) throws {
+        let healthy = DiscoveryBackendFixture()
+        let failing = DiscoveryBackendFixture()
+        let store = TVDiscoveryStore(
+            backend: CompositeTVDiscoveryBackend(backends: [healthy, failing]))
+        let television = DiscoveredTV(
+            reportedIdentifier: "synthetic-healthy-tv", displayName: "Synthetic Healthy TV",
+            modelName: "Synthetic Model",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.47"))
+        store.start()
+        healthy.emit(.found(television))
+        healthy.emit(.finished)
+        failing.emit(
+            .progress(
+                TVDiscoveryProgress(
+                    brand: .vizio, stage: permissionDenied ? .permissionDenied : .browserFailed)))
+        failing.emit(permissionDenied ? .permissionDenied : .failed)
+
+        #expect(store.state == .results)
+        #expect(store.televisions == [television])
+        #expect(store.hasSearchIssues)
+        #expect(!store.isSearching)
+        store.stop()
     }
 }
 

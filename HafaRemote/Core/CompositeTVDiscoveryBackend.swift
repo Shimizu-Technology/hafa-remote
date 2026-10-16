@@ -46,7 +46,7 @@ final class CompositeTVDiscoveryBackend: TVDiscoveryBackend {
     private func receive(_ event: TVDiscoveryBackendEvent, from index: Int, generation: UUID) {
         guard scanGeneration == generation, eventHandler != nil else { return }
         switch event {
-        case .found:
+        case .found, .progress:
             eventHandler?(event)
         case .finished:
             terminalStates[index] = .finished

@@ -32,6 +32,9 @@ final class PublicBuildUITests: XCTestCase {
     func testManualSetupOffersOnlySamsung() throws {
         let app = launch("-ui-testing-discovery-empty")
         app.buttons["addTVButton"].tap()
+        XCTAssertTrue(app.staticTexts["tvBuildSupportDescription"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.staticTexts["tvBuildSupportDescription"].label.contains("Other TV brands are not enabled"))
         let manual = app.buttons["manualSetupButton"]
         if !manual.waitForExistence(timeout: 5) { app.swipeUp() }
         XCTAssertTrue(manual.waitForExistence(timeout: 5))
@@ -42,6 +45,7 @@ final class PublicBuildUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Samsung"].exists)
         XCTAssertFalse(app.buttons["Sony"].exists)
         XCTAssertFalse(app.buttons["Vizio"].exists)
+        XCTAssertFalse(app.switches["manualVizioLegacyConnection"].exists)
     }
 
     @MainActor

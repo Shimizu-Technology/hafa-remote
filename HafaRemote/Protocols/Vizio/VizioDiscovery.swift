@@ -131,6 +131,7 @@ final class VizioBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
     private let resolveCandidate: CandidateResolver
     private var browser: (any VizioServiceBrowsing)?
     private var services: [ObjectIdentifier: NetService] = [:]
+    private var resolutionAttempts: [ObjectIdentifier: Int] = [:]
     private var eventHandler: (@MainActor @Sendable (TVDiscoveryBackendEvent) -> Void)?
 
     init(
@@ -154,32 +155,65 @@ final class VizioBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
         let browser = makeBrowser()
         browser.delegate = self
         self.browser = browser
+        eventHandler(.progress(TVDiscoveryProgress(brand: .vizio, stage: .browsing)))
+        guard self.browser === browser else { return }
         browser.start()
     }
 
     func stop() {
-        browser?.stop()
-        browser?.delegate = nil
+        let oldBrowser = browser
+        let oldServices = Array(services.values)
         browser = nil
-        for service in services.values {
-            service.stop()
-            service.delegate = nil
-        }
         services.removeAll()
+        resolutionAttempts.removeAll()
         eventHandler = nil
+        oldBrowser?.delegate = nil
+        oldBrowser?.stop()
+        for service in oldServices {
+            service.delegate = nil
+            service.stop()
+        }
     }
 
     func receiveResolvedService(_ service: NetService) {
         let serviceID = ObjectIdentifier(service)
         guard services[serviceID] === service else { return }
-        defer { services[serviceID] = nil }
-        guard let candidate = resolveCandidate(service) else { return }
+        defer {
+            services[serviceID] = nil
+            resolutionAttempts[serviceID] = nil
+        }
+        eventHandler?(.progress(TVDiscoveryProgress(brand: .vizio, stage: .resolved)))
+        guard services[serviceID] === service else { return }
+        guard let candidate = resolveCandidate(service) else {
+            eventHandler?(.progress(TVDiscoveryProgress(brand: .vizio, stage: .endpointRejected)))
+            return
+        }
         eventHandler?(.found(candidate))
     }
 
     func receiveResolutionFailure(_ service: NetService) {
-        guard services[ObjectIdentifier(service)] === service else { return }
-        services[ObjectIdentifier(service)] = nil
+        let serviceID = ObjectIdentifier(service)
+        guard services[serviceID] === service else { return }
+        eventHandler?(.progress(TVDiscoveryProgress(brand: .vizio, stage: .resolutionFailed)))
+        guard services[serviceID] === service else { return }
+        if resolutionAttempts[serviceID] == 1 {
+            services[serviceID] = nil
+            resolutionAttempts[serviceID] = nil
+            service.stop()
+            service.delegate = nil
+            // A fresh producer prevents late callbacks from the failed attempt
+            // from being accepted as the retry's result.
+            let retry = NetService(domain: service.domain, type: service.type, name: service.name)
+            let retryID = ObjectIdentifier(retry)
+            services[retryID] = retry
+            resolutionAttempts[retryID] = 2
+            eventHandler?(.progress(TVDiscoveryProgress(brand: .vizio, stage: .resolutionRetrying)))
+            guard services[retryID] === retry else { return }
+            startResolution(retry, self)
+        } else {
+            services[serviceID] = nil
+            resolutionAttempts[serviceID] = nil
+        }
     }
 
     var trackedServiceCount: Int { services.count }
@@ -210,6 +244,9 @@ extension VizioBonjourDiscoveryBackend: VizioServiceBrowserDelegate {
     func vizioServiceBrowser(_ browser: any VizioServiceBrowsing, didFind service: NetService) {
         guard self.browser === browser else { return }
         services[ObjectIdentifier(service)] = service
+        resolutionAttempts[ObjectIdentifier(service)] = 1
+        eventHandler?(.progress(TVDiscoveryProgress(brand: .vizio, stage: .advertised)))
+        guard self.browser === browser, services[ObjectIdentifier(service)] === service else { return }
         startResolution(service, self)
     }
 
@@ -217,6 +254,11 @@ extension VizioBonjourDiscoveryBackend: VizioServiceBrowserDelegate {
         guard self.browser === browser else { return }
         let handler = eventHandler
         stop()
+        handler?(
+            .progress(
+                TVDiscoveryProgress(
+                    brand: .vizio,
+                    stage: errorCode == Self.policyDeniedErrorCode ? .permissionDenied : .browserFailed)))
         handler?(
             errorCode == Self.policyDeniedErrorCode ? .permissionDenied : .failed
         )

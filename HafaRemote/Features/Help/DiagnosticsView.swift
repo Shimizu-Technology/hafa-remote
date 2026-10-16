@@ -37,7 +37,7 @@ struct DiagnosticsView: View {
                 .disabled(recorder.events.isEmpty)
             } footer: {
                 Text(
-                    "Reports include app and iOS versions, optional TV model and firmware, and coarse operation timing. Addresses, pairing credentials, device identities, TV names, Wi-Fi names, and entered text are excluded."
+                    "Reports include build support, app and iOS versions, optional TV model and firmware, brand search stages, and coarse operation timing. Addresses, pairing credentials, device identities, TV names, Wi-Fi names, and entered text are excluded."
                 )
                 .foregroundStyle(HafaTheme.secondaryText)
             }

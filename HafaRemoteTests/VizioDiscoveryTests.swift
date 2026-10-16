@@ -4,6 +4,65 @@ import Testing
 @testable import HafaRemote
 
 struct VizioDiscoveryTests {
+    @MainActor
+    @Test(
+        "Stopping from progress cannot start an untracked browser or resolution",
+        arguments: [TVDiscoveryStage.browsing, .advertised, .resolutionRetrying])
+    func progressCancellationCannotRestartProducer(_ stage: TVDiscoveryStage) {
+        let browser = FakeVizioServiceBrowser()
+        var resolutions: [NetService] = []
+        let backend = VizioBonjourDiscoveryBackend(
+            makeBrowser: { browser }, startResolution: { service, _ in resolutions.append(service) },
+            resolveCandidate: { _ in nil })
+        backend.start { event in
+            if case .progress(let update) = event, update.stage == stage { backend.stop() }
+        }
+        if stage != .browsing {
+            let service = fixtureService(name: "Synthetic Canceled Resolution")
+            browser.emitFound(service)
+            if stage == .resolutionRetrying { backend.receiveResolutionFailure(service) }
+        }
+        #expect(backend.trackedServiceCount == 0)
+        #expect(resolutions.count == (stage == .resolutionRetrying ? 1 : 0))
+        #expect(browser.startCount == (stage == .browsing ? 0 : 1))
+        backend.stop()
+    }
+
+    @MainActor
+    @Test("Vizio retries resolution once with a fresh producer and ignores the failed producer")
+    func retriesResolutionWithFreshProducer() throws {
+        let browser = FakeVizioServiceBrowser()
+        var resolutions: [NetService] = []
+        let recorder = VizioDiscoveryEventRecorder()
+        let candidate = try fixtureCandidate()
+        let backend = VizioBonjourDiscoveryBackend(
+            makeBrowser: { browser }, startResolution: { service, _ in resolutions.append(service) },
+            resolveCandidate: { _ in candidate })
+        backend.start { recorder.receive($0) }
+        let original = fixtureService(name: "Synthetic Retry TV")
+        browser.emitFound(original)
+        backend.receiveResolutionFailure(original)
+        #expect(resolutions.count == 2)
+        let retry = try #require(resolutions.last)
+        #expect(retry !== original)
+        backend.receiveResolvedService(original)
+        #expect(recorder.found.isEmpty)
+        backend.receiveResolvedService(retry)
+        #expect(recorder.found == [candidate])
+        #expect(backend.trackedServiceCount == 0)
+
+        browser.emitFound(fixtureService(name: "Synthetic Unresolved TV"))
+        let next = try #require(resolutions.last)
+        backend.receiveResolutionFailure(next)
+        let last = try #require(resolutions.last)
+        backend.receiveResolutionFailure(last)
+        #expect(resolutions.count == 4)
+        #expect(backend.trackedServiceCount == 0)
+        backend.stop()
+        backend.receiveResolvedService(last)
+        #expect(recorder.found == [candidate])
+    }
+
     @Test("Vizio TXT metadata produces a stable candidate with friendly presentation")
     func parsesVizioMetadata() throws {
         let txt = NetService.data(
@@ -127,7 +186,7 @@ struct VizioDiscoveryTests {
         browser.emitFound(failedService)
         backend.receiveResolutionFailure(failedService)
         backend.receiveResolvedService(failedService)
-        #expect(backend.trackedServiceCount == 0)
+        #expect(backend.trackedServiceCount == 1)
         #expect(recorder.found.isEmpty)
 
         browser.emitFound(stoppedService)
@@ -280,6 +339,8 @@ private final class VizioDiscoveryEventRecorder {
 
     func receive(_ event: TVDiscoveryBackendEvent) {
         switch event {
+        case .progress:
+            break
         case .found(let television):
             found.append(television)
         case .permissionDenied:

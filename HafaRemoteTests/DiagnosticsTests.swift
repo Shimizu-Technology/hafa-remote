@@ -5,6 +5,25 @@ import Testing
 
 @MainActor
 struct DiagnosticsTests {
+    @Test("Brand search details are opt-in and retain the scan's original consent lease")
+    func discoveryStagesRespectConsent() {
+        let recorder = DiagnosticRecorder()
+        let update = TVDiscoveryProgress(brand: .vizio, stage: .resolutionFailed)
+        recorder.recordDiscovery(update, collection: recorder.captureCollection())
+        #expect(recorder.events.isEmpty)
+        recorder.setEnabled(true)
+        let collection = recorder.captureCollection()
+        recorder.recordDiscovery(update, collection: collection)
+        let report = recorder.report(
+            metadata: DiagnosticMetadata(appVersion: "1", appBuild: "9", iOSVersion: "26"))
+        #expect(report.text.contains("Internal testing"))
+        #expect(report.text.contains("Vizio: TV service could not be resolved"))
+        recorder.clear()
+        recorder.recordDiscovery(update, collection: collection)
+        #expect(recorder.events.isEmpty)
+        #expect(report.events.count == 1)
+    }
+
     @Test(
         "Diagnostic metadata omits normalized protocol names used as Sony model fallback",
         arguments: [

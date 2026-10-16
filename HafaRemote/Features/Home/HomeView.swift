@@ -1052,6 +1052,9 @@ struct HafaRemoteHelpView: View {
 
                 Section("About") {
                     LabeledContent("Version", value: appVersion)
+                    LabeledContent("TV support", value: TVBuildFlavor.compiled.supportTitle)
+                        .accessibilityIdentifier("aboutTVBuildSupport")
+                    Text(TVBuildFlavor.compiled.supportDescription)
                     Text("No account, cloud sync, ads, tracking, or subscription.")
                     Link(
                         "Support",

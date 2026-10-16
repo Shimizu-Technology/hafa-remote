@@ -8,6 +8,20 @@
 
 ## Samsung App Store 1.0 cycle
 
+### HR-052 — Make mixed-brand discovery and recovery actionable
+
+**Owner request:** October 16: investigate and improve Sony/Vizio household compatibility. The public Samsung release boundary remains unchanged until each model passes hardware acceptance.
+
+- [ ] Identify the active brand scope in setup, About and privacy-safe support reports.
+- [ ] Preserve per-brand advertisement, service-resolution and browser failures through scan completion without hiding healthy TVs.
+- [ ] Retry a transient Vizio resolution failure once with a fresh, cancellable producer; allow the bounded scan to cover both attempts.
+- [ ] Offer the reviewed legacy Vizio connection for a user-entered TV address without weakening identity or TLS checks.
+- [ ] Verify original diagnostic consent, canceled scans, late resolution callbacks, public filtering, and manual port/identity behavior with synthetic fixtures.
+- [ ] Prepare multibrand internal 1.0 (10), retaining public 1.0 (9), with matching app/control versions and strict audience preflight.
+- [ ] Exercise affected native setup/retry/manual/support journeys, pass both audience gates, and obtain current-head CodeRabbit/CI review.
+
+**Acceptance:** A missing TV has a truthful brand-specific next action, a healthy brand remains usable during another brand's failure, a fresh Vizio manual candidate can target either reviewed port, and public builds continue to contain Samsung networking only. This ticket does not certify physical Sony/Vizio control, widen public compatibility, change TV settings, or upload a build. Current household discovery observations and remaining hardware acceptance are recorded in `docs/HR-052-MULTIBRAND-DISCOVERY.md`.
+
 ### HR-049 — Separate Samsung public and three-brand internal builds
 
 **Intent:** The public version supports compatible Samsung Tizen TVs. Sony and Vizio continue in the internal TestFlight audience until their acceptance is complete.
