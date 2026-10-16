@@ -1018,7 +1018,7 @@ struct SavedTVTests {
             controlPort: 7345, expectedSavedDeviceID: "synthetic-eligible-tv")
         let moved = DiscoveredTV(
             brand: .vizio, reportedIdentifier: "synthetic-eligible-alias",
-            displayName: "Synthetic TV", modelName: nil,
+            displayName: "Synthetic TV", modelName: "Synthetic Vizio",
             address: try PrivateIPv4Address(documentationAddressForTesting: "203.0.113.51"),
             controlPort: 7345)
         var eligible = true
