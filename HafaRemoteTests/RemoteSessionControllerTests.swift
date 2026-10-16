@@ -1114,14 +1114,16 @@ struct RemoteSessionControllerTests {
         #expect(await clock.pendingSleeps.isEmpty)
     }
 
-    @Test("One transient health failure keeps the remote connected")
+    @Test("One transient health failure keeps the remote connected", .timeLimit(.minutes(1)))
     func transientHealthFailureKeepsSessionConnected() async throws {
         let tv = try testTV(
             address: "192.168.10.20",
             reportedDeviceID: "synthetic-tv-a",
             model: "TEST_MODEL_A"
         )
-        let clock = ManualRemoteSessionClock()
+        let (registeredSleeps, sleepRegistration) = AsyncStream<Duration>.makeStream()
+        defer { sleepRegistration.finish() }
+        let clock = ManualRemoteSessionClock(onSleepRegistered: { sleepRegistration.yield($0) })
         let driver = MockRemoteSessionDriver(
             outcomes: [.success(tv: tv, announcesPairing: false)],
             healthFailures: [.unavailable]
@@ -1138,13 +1140,15 @@ struct RemoteSessionControllerTests {
 
         await session.connect(to: tv.address.rawValue)
         await resume(clock: clock, duration: .seconds(5))
-        await waitUntil { await driver.healthCheckCallCount == 1 }
+        // The mock call begins before the controller handles its failure. Wait for
+        // the durable retry registration, rather than racing a short polling deadline.
+        let retry = await registeredSleeps.first { $0 == .seconds(1) }
+        #expect(retry == .seconds(1))
 
         #expect(await session.state == .connected(tv))
         #expect(await driver.healthCheckCallCount == 1)
         #expect(await driver.connectCallCount == 1)
         #expect(await driver.activeSessionDisconnectCallCount == 0)
-        await waitUntil { await clock.pendingSleeps.contains(.seconds(1)) }
         await session.disconnect()
     }
 
@@ -2942,9 +2946,14 @@ private actor ManualRemoteSessionClock: RemoteSessionClock {
 
     private var sleepers: [Sleeper] = []
     private let beforeCancellationCleanup: @Sendable () async -> Void
+    private let onSleepRegistered: @Sendable (Duration) -> Void
 
-    init(beforeCancellationCleanup: @escaping @Sendable () async -> Void = {}) {
+    init(
+        onSleepRegistered: @escaping @Sendable (Duration) -> Void = { _ in },
+        beforeCancellationCleanup: @escaping @Sendable () async -> Void = {}
+    ) {
         self.beforeCancellationCleanup = beforeCancellationCleanup
+        self.onSleepRegistered = onSleepRegistered
     }
 
     var pendingSleeps: [Duration] {
@@ -2964,6 +2973,7 @@ private actor ManualRemoteSessionClock: RemoteSessionClock {
                         Sleeper(
                             id: id, duration: duration, continuation: continuation,
                             cancellation: cancellation))
+                    onSleepRegistered(duration)
                 }
             }
         } onCancel: { [weak self] in

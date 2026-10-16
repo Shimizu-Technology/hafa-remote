@@ -385,7 +385,21 @@ final class HafaRemoteUITests: XCTestCase {
         let error = app.staticTexts["setupErrorMessage"]
         XCTAssertTrue(error.waitForExistence(timeout: 3))
         XCTAssertTrue(error.label.contains("Sony pairing code was not accepted"))
-        XCTAssertTrue(app.buttons["manualSetupButton"].exists)
+        let manual = app.buttons["manualSetupButton"]
+        for _ in 0..<6 where !manual.isHittable { panSetupGutter(in: app, upward: true) }
+        XCTAssertTrue(manual.isHittable)
+        manual.tap()
+        XCTAssertEqual(manual.value as? String, "Expanded")
+        let picker = app.buttons["manualTVBrandPicker"]
+        for _ in 0..<5 where !picker.isHittable { panSetupGutter(in: app, upward: true) }
+        XCTAssertTrue(picker.isHittable)
+        XCTAssertTrue(picker.isEnabled)
+        picker.tap()
+        app.buttons["Sony"].tap()
+        let address = app.textFields["tvIPAddressField"]
+        for _ in 0..<5 where !address.isHittable { panSetupGutter(in: app, upward: true) }
+        XCTAssertTrue(address.isHittable)
+        XCTAssertTrue(address.isEnabled)
         XCTAssertFalse(app.staticTexts["savedTVManagementRecoveryMessage"].exists)
         XCTAssertEqual(app.staticTexts["sonyAssociationExpectedIdentity"].label, "none")
         XCTAssertEqual(app.staticTexts["sonyAssociationConnectionAttempts"].label, "1")
