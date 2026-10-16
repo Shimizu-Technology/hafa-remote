@@ -47,7 +47,7 @@ done
 project="HafaRemote.xcodeproj"
 scheme="HafaRemote"
 configuration="Release"
-expected_build="10"
+expected_build="11"
 info_plist="HafaRemote/Resources/Info.plist"
 privacy_manifest="HafaRemote/Resources/PrivacyInfo.xcprivacy"
 entitlements="HafaRemote/Resources/HafaRemote.entitlements"

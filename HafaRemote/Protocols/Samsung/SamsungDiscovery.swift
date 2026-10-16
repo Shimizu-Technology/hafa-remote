@@ -169,7 +169,7 @@ final class TVDiscoveryStore {
         // A remembered endpoint is only a cache. Every recovery attempt needs a
         // new scan so a second DHCP move cannot reuse the previous result.
         start()
-        guard state == .searching else {
+        guard isSearching else {
             return televisions.first(where: { $0.id == stableDeviceKey })?.connectionTarget
         }
 

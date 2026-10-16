@@ -247,6 +247,55 @@ actor VizioPairingCoordinator: VizioPairingCoordinating {
     }
 }
 
+/// Finds a manually paired TV whose Bonjour alias was never saved. Only the saved
+/// certificate is trusted, and discovery probes never carry an authentication token.
+actor VizioSavedTVDiscoveryResolver {
+    private let credentialStore: any VizioPairingCredentialStoring
+    private let makeClient: VizioHTTPClientFactory
+
+    init(
+        credentialStore: any VizioPairingCredentialStoring = KeychainVizioPairingCredentialStore(),
+        makeClient: @escaping VizioHTTPClientFactory = { address, port, mode, token in
+            try VizioHTTPSClient(
+                address: address, port: port, trustMode: mode, authToken: token,
+                requestTimeout: 2, resourceTimeout: 2)
+        }
+    ) {
+        self.credentialStore = credentialStore
+        self.makeClient = makeClient
+    }
+
+    func resolve(candidates: [TVConnectionTarget], savedTarget: TVConnectionTarget) async
+        -> TVConnectionTarget?
+    {
+        guard !Task.isCancelled, savedTarget.brand == .vizio,
+            let expected = savedTarget.expectedSavedDeviceID,
+            let identity = try? VizioPairingIdentity(reportedDeviceID: expected),
+            let credential = try? await credentialStore.credential(for: identity)
+        else { return nil }
+        // Bound candidate count and elapsed work. The final in-flight request has
+        // its own two-second resource limit; cancellation closes every client.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        for candidate in candidates.filter({ $0.brand == .vizio }).prefix(8) {
+            guard !Task.isCancelled, ContinuousClock.now < deadline else { return nil }
+            guard let port = candidate.controlPort,
+                let client = try? makeClient(
+                    candidate.address, port,
+                    .reconnect(expectedFingerprint: credential.certificateSHA256), nil)
+            else { continue }
+            let info = try? await client.deviceInfo(authToken: nil)
+            await client.disconnect()
+            guard !Task.isCancelled else { return nil }
+            if info?.reportedDeviceID == expected {
+                // Normal reconnection still validates the saved certificate, token
+                // and serial before persisting the changed address or alias.
+                return candidate.expectingSavedIdentity(expected)
+            }
+        }
+        return nil
+    }
+}
+
 private actor VizioPairingAttemptCleanup {
     private var client: (any VizioHTTPClienting)?
     private var pairingClientID: String?

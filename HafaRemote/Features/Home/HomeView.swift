@@ -8,7 +8,7 @@ struct HomeView: View {
     @Query(sort: \SavedTV.lastUsedAt, order: .reverse) private var savedTVs: [SavedTV]
     @State private var session: RemoteSessionStore
     @State private var discovery: TVDiscoveryStore
-    @State private var networkMonitor = LocalNetworkMonitor()
+    @State private var networkMonitor: LocalNetworkMonitor
     @State private var isShowingSetup = false
     @State private var isShowingMyTVs = false
     @State private var isShowingSupport = false
@@ -25,7 +25,7 @@ struct HomeView: View {
     init(
         session: RemoteSessionStore = RemoteSessionStore(),
         discovery: TVDiscoveryStore = TVDiscoveryStore(),
-        networkMonitor: LocalNetworkMonitor = LocalNetworkMonitor(),
+        networkMonitor: LocalNetworkMonitor = .applicationMonitor(),
         wakeService: any SamsungTVWaking = SamsungWakeOnLANService(),
         savedTargetResolver: @escaping @MainActor (SavedTV) -> TVConnectionTarget? = { $0.connectionTarget }
     ) {
@@ -116,7 +116,8 @@ struct HomeView: View {
                 initialTarget:
                     presentedTV?.connectionTarget
                     ?? selectableSavedTVs.first?.connectionTarget,
-                discovery: discovery
+                discovery: discovery,
+                networkMonitor: networkMonitor
             )
         }
         .sheet(isPresented: $isShowingMyTVs) {
@@ -187,7 +188,7 @@ struct HomeView: View {
                 break
             }
         }
-        .onChange(of: networkMonitor.isReachable) { _, isReachable in
+        .onChange(of: networkMonitor.isReachable, initial: true) { _, isReachable in
             guard let isReachable else { return }
             Task {
                 await session.networkReachabilityChanged(isReachable: isReachable)
@@ -467,17 +468,26 @@ struct HomeView: View {
 
     /// Treats a remembered IP as a cache and silently follows the same TV after DHCP changes.
     private func recoverSelectedTVAddressIfNeeded() {
-        guard let savedTV = selectedSavedTV, let cachedTarget = savedTV.connectionTarget else {
+        guard scenePhase == .active, !isShowingSetup,
+            let savedTV = selectedSavedTV, let cachedTarget = savedTV.connectionTarget
+        else {
             return
         }
         let expectedDeviceKey = savedTV.stableDeviceKey
         addressRecovery.recover(
             stableDeviceKey: expectedDeviceKey,
-            cachedTarget: cachedTarget
-        ) { target in
-            guard selection.selectedDeviceKey == expectedDeviceKey else { return }
-            await session.connect(to: target)
-        }
+            cachedTarget: cachedTarget,
+            canRecover: {
+                scenePhase == .active && !isShowingSetup
+                    && selection.selectedDeviceKey == expectedDeviceKey
+            },
+            connect: { target in
+                guard scenePhase == .active, !isShowingSetup,
+                    selection.selectedDeviceKey == expectedDeviceKey
+                else { return }
+                await session.connect(to: target)
+            }
+        )
     }
 
     /// Removes a saved TV while disrupting the active session only when that TV owns it.
@@ -1436,28 +1446,58 @@ final class SavedTVAddressRecoveryCoordinator {
     private var operationID: UUID?
     private nonisolated let taskHolder = SavedTVSelectionTaskHolder()
 
-    init(discovery: TVDiscoveryStore = TVDiscoveryStore()) {
+    private let resolveUnaliasedTarget:
+        @MainActor @Sendable ([TVConnectionTarget], TVConnectionTarget) async -> TVConnectionTarget?
+
+    init(
+        discovery: TVDiscoveryStore = TVDiscoveryStore(),
+        resolveUnaliasedTarget:
+            @escaping @MainActor @Sendable (
+                [TVConnectionTarget], TVConnectionTarget
+            ) async -> TVConnectionTarget? = { candidates, saved in
+                #if HAFA_PUBLIC_BUILD
+                    return nil
+                #else
+                    return await VizioSavedTVDiscoveryResolver().resolve(
+                        candidates: candidates, savedTarget: saved)
+                #endif
+            }
+    ) {
         self.discovery = discovery
+        self.resolveUnaliasedTarget = resolveUnaliasedTarget
     }
 
     func recover(
         stableDeviceKey: String,
         cachedTarget: TVConnectionTarget,
+        canRecover: @escaping @MainActor @Sendable () -> Bool = { true },
         connect: @escaping @MainActor (TVConnectionTarget) async -> Void
     ) {
-        guard operationID == nil else { return }
+        guard operationID == nil, canRecover() else { return }
         let operationID = UUID()
         self.operationID = operationID
         isRecovering = true
         taskHolder.install(
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                let candidate = await discovery.findDevice(
+                defer {
+                    if self.operationID == operationID {
+                        self.operationID = nil
+                        self.isRecovering = false
+                    }
+                }
+                guard !Task.isCancelled, canRecover() else { return }
+                var candidate = await discovery.findDevice(
                     stableDeviceKey: cachedTarget.discoveryIdentifier == nil
                         ? stableDeviceKey : cachedTarget.discoveryDeviceKey
                 )
+                guard !Task.isCancelled, self.operationID == operationID, canRecover() else { return }
+                if candidate == nil, cachedTarget.brand == .vizio, cachedTarget.discoveryIdentifier == nil {
+                    candidate = await resolveUnaliasedTarget(
+                        discovery.televisions.map(\.connectionTarget), cachedTarget)
+                }
                 let target = candidate?.expectingSavedIdentity(cachedTarget.expectedSavedDeviceID)
-                guard !Task.isCancelled, self.operationID == operationID else { return }
+                guard !Task.isCancelled, self.operationID == operationID, canRecover() else { return }
                 self.operationID = nil
                 self.isRecovering = false
                 guard let target,

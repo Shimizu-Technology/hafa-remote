@@ -14,7 +14,13 @@ final class LocalNetworkMonitor {
     init(monitor: NWPathMonitor = NWPathMonitor(requiredInterfaceType: .wifi)) {
         self.monitor = monitor
         monitor.pathUpdateHandler = { [weak self] path in
-            let isReachable = path.status == .satisfied
+            let isReachable: Bool? =
+                switch path.status {
+                case .satisfied: true
+                case .unsatisfied: false
+                case .requiresConnection: nil
+                @unknown default: nil
+                }
             Task { @MainActor in
                 self?.isReachable = isReachable
             }
@@ -24,11 +30,25 @@ final class LocalNetworkMonitor {
 
     #if DEBUG
         /// Provides a stable path hint for deterministic lifecycle UI tests.
-        init(fixedReachability: Bool) {
+        init(fixedReachability: Bool?) {
             monitor = nil
             isReachable = fixedReachability
         }
+
+        func setReachabilityForTesting(_ value: Bool?) {
+            precondition(monitor == nil)
+            isReachable = value
+        }
     #endif
+
+    static func applicationMonitor() -> LocalNetworkMonitor {
+        #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-ui-testing-in-memory-store") {
+                return LocalNetworkMonitor(fixedReachability: true)
+            }
+        #endif
+        return LocalNetworkMonitor()
+    }
 
     isolated deinit {
         monitor?.cancel()

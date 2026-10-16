@@ -315,6 +315,27 @@ struct SamsungDiscoveryTests {
     }
 
     @MainActor
+    @Test("An early synchronous result does not end a different saved TV's lookup")
+    func partialResultsStillWaitForSavedIdentity() async throws {
+        let address = try PrivateIPv4Address(documentationAddressForTesting: "203.0.113.30")
+        let early = DiscoveredTV(
+            brand: .sony, reportedIdentifier: "synthetic-early-sony", displayName: "Synthetic Sony",
+            modelName: "Synthetic TV", address: address, controlPort: 6466)
+        let later = DiscoveredTV(
+            brand: .vizio, reportedIdentifier: "synthetic-late-vizio", displayName: "Synthetic Vizio",
+            modelName: "Synthetic TV", address: address, controlPort: 7345)
+        let backend = ControllableDiscoveryBackend(initialEvents: [.found(early)])
+        let store = TVDiscoveryStore(backend: backend)
+        let lookup = Task { await store.findDevice(stableDeviceKey: later.id) }
+        await backend.waitUntilStarted()
+        #expect(store.state == .results)
+        #expect(store.isSearching)
+        backend.emit(.found(later))
+        #expect(await lookup.value == later.connectionTarget)
+        store.stop()
+    }
+
+    @MainActor
     @Test("Each saved-TV lookup refreshes a previously discovered endpoint")
     func refreshesSavedIdentityLookup() async throws {
         let secondAddress = try PrivateIPv4Address("192.168.10.92")
@@ -542,6 +563,8 @@ private final class SequencedDiscoveryBackend: TVDiscoveryBackend {
 
 @MainActor
 private final class ControllableDiscoveryBackend: TVDiscoveryBackend {
+    private let initialEvents: [TVDiscoveryBackendEvent]
+    init(initialEvents: [TVDiscoveryBackendEvent] = []) { self.initialEvents = initialEvents }
     private var eventHandler: (@MainActor @Sendable (TVDiscoveryBackendEvent) -> Void)?
     private(set) var startCount = 0
     private(set) var stopCount = 0
@@ -551,6 +574,7 @@ private final class ControllableDiscoveryBackend: TVDiscoveryBackend {
     ) {
         startCount += 1
         self.eventHandler = eventHandler
+        initialEvents.forEach(eventHandler)
     }
 
     func stop() {

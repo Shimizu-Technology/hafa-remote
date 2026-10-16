@@ -837,6 +837,9 @@ actor RemoteSessionController {
         let previous = lastNetworkReachability
         lastNetworkReachability = isReachable
         guard previous != isReachable else { return }
+        // A path hint must not replace an in-flight handshake or entered PIN.
+        // Its bounded transport operation will report actual connection failure.
+        guard connectionTask == nil else { return }
 
         if !isReachable {
             guard targetAddressText != nil else { return }

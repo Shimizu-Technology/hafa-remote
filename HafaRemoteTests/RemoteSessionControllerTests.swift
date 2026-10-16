@@ -1660,6 +1660,55 @@ struct RemoteSessionControllerTests {
         await waitUntil { await clock.pendingSleeps.isEmpty }
     }
 
+    @Test("Wi-Fi path hints do not restart an active handshake or pairing", arguments: [false, true])
+    func pathHintsPreserveConnectionAttempt(_ pairing: Bool) async throws {
+        let driver = SuspendedRemoteSessionDriver(announcesPairing: pairing)
+        let controller = RemoteSessionController(driver: driver)
+        var starts = driver.connectionStarts.makeAsyncIterator()
+        let target = TVConnectionTarget(
+            brand: .samsung, reportedDeviceID: "synthetic-path-hint-tv",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.40"),
+            controlPort: 8002)
+        let attempt = Task { await controller.connect(to: target) }
+        _ = await starts.next()
+        await controller.networkReachabilityChanged(isReachable: false)
+        await controller.networkReachabilityChanged(isReachable: true)
+        #expect(await driver.connectionStartCount == 1)
+        #expect(await driver.cancelledConnectionCount == 0)
+        #expect(await controller.state == (pairing ? .pairing : .connecting))
+        await controller.disconnect()
+        await attempt.value
+        #expect(await driver.cancelledConnectionCount == 1)
+    }
+
+    @Test("A held handshake failure uses the latest Wi-Fi hint for retry", arguments: [false, true])
+    func handshakeFailureRespectsLatestPath(_ restored: Bool) async throws {
+        let driver = SuspendedRemoteSessionDriver()
+        let clock = ManualRemoteSessionClock()
+        let controller = RemoteSessionController(
+            driver: driver, clock: clock,
+            configuration: testConfiguration(reconnectDelays: [.seconds(30)]))
+        let target = TVConnectionTarget(
+            brand: .samsung, reportedDeviceID: "synthetic-latest-path-tv",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.40"),
+            controlPort: 8002)
+        var starts = driver.connectionStarts.makeAsyncIterator()
+        let attempt = Task { await controller.connect(to: target) }
+        _ = await starts.next()
+        await controller.networkReachabilityChanged(isReachable: false)
+        if restored { await controller.networkReachabilityChanged(isReachable: true) }
+        await driver.failPendingConnection()
+        await attempt.value
+        #expect(await controller.state == (restored ? .reconnecting(attempt: 1) : .offline))
+        if restored {
+            await resume(clock: clock, duration: .seconds(30))
+            await waitUntil { await driver.connectionStartCount == 2 }
+        } else {
+            #expect(await driver.connectionStartCount == 1)
+        }
+        await controller.disconnect()
+    }
+
     @Test("A brief Wi-Fi path flap does not tear down a connected TV")
     func briefNetworkLossKeepsSessionConnected() async throws {
         let tv = try testTV(
@@ -2475,6 +2524,12 @@ private actor SuspendedRemoteSessionDriver: RemoteSessionDriving {
     func forget(addressText: String) async throws {}
 
     func disconnect() {}
+
+    func failPendingConnection() {
+        let pending = Array(continuations.values)
+        continuations.removeAll()
+        for continuation in pending { continuation.resume(throwing: SamsungConnectionError.unavailable) }
+    }
 
     private func cancel(_ id: UUID) {
         guard let continuation = continuations.removeValue(forKey: id) else { return }

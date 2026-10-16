@@ -201,7 +201,7 @@ final class DiagnosticRecorder {
         events.append(DiagnosticEvent(kind: .discoveryProgress, duration: .unknown, discovery: progress))
     }
 
-    /// The first result or terminal state completes the scan using its original consent lease.
+    /// The discovery owner completes a scan using its original consent lease.
     /// Later result updates cannot duplicate completion or acquire consent after Clear.
     func finishDiscovery(collection: inout DiagnosticCollectionToken?) {
         let startedCollection = collection

@@ -38,6 +38,116 @@ struct VizioPairingCoordinatorTests {
         #expect(await store.credential(for: otherIdentity) == credential)
     }
 
+    @Test("A manually paired Vizio with a different Bonjour ID is resolved with its saved pin and no token")
+    func manualRecordRecoversChangedAddressWithoutAnotherPIN() async throws {
+        let serial = "synthetic-manual-vizio-serial"
+        let fingerprint = Data(repeating: 17, count: 32)
+        let credential = try VizioPairingCredential(
+            authToken: "synthetic-recovery-token", certificateSHA256: fingerprint,
+            clientID: "00000000-0000-4000-8000-000000000017")
+        let identity = try VizioPairingIdentity(reportedDeviceID: serial)
+        let store = InMemoryVizioCredentialStore()
+        await store.save(credential, for: identity)
+        let saved = TVConnectionTarget(
+            brand: .vizio, reportedDeviceID: serial,
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.40"),
+            controlPort: 7345, expectedSavedDeviceID: serial)
+        let moved = TVConnectionTarget(
+            brand: .vizio, reportedDeviceID: "synthetic-different-bonjour-alias",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.41"),
+            controlPort: 7345, discoveryIdentifier: "synthetic-different-bonjour-alias")
+        let wrong = TVConnectionTarget(
+            brand: .vizio, reportedDeviceID: "synthetic-other-bonjour-alias",
+            address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.42"),
+            controlPort: 7345)
+        let other = StubVizioHTTPClient(info: info)
+        let matchedInfo = VizioDeviceInfo(
+            reportedDeviceID: serial, displayName: "Synthetic TV", modelName: "Synthetic Vizio",
+            firmwareVersion: nil)
+        let matched = StubVizioHTTPClient(info: matchedInfo)
+        let factory = VizioClientFactoryRecorder(clients: [other, matched])
+        let resolver = VizioSavedTVDiscoveryResolver(credentialStore: store, makeClient: factory.makeClient)
+        let resolved = try #require(await resolver.resolve(candidates: [wrong, moved], savedTarget: saved))
+        #expect(resolved == moved.expectingSavedIdentity(serial))
+        #expect(
+            factory.requests.allSatisfy {
+                $0.authToken == nil && $0.trustMode == .reconnect(expectedFingerprint: fingerprint)
+            })
+        #expect(await other.deviceInfoTokens == [nil])
+        #expect(await matched.deviceInfoTokens == [nil])
+        #expect(await other.isDisconnected)
+        #expect(await matched.isDisconnected)
+        let reconnectFactory = VizioClientFactoryRecorder(clients: [
+            StubVizioHTTPClient(info: matchedInfo), StubVizioHTTPClient(info: matchedInfo),
+        ])
+        let coordinator = VizioPairingCoordinator(
+            credentialStore: store, makeClient: reconnectFactory.makeClient)
+        _ = try await coordinator.pair(target: resolved) { _ in
+            Issue.record("A saved credential must avoid another PIN prompt")
+            return "1234"
+        }
+        #expect(await store.credential(for: identity) == credential)
+        await coordinator.disconnect()
+    }
+
+    @Test("Cancelling a suspended identity read disconnects it without releasing credentials")
+    func cancelledRecoveryDisconnectsPendingRead() async throws {
+        let serial = "synthetic-cancelled-recovery"
+        let identity = try VizioPairingIdentity(reportedDeviceID: serial)
+        let credential = try VizioPairingCredential(
+            authToken: "synthetic-retained-token", certificateSHA256: Data(repeating: 23, count: 32),
+            clientID: "00000000-0000-4000-8000-000000000023")
+        let store = InMemoryVizioCredentialStore()
+        await store.save(credential, for: identity)
+        let address = try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.23")
+        let saved = TVConnectionTarget(
+            brand: .vizio, reportedDeviceID: serial, address: address, controlPort: 7345,
+            expectedSavedDeviceID: serial)
+        let candidate = TVConnectionTarget(
+            brand: .vizio, reportedDeviceID: "synthetic-cancelled-alias", address: address, controlPort: 7345)
+        let gate = SuspendedDeviceInfoRead()
+        let client = StubVizioHTTPClient(info: info, readGate: gate)
+        let factory = VizioClientFactoryRecorder(clients: [client])
+        let resolver = VizioSavedTVDiscoveryResolver(credentialStore: store, makeClient: factory.makeClient)
+        let task = Task { await resolver.resolve(candidates: [candidate], savedTarget: saved) }
+        await gate.waitUntilStarted()
+        task.cancel()
+        #expect(await task.value == nil)
+        #expect(await client.isDisconnected)
+        #expect(await client.deviceInfoTokens == [nil])
+        #expect(await store.credential(for: identity) == credential)
+    }
+
+    @Test("Alias-free recovery rejects certificate failures, wrong serials and other brands")
+    func manualRecoveryCannotAuthorizeAnotherTV() async throws {
+        let identity = try VizioPairingIdentity(reportedDeviceID: "synthetic-expected-serial")
+        let credential = try VizioPairingCredential(
+            authToken: "synthetic-unused-token", certificateSHA256: Data(repeating: 21, count: 32),
+            clientID: "00000000-0000-4000-8000-000000000021")
+        let store = InMemoryVizioCredentialStore()
+        await store.save(credential, for: identity)
+        let address = try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.21")
+        let saved = TVConnectionTarget(
+            brand: .vizio, reportedDeviceID: identity.reportedDeviceID, address: address, controlPort: 7345,
+            expectedSavedDeviceID: identity.reportedDeviceID)
+        let candidate = TVConnectionTarget(
+            brand: .vizio, reportedDeviceID: "synthetic-alias", address: address, controlPort: 7345)
+        let certificateChanged = StubVizioHTTPClient(info: info, deviceInfoError: .certificateChanged)
+        let wrongSerial = StubVizioHTTPClient(info: info)
+        let factory = VizioClientFactoryRecorder(clients: [certificateChanged, wrongSerial])
+        let resolver = VizioSavedTVDiscoveryResolver(credentialStore: store, makeClient: factory.makeClient)
+        #expect(await resolver.resolve(candidates: [candidate, candidate], savedTarget: saved) == nil)
+        #expect(factory.requests.count == 2)
+        #expect(factory.requests.allSatisfy { $0.authToken == nil })
+        #expect(await certificateChanged.isDisconnected)
+        #expect(await wrongSerial.isDisconnected)
+        #expect(await store.credential(for: identity) == credential)
+        let sony = TVConnectionTarget(
+            brand: .sony, reportedDeviceID: "synthetic-sony", address: address, controlPort: 6466)
+        #expect(await resolver.resolve(candidates: [sony], savedTarget: saved) == nil)
+        #expect(factory.requests.count == 2)
+    }
+
     private let target: TVConnectionTarget
     private let info = VizioDeviceInfo(
         reportedDeviceID: "synthetic-vizio-serial",
@@ -463,6 +573,7 @@ private actor StubVizioHTTPClient: VizioHTTPClienting {
     private let fingerprint: Data
     private let deviceInfoError: VizioHTTPSClientError?
     private let returnsInvalidDeviceInfo: Bool
+    private let readGate: SuspendedDeviceInfoRead?
     private(set) var deviceInfoTokens: [String?] = []
     private(set) var finishedPIN: String?
     private(set) var confirmationCount = 0
@@ -474,16 +585,19 @@ private actor StubVizioHTTPClient: VizioHTTPClienting {
         info: VizioDeviceInfo,
         fingerprint: Data = Data(repeating: 1, count: 32),
         deviceInfoError: VizioHTTPSClientError? = nil,
-        returnsInvalidDeviceInfo: Bool = false
+        returnsInvalidDeviceInfo: Bool = false,
+        readGate: SuspendedDeviceInfoRead? = nil
     ) {
         self.info = info
         self.fingerprint = fingerprint
         self.deviceInfoError = deviceInfoError
         self.returnsInvalidDeviceInfo = returnsInvalidDeviceInfo
+        self.readGate = readGate
     }
 
-    func deviceInfo(authToken: String?) throws -> VizioDeviceInfo {
+    func deviceInfo(authToken: String?) async throws -> VizioDeviceInfo {
         deviceInfoTokens.append(authToken)
+        try await readGate?.wait()
         if let deviceInfoError { throw deviceInfoError }
         if returnsInvalidDeviceInfo { throw VizioProtocolError.invalidResponse }
         return info
@@ -699,5 +813,22 @@ private actor SuspendedPINPrompt {
         await withCheckedContinuation { continuation in
             self.continuation = continuation
         }
+    }
+}
+
+private actor SuspendedDeviceInfoRead {
+    private var started = false
+    private var waiter: CheckedContinuation<Void, Never>?
+
+    func wait() async throws {
+        started = true
+        waiter?.resume()
+        waiter = nil
+        try await Task.sleep(for: .seconds(60))
+    }
+
+    func waitUntilStarted() async {
+        guard !started else { return }
+        await withCheckedContinuation { waiter = $0 }
     }
 }
