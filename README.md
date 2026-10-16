@@ -1,10 +1,10 @@
 # Hafa Remote
 
-Hafa Remote is a native iPhone remote for compatible Samsung, Sony, and Vizio smart TVs on the same local network. The product is intentionally local-first: no account, backend, advertising, tracking, or subscription.
+Hafa Remote is a native iPhone remote for compatible Samsung TVs on the same local network. A separate internal build also tests Sony BRAVIA/Google TV and Vizio SmartCast. Sony and Vizio remain experimental until the exact household models pass hardware acceptance. The product is intentionally local-first: no account, backend, advertising, tracking, or subscription.
 
 ## Status
 
-The native SwiftUI personal alpha includes automatic nearby-TV search, brand-specific secure pairing, saved-TV switching, connection recovery, capability-driven controls, and a Control Center/Lock Screen/Action Button launcher for the remembered remote. Samsung wake uses a verified Wake-on-LAN target; Sony and Vizio use their local standby controls. Manual IP entry remains available only as a troubleshooting fallback.
+The native SwiftUI internal alpha includes automatic nearby-TV search, brand-specific secure pairing, saved-TV switching, connection recovery, capability-driven controls, and a Control Center/Lock Screen/Action Button launcher for the remembered remote. Samsung wake uses a conditional Wake-on-LAN path; Sony and Vizio use their local standby controls. Actual wake behavior requires model-specific hardware testing. Manual IP entry remains available only as a troubleshooting fallback.
 
 ## Documents
 

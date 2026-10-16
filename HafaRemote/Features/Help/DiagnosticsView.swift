@@ -37,7 +37,7 @@ struct DiagnosticsView: View {
                 .disabled(recorder.events.isEmpty)
             } footer: {
                 Text(
-                    "Reports include app and iOS versions, optional TV model and firmware, and coarse operation timing. Addresses, pairing credentials, device identities, TV names, Wi-Fi names, and entered text are excluded."
+                    "Reports include build support, app and iOS versions, optional TV model and firmware, brand search stages, and coarse operation timing. Addresses, pairing credentials, device identities, TV names, Wi-Fi names, and entered text are excluded."
                 )
                 .foregroundStyle(HafaTheme.secondaryText)
             }
@@ -75,15 +75,19 @@ private struct DiagnosticReportPreview: View {
                         .font(.body.monospaced())
                         .textSelection(.enabled)
                         .accessibilityIdentifier("diagnosticsReportPreview")
-                    ShareLink(item: report.text) {
-                        Label("Share This Report", systemImage: "square.and.arrow.up")
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                            .foregroundStyle(HafaTheme.onAccent)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("shareDiagnosticsButton")
                 }
                 .padding(20)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                ShareLink(item: report.text) {
+                    Label("Share This Report", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .foregroundStyle(HafaTheme.onAccent)
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("shareDiagnosticsButton")
+                .padding(20)
+                .background(HafaTheme.canvas)
             }
             .background(HafaTheme.canvas)
             .navigationTitle("Support Report")

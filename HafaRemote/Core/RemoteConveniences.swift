@@ -244,7 +244,10 @@ enum RemoteSwipeMapping {
 
 /// Manual endpoints locate a pairing candidate; only authenticated protocol data is identity.
 enum ManualTVTargetFactory {
-    static func target(address: PrivateIPv4Address, brand: TVBrand, savedTarget: TVConnectionTarget? = nil)
+    static func target(
+        address: PrivateIPv4Address, brand: TVBrand, savedTarget: TVConnectionTarget? = nil,
+        vizioPort: UInt16? = nil
+    )
         -> TVConnectionTarget
     {
         let port: UInt16
@@ -266,7 +269,8 @@ enum ManualTVTargetFactory {
             brand: brand,
             reportedDeviceID: remembered?.reportedDeviceID ?? "manual-pairing-candidate",
             address: address,
-            controlPort: usesKnownLegacyPort ? 9000 : port,
+            controlPort: brand == .vizio && (vizioPort == 7345 || vizioPort == 9000)
+                ? vizioPort : usesKnownLegacyPort ? 9000 : port,
             expectedSavedDeviceID: remembered?.expectedSavedDeviceID,
             discoveryIdentifier: remembered?.discoveryIdentifier
         )

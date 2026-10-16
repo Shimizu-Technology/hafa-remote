@@ -11,6 +11,7 @@ struct TVSetupView: View {
     @State private var discoveryCollection: DiagnosticCollectionToken?
     @State private var address = ""
     @State private var manualBrand: TVBrand = .samsung
+    @State private var usesLegacyVizioConnection = false
     @State private var manualFailure: String?
     @State private var selectedTV: DiscoveredTV?
     @State private var ambiguousCandidate: DiscoveredTV?
@@ -59,6 +60,7 @@ struct TVSetupView: View {
         _address = State(initialValue: self.initialAddress)
         _selectedBrand = State(initialValue: permittedInitialTarget?.brand)
         _manualBrand = State(initialValue: permittedInitialTarget?.brand ?? .samsung)
+        _usesLegacyVizioConnection = State(initialValue: permittedInitialTarget?.controlPort == 9000)
         _selectedTarget = State(initialValue: permittedInitialTarget)
         _discovery = State(initialValue: discovery)
     }
@@ -66,7 +68,16 @@ struct TVSetupView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Text(TVBuildFlavor.compiled.supportDescription)
+                        .font(.footnote)
+                        .foregroundStyle(HafaTheme.secondaryText)
+                        .accessibilityIdentifier("tvBuildSupportDescription")
+                }
                 discoverySection
+                if showsSearchDetails {
+                    searchDetailsSection
+                }
                 connectionStatusSection
                 if !requiresSavedTVManagement { manualSetupSection }
             }
@@ -174,6 +185,28 @@ struct TVSetupView: View {
     }
 
     @ViewBuilder
+    private var searchDetailsSection: some View {
+        Section("Search details") {
+            ForEach(TVDistributionPolicy.current.permittedBrands, id: \.self) { brand in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(brand.displayName).font(.subheadline.weight(.semibold))
+                    Text(discovery.searchDetail(for: brand))
+                        .font(.subheadline)
+                        .foregroundStyle(HafaTheme.secondaryText)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("discoveryDetail-\(brand.rawValue)")
+            }
+        }
+    }
+
+    private var showsSearchDetails: Bool {
+        discovery.hasSearchIssues
+            || (discovery.state == .noResults
+                && discovery.progress.contains { $0.stage == .advertised })
+    }
+
+    @ViewBuilder
     private var discoverySection: some View {
         switch discovery.state {
         case .idle, .searching:
@@ -257,11 +290,13 @@ struct TVSetupView: View {
         case .noResults:
             Section {
                 VStack(alignment: .leading, spacing: 14) {
-                    Label("No supported TVs found", systemImage: "tv.slash")
+                    Label("No TVs ready to pair", systemImage: "tv.slash")
                         .font(.headline)
 
                     Text(
-                        "No compatible TV responded. Check that the TV is on, on the same home network, and not isolated by guest Wi-Fi."
+                        showsSearchDetails
+                            ? "Check the search details below. Keep the TV on and on the same home network, without guest Wi-Fi isolation."
+                            : "No TVs were found in this search. Keep the TV on and on the same home network, without guest Wi-Fi isolation."
                     )
                     .font(.subheadline)
                     .foregroundStyle(HafaTheme.secondaryText)
@@ -409,6 +444,19 @@ struct TVSetupView: View {
                     .disabled(isBusy)
                     .frame(minHeight: 44)
                     .accessibilityIdentifier("manualTVBrandPicker")
+                    #if !HAFA_PUBLIC_BUILD
+                        if manualBrand == .vizio {
+                            Toggle("Try older Vizio connection", isOn: $usesLegacyVizioConnection)
+                                .disabled(isBusy)
+                                .frame(minHeight: 44)
+                                .accessibilityIdentifier("manualVizioLegacyConnection")
+                            Text(
+                                "Try this if the normal Vizio connection fails. It only changes how this TV address is contacted."
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(HafaTheme.secondaryText)
+                        }
+                    #endif
                     if let manualFailure { Text(manualFailure).foregroundStyle(.secondary) }
                     TextField("192.168.1.25", text: $address)
                         .keyboardType(.numbersAndPunctuation)
@@ -517,7 +565,10 @@ struct TVSetupView: View {
     private func startDiscovery() {
         discoveryCollection = session.diagnostics.captureCollection()
         session.diagnostics.record(.discoveryStarted, collection: discoveryCollection)
-        discovery.start()
+        let collection = discoveryCollection
+        discovery.start { [session] progress in
+            session.diagnostics.recordDiscovery(progress, collection: collection)
+        }
     }
 
     private func connect(to television: DiscoveredTV) {
@@ -540,6 +591,7 @@ struct TVSetupView: View {
         selectedTV = television
         selectedBrand = television.brand
         manualBrand = television.brand
+        usesLegacyVizioConnection = television.controlPort == 9000
         selectedTarget = target
         pairingCode = ""
         hasSubmittedPairingCode = false
@@ -575,7 +627,8 @@ struct TVSetupView: View {
         do {
             let validated = try PrivateIPv4Address(address.trimmingCharacters(in: .whitespacesAndNewlines))
             let target = ManualTVTargetFactory.target(
-                address: validated, brand: manualBrand, savedTarget: selectedTarget ?? initialTarget)
+                address: validated, brand: manualBrand, savedTarget: selectedTarget ?? initialTarget,
+                vizioPort: manualBrand == .vizio ? (usesLegacyVizioConnection ? 9000 : 7345) : nil)
             selectedBrand = manualBrand
             selectedTarget = target
             manualFailure = nil

@@ -45,19 +45,23 @@ final class SonyBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
         let browser = NetServiceBrowser()
         browser.delegate = self
         self.browser = browser
+        eventHandler(.progress(TVDiscoveryProgress(brand: .sony, stage: .browsing)))
+        guard self.browser === browser else { return }
         browser.searchForServices(ofType: Self.serviceType, inDomain: "local.")
     }
 
     func stop() {
-        browser?.stop()
-        browser?.delegate = nil
+        let oldBrowser = browser
+        let oldServices = Array(services.values)
         browser = nil
-        for service in services.values {
-            service.stop()
-            service.delegate = nil
-        }
         services.removeAll()
         eventHandler = nil
+        oldBrowser?.delegate = nil
+        oldBrowser?.stop()
+        for service in oldServices {
+            service.delegate = nil
+            service.stop()
+        }
     }
 
     private func publish(_ service: NetService) {
@@ -66,8 +70,11 @@ final class SonyBonjourDiscoveryBackend: NSObject, TVDiscoveryBackend {
         guard service.port == Self.controlPort,
             let address = SamsungBonjourDiscoveryBackend.privateIPv4Address(from: service)
         else {
+            eventHandler?(.progress(TVDiscoveryProgress(brand: .sony, stage: .endpointRejected)))
             return
         }
+        eventHandler?(.progress(TVDiscoveryProgress(brand: .sony, stage: .resolved)))
+        guard services[ObjectIdentifier(service)] === service else { return }
         let metadata = SonyBonjourCandidateMetadata(serviceName: service.name)
         eventHandler?(
             .found(
@@ -92,6 +99,8 @@ extension SonyBonjourDiscoveryBackend: NetServiceBrowserDelegate {
     ) {
         guard self.browser === browser else { return }
         services[ObjectIdentifier(service)] = service
+        eventHandler?(.progress(TVDiscoveryProgress(brand: .sony, stage: .advertised)))
+        guard self.browser === browser, services[ObjectIdentifier(service)] === service else { return }
         service.delegate = self
         service.resolve(withTimeout: 5)
     }
@@ -101,6 +110,11 @@ extension SonyBonjourDiscoveryBackend: NetServiceBrowserDelegate {
         let handler = eventHandler
         let code = errorDict[NetService.errorCode]?.intValue
         stop()
+        handler?(
+            .progress(
+                TVDiscoveryProgress(
+                    brand: .sony,
+                    stage: code == Self.policyDeniedErrorCode ? .permissionDenied : .browserFailed)))
         handler?(code == Self.policyDeniedErrorCode ? .permissionDenied : .failed)
     }
 }
@@ -113,5 +127,6 @@ extension SonyBonjourDiscoveryBackend: NetServiceDelegate {
     func netService(_ sender: NetService, didNotResolve errorDict: [String: NSNumber]) {
         guard services[ObjectIdentifier(sender)] === sender else { return }
         services[ObjectIdentifier(sender)] = nil
+        eventHandler?(.progress(TVDiscoveryProgress(brand: .sony, stage: .resolutionFailed)))
     }
 }

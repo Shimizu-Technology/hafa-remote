@@ -112,7 +112,7 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(addButton.waitForExistence(timeout: 5))
         addButton.tap()
 
-        XCTAssertTrue(app.staticTexts["No supported TVs found"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["No TVs ready to pair"].waitForExistence(timeout: 2))
         let scanAgain = app.buttons["scanAgainButton"]
         XCTAssertTrue(scanAgain.waitForExistence(timeout: 2))
         XCTAssertTrue(scanAgain.isHittable)
@@ -130,6 +130,69 @@ final class HafaRemoteUITests: XCTestCase {
             app.swipeUp()
         }
         XCTAssertTrue(addressField.waitForExistence(timeout: 2))
+    }
+
+    /// Failed resolution remains visible until a fresh scan recovers the candidate.
+    @MainActor
+    func testUnresolvedVizioExplainsFailureAndFreshScanRecovers() throws {
+        assertVizioDiscoveryRecovery(
+            launchArgument: "-ui-testing-discovery-issues",
+            detailText: "connection details could not be read")
+    }
+
+    /// An advertisement without a completed resolution must not be described as no TV found.
+    @MainActor
+    func testAdvertisedVizioWithoutResolutionShowsRecoveryDetails() throws {
+        assertVizioDiscoveryRecovery(
+            launchArgument: "-ui-testing-discovery-advertised",
+            detailText: "A TV announced itself, but setup did not finish")
+    }
+
+    @MainActor
+    private func assertVizioDiscoveryRecovery(launchArgument: String, detailText: String) {
+        let app = makeApplication()
+        app.launchArguments.append(launchArgument)
+        app.launch()
+        app.buttons["addTVButton"].tap()
+        XCTAssertTrue(app.staticTexts["tvBuildSupportDescription"].waitForExistence(timeout: 5))
+        let detail = app.descendants(matching: .any)["discoveryDetail-vizio"].firstMatch
+        for _ in 0..<5 where !detail.isHittable { panSetupGutter(in: app, upward: true) }
+        XCTAssertTrue(detail.exists)
+        XCTAssertTrue(detail.label.contains(detailText))
+        XCTAssertFalse(app.staticTexts["No TVs were found in this search."].exists)
+        let scan = app.buttons["scanAgainButton"]
+        for _ in 0..<5 where !scan.isHittable { panSetupGutter(in: app, upward: false) }
+        XCTAssertTrue(scan.isHittable)
+        scan.tap()
+        XCTAssertTrue(app.buttons["discoveredTVButton"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["discoveredTVButton"].label.contains("Vizio"))
+        XCTAssertFalse(detail.exists)
+    }
+
+    @MainActor
+    func testInternalManualSetupOffersOlderVizioConnection() throws {
+        let app = makeApplication()
+        app.launchArguments.append("-ui-testing-discovery-empty")
+        app.launch()
+        app.buttons["addTVButton"].tap()
+        let manual = app.buttons["manualSetupButton"]
+        for _ in 0..<6 where !manual.isHittable { panSetupGutter(in: app, upward: true) }
+        XCTAssertTrue(manual.isHittable)
+        manual.tap()
+        let picker = app.buttons["manualTVBrandPicker"]
+        for _ in 0..<5 where !picker.isHittable { panSetupGutter(in: app, upward: true) }
+        picker.tap()
+        app.buttons["Vizio"].tap()
+        let legacy = app.switches["manualVizioLegacyConnection"]
+        for _ in 0..<5 where !legacy.isHittable { panSetupGutter(in: app, upward: true) }
+        XCTAssertTrue(legacy.isHittable)
+        XCTAssertEqual(legacy.value as? String, "0")
+        // Native Form toggles expose a full-row AX element; tap the switch thumb.
+        legacy.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
+        expectation(for: NSPredicate(format: "value == %@", "1"), evaluatedWith: legacy)
+        waitForExpectations(timeout: 2)
+        XCTAssertEqual(legacy.value as? String, "1")
+        XCTAssertTrue(app.textFields["tvIPAddressField"].exists)
     }
 
     /// Persisted discovery aliases must carry authenticated identity into deliberate saved-TV repair.

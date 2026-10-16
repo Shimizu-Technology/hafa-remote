@@ -13,6 +13,21 @@ enum TVBuildFlavor: String, Sendable {
         #endif
     }
 
+    var supportTitle: String {
+        switch self {
+        case .samsungPublic: "Samsung public"
+        case .internalTesting: "Internal testing"
+        }
+    }
+
+    var supportDescription: String {
+        #if HAFA_PUBLIC_BUILD
+            "This build searches for compatible Samsung TVs. Other TV brands are not enabled."
+        #else
+            "This build searches for Samsung, Sony and Vizio TVs. Sony and Vizio are experimental; compatibility depends on the model."
+        #endif
+    }
+
     func validatesAudience(_ value: Any?) -> Bool {
         guard let value = value as? String else { return false }
         return value == rawValue

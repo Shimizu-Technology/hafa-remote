@@ -3,6 +3,7 @@ import Observation
 
 /// Only reviewed semantic events can enter the diagnostic buffer. No payload is accepted.
 enum DiagnosticEventKind: String, CaseIterable, Sendable {
+    case discoveryProgress = "TV search detail"
     case discoveryStarted = "Discovery started"
     case discoveryFinished = "Discovery finished"
     case pairingStarted = "Pairing started"
@@ -49,6 +50,7 @@ enum DiagnosticDuration: String, Sendable {
 struct DiagnosticEvent: Equatable, Sendable {
     let kind: DiagnosticEventKind
     let duration: DiagnosticDuration
+    var discovery: TVDiscoveryProgress? = nil
 }
 
 /// A strict defense-in-depth filter for version/model fields, never for names or identities.
@@ -133,6 +135,8 @@ struct DiagnosticReport: Equatable, Sendable {
         var lines = [
             "Hafa Remote — Support Report",
             "App: \(metadata.appVersion) (\(metadata.appBuild))",
+            "TV support: \(TVBuildFlavor.compiled.supportTitle)",
+            TVBuildFlavor.compiled.supportDescription,
             "iOS: \(metadata.iOSVersion)",
             "TV model: \(metadata.tvModel)",
             "TV firmware: \(metadata.tvFirmware)",
@@ -146,7 +150,8 @@ struct DiagnosticReport: Equatable, Sendable {
             lines.append("No events recorded. Turn on diagnostics, reproduce the issue, then preview again.")
         } else {
             for (index, event) in events.enumerated() {
-                lines.append("\(index + 1). \(event.kind.rawValue) (\(event.duration.rawValue))")
+                let detail = event.discovery.map { " · \($0.brand.displayName): \($0.stage.rawValue)" } ?? ""
+                lines.append("\(index + 1). \(event.kind.rawValue)\(detail) (\(event.duration.rawValue))")
             }
         }
         return lines.joined(separator: "\n")
@@ -186,6 +191,14 @@ final class DiagnosticRecorder {
         guard isEnabled, let collection, collection.epoch == collectionEpoch else { return }
         if events.count == Self.maximumEventCount { events.removeFirst() }
         events.append(DiagnosticEvent(kind: kind, duration: DiagnosticDuration(seconds: durationSeconds)))
+    }
+
+    func recordDiscovery(_ progress: TVDiscoveryProgress, collection: DiagnosticCollectionToken?) {
+        guard isEnabled, let collection, collection.epoch == collectionEpoch,
+            TVDistributionPolicy.current.permits(progress.brand)
+        else { return }
+        if events.count == Self.maximumEventCount { events.removeFirst() }
+        events.append(DiagnosticEvent(kind: .discoveryProgress, duration: .unknown, discovery: progress))
     }
 
     /// The first result or terminal state completes the scan using its original consent lease.

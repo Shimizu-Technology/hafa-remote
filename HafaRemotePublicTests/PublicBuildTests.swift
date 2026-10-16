@@ -77,7 +77,18 @@ struct PublicBuildTests {
         store.start()
         #expect(store.televisions.map(\.brand) == [.samsung])
         #expect(store.state == .results)
+        #expect(store.progress.allSatisfy { $0.brand == .samsung })
         store.stop()
+    }
+
+    @Test("Public support reports describe only the active Samsung scope")
+    func supportScopeIsExplicit() {
+        let report = DiagnosticReport(
+            metadata: DiagnosticMetadata(appVersion: "1", appBuild: "9", iOSVersion: "26"), events: [])
+        #expect(report.text.contains("Samsung public"))
+        #expect(report.text.contains("Other TV brands are not enabled"))
+        #expect(!report.text.contains("Sony"))
+        #expect(!report.text.contains("Vizio"))
     }
 
     @Test("Most-recent experimental records do not displace the eligible Samsung restoration")
@@ -229,6 +240,7 @@ private final class PublicDiscoveryFixture: TVDiscoveryBackend {
             return
         }
         for brand in TVBrand.allCases {
+            eventHandler(.progress(TVDiscoveryProgress(brand: brand, stage: .resolutionFailed)))
             eventHandler(
                 .found(
                     DiscoveredTV(

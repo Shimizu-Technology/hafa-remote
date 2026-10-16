@@ -65,6 +65,18 @@ struct HafaRemoteApp: App {
                         isAwaitingApproval: false,
                         powerOffFails: false
                     )
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-discovery-advertised") {
+                    HomeView(
+                        discovery: TVDiscoveryStore(
+                            backend: TVDiscoveryFixtureBackend(fixture: .advertisementThenTelevision)
+                        )
+                    )
+                } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-discovery-issues") {
+                    HomeView(
+                        discovery: TVDiscoveryStore(
+                            backend: TVDiscoveryFixtureBackend(fixture: .resolutionFailureThenTelevision)
+                        )
+                    )
                 } else if ProcessInfo.processInfo.arguments.contains("-ui-testing-discovery-result") {
                     HomeView(
                         discovery: TVDiscoveryStore(
