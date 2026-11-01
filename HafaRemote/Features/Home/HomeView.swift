@@ -43,7 +43,7 @@ struct HomeView: View {
                 let savedTV = savedTV(for: tv)
                 RemoteControlView(
                     tvName: displayName(for: tv),
-                    modelName: tv.modelName,
+                    modelName: tv.brand.presentedDeviceText(tv.modelName),
                     statusLabel: statusLabel,
                     isConnected: isPresentedTVConnected,
                     powerState: session.observedPowerState,
@@ -711,7 +711,8 @@ struct HomeView: View {
                 SavedTV(
                     brand: tv.brand,
                     reportedDeviceID: tv.reportedDeviceID,
-                    displayName: tv.displayName ?? tv.brand.defaultDeviceName,
+                    displayName: tv.displayName.map(tv.brand.presentedDeviceText)
+                        ?? tv.brand.defaultDeviceName,
                     modelName: tv.modelName,
                     firmwareVersion: tv.firmwareVersion,
                     lastKnownAddress: tv.address.rawValue,
@@ -1274,7 +1275,7 @@ private struct SavedTVEditor: View {
                     if let brandName = savedTV.brand.presentedName {
                         LabeledContent("Brand", value: brandName)
                     }
-                    LabeledContent("Model", value: savedTV.modelName)
+                    LabeledContent("Model", value: savedTV.brand.presentedDeviceText(savedTV.modelName))
                 }
             }
             .navigationTitle("Edit TV")

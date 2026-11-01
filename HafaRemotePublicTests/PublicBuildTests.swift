@@ -92,6 +92,20 @@ struct PublicBuildTests {
         }
     }
 
+    @Test(
+        "Public presentation removes the manufacturer from TV-reported names and models",
+        arguments: [
+            ("[TV] Samsung Q70 Series (55)", "Q70 Series (55)"),
+            ("Samsung Q70A", "Q70A"),
+            ("SAMSUNG", "TV"),
+            ("QN55Q70AAFXZA", "QN55Q70AAFXZA"),
+            ("Living Room", "Living Room"),
+        ])
+    func publicDeviceTextIsBrandNeutral(reported: String, presented: String) {
+        #expect(TVBrand.samsung.presentedDeviceText(reported) == presented)
+        #expect(TVBrand.samsung.detail(model: reported) == presented)
+    }
+
     @Test("Public presentation names no manufacturer")
     func publicPresentationIsBrandNeutral() {
         #expect(TVBrand.samsung.presentedName == nil)

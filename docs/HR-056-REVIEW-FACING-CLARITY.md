@@ -16,5 +16,5 @@ These are small changes from the November 1, 2026 design audit. They affect what
 
 - A public UI test opens the demo from the first-launch screen.
 - Existing recovery UI tests still find the Retry and Find TV actions.
-- The full gate passes for both audiences.
+- Required: the full gate passes for both audiences. Results are recorded on the PR.
 - Simulator screenshots of standby, offline and first launch are captured for the release packet in HR-057.

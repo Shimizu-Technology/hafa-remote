@@ -214,7 +214,7 @@ struct RemoteControlView: View {
                 .disabled(
                     isPoweringOnTV || isPoweringOffTV || isAwaitingApproval
                         || (offersPowerOff && !capabilities.contains(.powerOff))
-                        || (!offersPowerOff && (!canPowerOnTV || !capabilities.contains(.powerOn)))
+                        || (!offersPowerOff && !canPowerOnTV)
                 )
                 .accessibilityLabel(
                     powerAccessibilityLabel
@@ -223,7 +223,7 @@ struct RemoteControlView: View {
                 .accessibilityIdentifier(offersPowerOff ? "remote-powerOff" : "remote-powerOn")
             }
 
-            if isConnected, powerState == .unknown, canPowerOnTV, capabilities.contains(.powerOn) {
+            if isConnected, powerState == .unknown, canPowerOnTV {
                 Button("Screen dark? Turn On TV", systemImage: "power") { powerOnTV() }
                     .font(.subheadline)
                     .frame(minHeight: 44)
@@ -687,8 +687,11 @@ struct RemoteControlView: View {
     private var canControlTV: Bool { isConnected && powerState != .standby }
 
     /// Power on is the action most likely to help when the TV is asleep or offline.
+    /// `canPowerOnTV` already reflects each brand's wake path, including a saved
+    /// wake address. Pairing failures need Find TV instead, so they offer no retry.
     private var offersPrimaryPowerOn: Bool {
-        canPowerOnTV && capabilities.contains(.powerOn) && !isAwaitingApproval
+        canPowerOnTV && !isAwaitingApproval
+            && (recoveryActions.contains(.retryConnection) || (isConnected && powerState == .standby))
     }
 
     private var statusSymbol: String {

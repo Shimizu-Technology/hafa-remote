@@ -21,6 +21,6 @@ SHARING IS YOUR CHOICE
 Pairing credentials and saved TV information stay on your phone during ordinary use. Optional diagnostics are off by default and keep a small, redacted history in memory. Preview a support report before choosing whether and where to share it. Nothing is uploaded automatically.
 
 COMPATIBILITY
-Hafa Remote works with TVs that offer a local-network remote connection approved on the TV screen. Not every TV supports this, and features depend on the model, firmware, network and TV app. Power-on depends on the TV's standby and network settings and is not guaranteed.
+Hafa Remote works with select TVs that offer a local-network remote connection approved on the TV screen. Not every TV supports this, and features depend on the model, firmware, network and TV app. Power-on depends on the TV's standby and network settings and is not guaranteed.
 
 Hafa Remote is independently developed by Shimizu Technology. It is not affiliated with or endorsed by any TV manufacturer.

@@ -301,7 +301,7 @@ struct TVSetupView: View {
                                 .accessibilityHidden(true)
 
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(television.displayName)
+                                Text(television.brand.presentedDeviceText(television.displayName))
                                     .font(.body.weight(.semibold))
                                     .foregroundStyle(.primary)
                                 Text(television.brand.detail(model: television.modelName))
@@ -322,9 +322,13 @@ struct TVSetupView: View {
                     .buttonStyle(.plain)
                     .disabled(isBusy)
                     .accessibilityLabel(
-                        [television.displayName, television.brand.presentedName, television.modelName]
-                            .compactMap { $0 }
-                            .joined(separator: ", ")
+                        [
+                            television.brand.presentedDeviceText(television.displayName),
+                            television.brand.presentedName,
+                            television.brand.presentedDeviceText(television.modelName),
+                        ]
+                        .compactMap { $0 }
+                        .joined(separator: ", ")
                     )
                     .accessibilityHint("Connects Hafa Remote to this TV")
                     .accessibilityIdentifier("discoveredTVButton")
@@ -420,7 +424,9 @@ struct TVSetupView: View {
             EmptyView()
         case .connecting:
             Section {
-                Label("Connecting to \(selectedTV?.displayName ?? "TV")…", systemImage: "wifi")
+                Label(
+                    "Connecting to \(selectedTV.map { $0.brand.presentedDeviceText($0.displayName) } ?? "TV")…",
+                    systemImage: "wifi")
             }
         case .pairing:
             Section {
@@ -673,7 +679,9 @@ struct TVSetupView: View {
     }
 
     private func savedTVChoiceLabel(_ saved: SavedTV) -> String {
-        [saved.displayName, saved.roomName, saved.modelName].compactMap { $0 }.joined(separator: " • ")
+        [saved.displayName, saved.roomName, saved.brand.presentedDeviceText(saved.modelName)].compactMap {
+            $0
+        }.joined(separator: " • ")
     }
 
     private func beginConnection(to television: DiscoveredTV, target: TVConnectionTarget) {
@@ -930,7 +938,7 @@ struct TVSetupView: View {
                 "Choose Allow if your TV asks to approve Hafa Remote."
             }
         case .connected(let tv):
-            "Connected to \(tv.modelName)."
+            "Connected to \(tv.brand.presentedDeviceText(tv.modelName))."
         case .denied:
             pairingDeniedMessage
         case .savedPairingRejected:

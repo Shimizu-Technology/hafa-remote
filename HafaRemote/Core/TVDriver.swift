@@ -42,7 +42,28 @@ enum TVBrand: String, Codable, CaseIterable, Hashable, Sendable {
 
     /// Joins the presented brand, when any, with a model for compact detail text.
     func detail(model: String) -> String {
-        presentedName.map { "\($0) · \(model)" } ?? model
+        let model = presentedDeviceText(model)
+        return presentedName.map { "\($0) · \(model)" } ?? model
+    }
+
+    /// Presents a name or model the TV reports about itself. The public build drops
+    /// the manufacturer name and the "[TV]" tag some TVs advertise; stored values stay
+    /// unchanged for identity and diagnostics.
+    func presentedDeviceText(_ value: String) -> String {
+        #if HAFA_PUBLIC_BUILD
+            let cleaned =
+                value
+                .replacingOccurrences(
+                    of: #"^\s*\[TV\]\s*"#, with: "", options: [.regularExpression, .caseInsensitive]
+                )
+                .replacingOccurrences(of: displayName, with: "", options: .caseInsensitive)
+                .split(whereSeparator: \.isWhitespace)
+                .joined(separator: " ")
+                .trimmingCharacters(in: CharacterSet(charactersIn: " -·:,"))
+            return cleaned.isEmpty ? "TV" : cleaned
+        #else
+            value
+        #endif
     }
 }
 

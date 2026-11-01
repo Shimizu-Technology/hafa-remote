@@ -163,7 +163,7 @@ if [[ "$local_network_copy" != *"supported TVs"* && "$local_network_copy" != *"T
   echo "Local-network permission copy must tell people it controls supported TVs." >&2
   exit 1
 fi
-if [[ "$distribution_audience" == public ]] && grep -Eiq 'samsung|sony|vizio|tizen|bravia|smartcast' <<<"$local_network_copy"; then
+if [[ "$distribution_audience" == public ]] && grep -Eiq '\b(samsung|tizen|sony|bravia|vizio|smartcast|lg|webos|roku|hisense|tcl)\b' <<<"$local_network_copy"; then
   echo "Public local-network permission copy must not name a TV manufacturer." >&2
   exit 1
 fi
