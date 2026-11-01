@@ -31,6 +31,12 @@ The upload follows the existing public path:
 
 After upload, verify that build 12 is `VALID` and App Store eligible, and that Leon's existing internal TestFlight group can install it.
 
+## Public upload receipt (build 12)
+
+The receipt schema is unchanged from [HR-051](HR-051-SAMSUNG-PUBLIC-DELIVERY.md). The current candidate's identity is `appId` `6808899369`, `bundleId` `com.shimizutechnology.hafaremote`, `version` `1.0`, `build` **`12`**, `audience` `public`. `scripts/validate-public-upload-readiness.sh` rejects any other build.
+
+The receipt's `sourceCommit` and `sourceTree` must name the merged HR-057 checkout. Its export and archive hashes must match that exact artifact. Its policy, privacy and store facts must come from live checks made within 24 hours of upload. The HR-051 document is the historical record of the build 9 delivery.
+
 ## Left for Leon
 
 - Test the candidate on the Q70AA. The checklist is in `testflight_what_to_test.txt`.
