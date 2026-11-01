@@ -224,7 +224,9 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
             panGutter(in: app, upward: direction == .up)
         }
         XCTAssertTrue(element.waitForExistence(timeout: 2))
-        XCTAssertTrue(element.isHittable)
+        // Scrolling settles asynchronously on loaded hosted runners.
+        let hittable = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 5), .completed)
     }
     @MainActor private func launch(
         brand: String = "samsung", contentSizeCategory: String = "UICTContentSizeCategoryL",
