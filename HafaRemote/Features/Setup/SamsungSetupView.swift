@@ -216,7 +216,9 @@ struct TVSetupView: View {
         Section("Search details") {
             ForEach(TVDistributionPolicy.current.permittedBrands, id: \.self) { brand in
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(brand.displayName).font(.subheadline.weight(.semibold))
+                    if let brandName = brand.presentedName {
+                        Text(brandName).font(.subheadline.weight(.semibold))
+                    }
                     Text(discovery.searchDetail(for: brand))
                         .font(.subheadline)
                         .foregroundStyle(HafaTheme.secondaryText)
@@ -302,7 +304,7 @@ struct TVSetupView: View {
                                 Text(television.displayName)
                                     .font(.body.weight(.semibold))
                                     .foregroundStyle(.primary)
-                                Text("\(television.brand.displayName) · \(television.modelName)")
+                                Text(television.brand.detail(model: television.modelName))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -320,7 +322,9 @@ struct TVSetupView: View {
                     .buttonStyle(.plain)
                     .disabled(isBusy)
                     .accessibilityLabel(
-                        "\(television.displayName), \(television.brand.displayName), \(television.modelName)"
+                        [television.displayName, television.brand.presentedName, television.modelName]
+                            .compactMap { $0 }
+                            .joined(separator: ", ")
                     )
                     .accessibilityHint("Connects Hafa Remote to this TV")
                     .accessibilityIdentifier("discoveredTVButton")
@@ -484,20 +488,22 @@ struct TVSetupView: View {
                 Group {
                     Text(
                         TVBuildFlavor.compiled == .samsungPublic
-                            ? "Enter your Samsung TV's private address from its network settings. Choose Allow when the TV asks to approve Hafa Remote."
+                            ? "Enter your TV's private address from its network settings. Choose Allow when the TV asks to approve Hafa Remote."
                             : "Choose the TV brand, then enter its private address from the TV network settings. Samsung asks for approval, Sony shows a pairing code, and Vizio shows a PIN."
                     )
                     .font(.footnote)
                     .foregroundStyle(HafaTheme.secondaryText)
 
-                    Picker("TV Brand", selection: $manualBrand) {
-                        ForEach(TVDistributionPolicy.current.permittedBrands, id: \.self) { brand in
-                            Text(brand.displayName).tag(brand)
+                    if TVDistributionPolicy.current.permittedBrands.count > 1 {
+                        Picker("TV Brand", selection: $manualBrand) {
+                            ForEach(TVDistributionPolicy.current.permittedBrands, id: \.self) { brand in
+                                Text(brand.displayName).tag(brand)
+                            }
                         }
+                        .disabled(isBusy)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("manualTVBrandPicker")
                     }
-                    .disabled(isBusy)
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("manualTVBrandPicker")
                     #if !HAFA_PUBLIC_BUILD
                         if manualBrand == .vizio {
                             Toggle("Try older Vizio connection", isOn: $usesLegacyVizioConnection)

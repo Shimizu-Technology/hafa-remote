@@ -189,9 +189,9 @@ enum SamsungDeviceInfoError: LocalizedError, Equatable, Sendable {
         case .invalidEndpoint:
             "That TV address could not be used."
         case .unavailable:
-            "Hafa Remote could not reach a Samsung TV at that address. Check the address and Wi-Fi network."
+            "Hafa Remote could not reach a compatible TV at that address. Check the address and Wi-Fi network."
         case .invalidResponse:
-            "A device responded, but it did not identify itself as a supported Samsung TV."
+            "A device responded, but it did not identify itself as a supported TV."
         }
     }
 }

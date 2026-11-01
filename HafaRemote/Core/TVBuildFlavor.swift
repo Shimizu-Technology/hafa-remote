@@ -15,14 +15,14 @@ enum TVBuildFlavor: String, Sendable {
 
     var supportTitle: String {
         switch self {
-        case .samsungPublic: "Samsung public"
+        case .samsungPublic: "App Store"
         case .internalTesting: "Internal testing"
         }
     }
 
     var supportDescription: String {
         #if HAFA_PUBLIC_BUILD
-            "This build searches for compatible Samsung TVs. Other TV brands are not enabled."
+            "This build finds compatible TVs on your home network that approve Hafa Remote on screen."
         #else
             "This build searches for Samsung, Sony and Vizio TVs. Sony and Vizio are experimental; compatibility depends on the model."
         #endif

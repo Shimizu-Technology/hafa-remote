@@ -16,8 +16,33 @@ enum TVBrand: String, Codable, CaseIterable, Hashable, Sendable {
         }
     }
 
+    /// The manufacturer name shown in the interface. The public build names no
+    /// manufacturer; brand identity remains internal for routing and credentials.
+    var presentedName: String? {
+        #if HAFA_PUBLIC_BUILD
+            nil
+        #else
+            displayName
+        #endif
+    }
+
     var defaultDeviceName: String {
-        "\(displayName) TV"
+        presentedName.map { "\($0) TV" } ?? "My TV"
+    }
+
+    /// "the Sony TV" in testing builds, "the TV" in the public build.
+    var tvPhrase: String {
+        presentedName.map { "the \($0) TV" } ?? "the TV"
+    }
+
+    /// Sentence-initial form of `tvPhrase`.
+    var tvSubject: String {
+        presentedName.map { "The \($0) TV" } ?? "The TV"
+    }
+
+    /// Joins the presented brand, when any, with a model for compact detail text.
+    func detail(model: String) -> String {
+        presentedName.map { "\($0) · \(model)" } ?? model
     }
 }
 

@@ -150,7 +150,12 @@ struct DiagnosticReport: Equatable, Sendable {
             lines.append("No events recorded. Turn on diagnostics, reproduce the issue, then preview again.")
         } else {
             for (index, event) in events.enumerated() {
-                let detail = event.discovery.map { " · \($0.brand.displayName): \($0.stage.rawValue)" } ?? ""
+                let detail =
+                    event.discovery.map { discovery in
+                        " · "
+                            + [discovery.brand.presentedName, discovery.stage.rawValue].compactMap { $0 }
+                            .joined(separator: ": ")
+                    } ?? ""
                 lines.append("\(index + 1). \(event.kind.rawValue)\(detail) (\(event.duration.rawValue))")
             }
         }

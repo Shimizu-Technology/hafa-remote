@@ -1,11 +1,13 @@
-Hafa Remote is an iPhone-only local-network remote for compatible Samsung Tizen TVs. No app account or sign-in is required. It does not require a Samsung or SmartThings cloud account.
+Hafa Remote is an iPhone-only remote for compatible smart TVs on the same local network. No app account or sign-in is required, and the app uses no manufacturer cloud service or SDK.
 
-WITHOUT TV HARDWARE: From the first-launch screen, tap Help, then Try the Remote Offline. The offline demo is explicitly labeled as simulated; it makes no discovery, pairing or TV command connections. It lets you inspect button/swipe controls and interface feedback. Help also contains TV Help & About, Diagnostics and a previewable support report.
+HARDWARE DEMO VIDEO: A video recorded on a physical iPhone with the TV in frame shows first launch, the Local Network permission, discovery, approving Hafa Remote on the TV, the remote controls, text entry, leaving and returning to the app, and power. The link is in the App Review Information notes.
 
-WITH TV HARDWARE: Use a compatible Samsung Tizen TV on the same private, non-guest local network as the iPhone. The phone uses Wi-Fi; the TV may use Wi-Fi or Ethernet. Turn the TV on, choose Add TV, allow iOS Local Network access and select the discovered Samsung TV. Approve Hafa Remote on the TV's connection dialog. If discovery cannot find the TV, use the manual-address fallback under TV not showing up?. Then exercise navigation, volume/mute, Home/Back and supported playback controls.
+WITHOUT TV HARDWARE: On the first-launch screen, tap Try Without a TV (also under Help > Try the Remote Offline). The offline demo is clearly labeled as simulated and makes no discovery, pairing or TV connections.
 
-Optional sources, channel/guide/number controls, text entry and TV-returned app shortcuts vary by model, firmware and TV app. Power-on is conditional on standby/network settings and is not guaranteed; the app distinguishes wake attempts from confirmed reconnection. This public binary excludes Sony and Vizio protocols and setup flows.
+WITH TV HARDWARE: Put the iPhone on Wi-Fi and the TV on the same private, non-guest network (Wi-Fi or Ethernet). Turn the TV on, tap Add TV, allow Local Network access and select the TV. Choose Allow on the TV's approval prompt. If discovery cannot find the TV, use "TV not showing up?" to enter its address. Then try navigation, volume/mute, Home/Back and playback.
 
-Diagnostics are off by default, bounded and in-memory. Sharing requires previewing an immutable redacted report and explicitly choosing a destination in the system share sheet. No automatic upload, tracking, advertisements, subscription or backend is included.
+Optional sources, channel/guide/number controls, text entry and TV-returned app shortcuts vary by TV and current screen. Power-on depends on the TV's standby and network settings and is not guaranteed; the app distinguishes a wake attempt from a confirmed reconnection.
 
-This is an independent app, not affiliated with or endorsed by Samsung Electronics.
+Diagnostics are off by default and kept in memory. Sharing requires previewing a redacted report and choosing a destination in the system share sheet. There is no automatic upload, tracking, advertising, subscription or backend.
+
+Hafa Remote is an independent app and is not affiliated with or endorsed by any TV manufacturer.

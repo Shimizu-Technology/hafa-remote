@@ -83,7 +83,7 @@
                     modelContext.insert(
                         SavedTV(
                             reportedDeviceID: "synthetic-samsung-public",
-                            displayName: "Synthetic Samsung Living TV", modelName: "Synthetic Samsung",
+                            displayName: "Synthetic Living TV", modelName: "Synthetic Model",
                             firmwareVersion: nil,
                             lastKnownAddress: "192.0.2.51"))
                 }
@@ -102,7 +102,7 @@
             return ConnectedTV(
                 reportedDeviceID: "synthetic-samsung-public",
                 address: try PrivateIPv4Address(documentationAddressForTesting: addressText),
-                modelName: "Synthetic Samsung", firmwareVersion: nil,
+                modelName: "Synthetic Model", firmwareVersion: nil,
                 capabilities: [.navigation, .volume, .mute, .playback, .powerOff])
         }
         func send(_ command: RemoteCommand) async throws {}

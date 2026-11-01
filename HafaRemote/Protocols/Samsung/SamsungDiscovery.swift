@@ -391,10 +391,10 @@ struct SamsungBonjourMetadata: Equatable, Sendable {
         reportedIdentifier = normalizedIdentifier
         displayName = Self.cleaned(
             Self.value(for: "fn", in: record) ?? serviceName,
-            fallback: "Samsung TV"
+            fallback: TVBrand.samsung.defaultDeviceName
         )
         advertisedModelName = Self.value(for: "md", in: record).map {
-            Self.cleaned($0, fallback: "Samsung TV")
+            Self.cleaned($0, fallback: TVBrand.samsung.defaultDeviceName)
         }
     }
 
@@ -666,7 +666,7 @@ extension SamsungBonjourDiscoveryBackend: NetServiceDelegate {
             let controlPort: UInt16?
             switch brand {
             case .samsung:
-                modelName = "Samsung Q70A"
+                modelName = "Q70A"
                 controlPort = nil
             case .sony:
                 modelName = "Sony BRAVIA"

@@ -71,7 +71,7 @@ enum RemoteSessionFailure: Equatable, Sendable {
         case .timedOut(.forgetPairing):
             "Removing the saved pairing took too long. Try again."
         case .unrecognizedDeviceInfo(let brand):
-            "The \(brand.displayName) TV responded, but Hafa Remote could not read its device information. Update the TV software, then scan again."
+            "\(brand.tvSubject) responded, but Hafa Remote could not read its device information. Update the TV software, then scan again."
         case .savedDeviceIdentityMismatch:
             "A different TV is using the remembered address. Find your TV again before connecting."
         case .unexpected:
