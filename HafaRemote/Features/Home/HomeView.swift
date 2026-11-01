@@ -197,6 +197,9 @@ struct HomeView: View {
         .onChange(of: isShowingSetup) { _, isShowing in
             if isShowing {
                 addressRecovery.cancel()
+            } else if session.state == .offline {
+                // Setup cancelled recovery; resume it when the saved TV is still offline.
+                recoverSelectedTVAddressIfNeeded()
             }
         }
         .onChange(of: scenePhase) { _, phase in

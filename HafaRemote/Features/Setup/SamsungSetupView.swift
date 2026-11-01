@@ -672,7 +672,6 @@ struct TVSetupView: View {
     }
 
     private func beginConnection(to television: DiscoveredTV, target: TVConnectionTarget) {
-        hasAttemptedSetupConnection = true
         discoveryLifecycle.selectTV()
         resetPairingCodeSubmission()
         selectedTV = television
@@ -688,7 +687,6 @@ struct TVSetupView: View {
     }
 
     private func connectManually() {
-        hasAttemptedSetupConnection = true
         discoveryLifecycle.selectTV()
         resetPairingCodeSubmission()
         selectedTV = nil
@@ -700,6 +698,8 @@ struct TVSetupView: View {
     }
 
     private func connect(to target: TVConnectionTarget) {
+        // Only a connection setup actually starts may be torn down when setup closes.
+        hasAttemptedSetupConnection = true
         let operationID = UUID()
         connectionTaskID = nil
         connectionTask?.cancel()
@@ -869,6 +869,7 @@ struct TVSetupView: View {
         guard !isForgettingPairing else { return }
         isForgettingPairing = true
         defer { isForgettingPairing = false }
+        hasAttemptedSetupConnection = true
         let repairTarget = [selectedTarget, initialTarget]
             .compactMap { $0 }
             .first(where: { $0.address.rawValue == address })

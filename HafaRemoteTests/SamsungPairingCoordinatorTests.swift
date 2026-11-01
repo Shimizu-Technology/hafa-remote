@@ -464,6 +464,39 @@ struct SamsungPairingCoordinatorTests {
         await coordinator.disconnect()
     }
 
+    @Test(
+        "Removing a pairing while its save is in flight keeps it removed",
+        arguments: [true, false])
+    func removalDuringSaveWins(cancelsAttempt: Bool) async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let previousCredential = try SamsungPairingCredential(
+            token: "synthetic-previous-token",
+            certificateSHA256: Data(repeating: 12, count: 32)
+        )
+        let refreshedCredential = try SamsungPairingCredential(
+            token: "synthetic-refreshed-token",
+            certificateSHA256: Data(repeating: 13, count: 32)
+        )
+        let store = SuspendedSaveCredentialStore()
+        await store.seed(previousCredential, for: address)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: AttemptAwareSamsungTransport(issuedCredential: refreshedCredential)
+        )
+
+        let pairing = Task { try await coordinator.pair(addressText: address.rawValue) }
+        var saveStarts = store.firstSaveStarted.makeAsyncIterator()
+        _ = await saveStarts.next()
+        try await coordinator.removeCredential(
+            addressText: address.rawValue, reportedDeviceID: "synthetic-device-id")
+        if cancelsAttempt { pairing.cancel() }
+        await store.releaseFirstSave()
+
+        await #expect(throws: CancellationError.self) { try await pairing.value }
+        #expect(await store.credential(for: address) == nil)
+    }
+
     @Test("A failed credential save disconnects before an immediate retry")
     func saveFailureDisconnectsAndAllowsRetry() async throws {
         let address = try PrivateIPv4Address("192.168.10.20")
