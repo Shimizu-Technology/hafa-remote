@@ -217,6 +217,13 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                         )
                     } else if let previousCredential {
                         try? await credentialStore.save(previousCredential, for: attemptedIdentity)
+                        // A removal can run while the restore awaits the store.
+                        if credentialWasRemoved(since: removalCountAtStart, identity: attemptedIdentity) {
+                            try? await credentialStore.removeCredential(
+                                for: attemptedIdentity,
+                                legacyAddress: attemptedAddress
+                            )
+                        }
                     } else {
                         try? await credentialStore.removeCredential(
                             for: attemptedIdentity,

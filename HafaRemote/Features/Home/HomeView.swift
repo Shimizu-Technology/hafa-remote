@@ -518,6 +518,7 @@ struct HomeView: View {
         // Stop the TV's own recovery and session first so neither an address
         // search nor an in-flight reconnect can pair it again after removal.
         if affectsActiveSession {
+            selection.invalidatePendingWork()
             addressRecovery.cancel()
             await session.disconnect()
         }
@@ -1335,6 +1336,15 @@ final class SavedTVSelectionCoordinator {
         isSwitching = false
         operationID = nil
         taskHolder.cancel()
+    }
+
+    /// Invalidates in-flight selection, wake and power work for the current selection
+    /// without changing which TV is selected.
+    func invalidatePendingWork() {
+        revision &+= 1
+        taskHolder.cancel()
+        isSwitching = false
+        operationID = nil
     }
 
     /// Clears a removed selection and optionally promotes a remaining saved TV.
