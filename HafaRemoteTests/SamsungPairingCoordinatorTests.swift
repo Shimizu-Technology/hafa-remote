@@ -497,6 +497,36 @@ struct SamsungPairingCoordinatorTests {
         #expect(await store.credential(for: address) == nil)
     }
 
+    @Test("Address-only removal during an in-flight save keeps the stable credential")
+    func addressOnlyRemovalDuringSaveKeepsStableCredential() async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let previousCredential = try SamsungPairingCredential(
+            token: "synthetic-previous-token",
+            certificateSHA256: Data(repeating: 14, count: 32)
+        )
+        let refreshedCredential = try SamsungPairingCredential(
+            token: "synthetic-refreshed-token",
+            certificateSHA256: Data(repeating: 15, count: 32)
+        )
+        let store = SuspendedSaveCredentialStore()
+        await store.seed(previousCredential, for: address)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: AttemptAwareSamsungTransport(issuedCredential: refreshedCredential)
+        )
+
+        let pairing = Task { try await coordinator.pair(addressText: address.rawValue) }
+        var saveStarts = store.firstSaveStarted.makeAsyncIterator()
+        _ = await saveStarts.next()
+        try await coordinator.removeCredential(addressText: address.rawValue, reportedDeviceID: nil)
+        pairing.cancel()
+        await store.releaseFirstSave()
+
+        await #expect(throws: CancellationError.self) { try await pairing.value }
+        #expect(await store.credential(for: address) == previousCredential)
+    }
+
     @Test("A failed credential save disconnects before an immediate retry")
     func saveFailureDisconnectsAndAllowsRetry() async throws {
         let address = try PrivateIPv4Address("192.168.10.20")

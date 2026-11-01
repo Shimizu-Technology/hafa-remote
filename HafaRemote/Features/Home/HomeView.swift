@@ -515,9 +515,10 @@ struct HomeView: View {
             throw error
         }
 
-        // Stop the TV's own session first so an in-flight reconnect cannot
-        // save its credential again after removal.
+        // Stop the TV's own recovery and session first so neither an address
+        // search nor an in-flight reconnect can pair it again after removal.
         if affectsActiveSession {
+            addressRecovery.cancel()
             await session.disconnect()
         }
         try await session.removePairingCredential(
