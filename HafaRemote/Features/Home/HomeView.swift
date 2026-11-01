@@ -276,6 +276,19 @@ struct HomeView: View {
                         .accessibilityIdentifier("addTVButton")
                         .disabled(restoration.isRestoring)
 
+                        NavigationLink {
+                            DemoRemoteView()
+                        } label: {
+                            Label("Try Without a TV", systemImage: "play.rectangle")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .frame(minHeight: 48)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(HafaTheme.accent)
+                        .accessibilityHint("Opens a clearly labeled simulated remote that contacts no TV.")
+                        .accessibilityIdentifier("emptyStateDemoButton")
+
                         Label("Same home network. Just you and your TV.", systemImage: "wifi")
                             .font(.footnote)
                             .foregroundStyle(HafaTheme.secondaryText)

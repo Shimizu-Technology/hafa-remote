@@ -32,6 +32,15 @@ final class PublicBuildUITests: XCTestCase {
     }
 
     @MainActor
+    func testFirstLaunchOffersTheOfflineDemo() throws {
+        let app = launch("-ui-testing-discovery-empty")
+        let demo = app.buttons["emptyStateDemoButton"]
+        XCTAssertTrue(demo.waitForExistence(timeout: 5))
+        demo.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["offlineDemoLabel"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
     func testManualSetupNamesNoManufacturer() throws {
         let app = launch("-ui-testing-discovery-empty")
         app.buttons["addTVButton"].tap()
