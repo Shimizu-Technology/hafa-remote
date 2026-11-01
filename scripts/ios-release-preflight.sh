@@ -71,7 +71,7 @@ fi
 if [[ "$distribution_audience" == public ]]; then
   scheme="HafaRemotePublic"
   configuration="ReleasePublic"
-  expected_build="9"
+  expected_build="12"
   info_plist="HafaRemote/Resources/InfoPublic.plist"
   metadata_path="ios/app-store/public/en-US"
   export_options="ios/app-store/PublicExportOptions.plist"

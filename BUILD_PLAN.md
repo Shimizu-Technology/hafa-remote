@@ -14,27 +14,34 @@ App Review rejected public 1.0 (9) on October 30, 2026 under Guideline 5.2.1 (Sa
 
 ### HR-054 — Keep saved-TV recovery alive after common failures
 
-- [ ] Treat a failed Samsung device-information probe as offline for a remembered TV, so bounded retry, address recovery and wake-then-reconnect continue; an unreadable reply at a new manual address stays unsupported.
-- [ ] Remember a TV turned off from the app and reconnect it on the next foreground return without reconnecting immediately; any explicit connect, disconnect or forget clears that.
-- [ ] Keep the advertised name and discovery identity when the public build pairs a discovered Samsung TV.
-- [ ] Closing setup after only browsing leaves the saved TV's own recovery running; Forget TV stops the TV's session before removing its credential.
-- [ ] Deterministic tests for each path; full gate, review and CI.
+Merged in #52. Review also closed the Forget TV races: credential removal wins over an in-flight or restoring attempt, and pending wake or recovery work is invalidated first.
+
+- [x] Treat a failed Samsung device-information probe as offline for a remembered TV, so bounded retry, address recovery and wake-then-reconnect continue; an unreadable reply at a new manual address stays unsupported.
+- [x] Remember a TV turned off from the app and reconnect it on the next foreground return without reconnecting immediately; any explicit connect, disconnect or forget clears that.
+- [x] Keep the advertised name and discovery identity when the public build pairs a discovered Samsung TV.
+- [x] Closing setup after only browsing leaves the saved TV's own recovery running; Forget TV stops the TV's session before removing its credential.
+- [x] Deterministic tests for each path; full gate, review and CI.
 
 **Acceptance:** [HR-054](docs/HR-054-RECONNECT-RELIABILITY.md). Physical Samsung behavior (wake timing, standby and address change) is verified by Leon on the TestFlight candidate.
 
 ### HR-055 — Brand-neutral public build and listing
 
-- [ ] Public in-app copy, permission text, default names, demo and About contain no manufacturer name; the internal build keeps brand-specific testing copy.
-- [ ] Public listing (subtitle, keywords, promotional text, description, review notes) and screenshots contain no manufacturer name or logo.
-- [ ] Gate checks keep manufacturer names out of the public strings and metadata.
+Merged with HR-056 in #53. TV-reported names and models are also presented without the manufacturer name in the public build. Store images moved to HR-057 so they show the final interface.
+
+- [x] Public in-app copy, permission text, default names, demo and About contain no manufacturer name; the internal build keeps brand-specific testing copy.
+- [x] Public listing (subtitle, keywords, promotional text, description, review notes) and screenshots contain no manufacturer name or logo.
+- [x] Gate checks keep manufacturer names out of the public strings and metadata.
 
 ### HR-056 — Review-facing remote clarity
 
-- [ ] Standby and offline make the working power action primary; the connected header never offers opposing power actions together.
-- [ ] Theme accent replaces the low-contrast asset accent; the offline demo is reachable from the first-launch screen.
+Merged in #53. That PR also hardened timing-sensitive tests that failed intermittently on hosted runners.
+
+- [x] Standby and offline make the working power action primary; the connected header never offers opposing power actions together.
+- [x] Theme accent replaces the low-contrast asset accent; the offline demo is reachable from the first-launch screen.
 
 ### HR-057 — Public TestFlight candidate
 
+- [x] Regenerate brand-neutral store images from the build 12 interface.
 - [ ] Verify the next unused build number, archive/export the merged public source, upload the App Store-eligible build and confirm processing and internal tester availability.
 - [ ] Prepare (do not submit) the App Review reply, video checklist and updated listing for Leon's resubmission decision.
 

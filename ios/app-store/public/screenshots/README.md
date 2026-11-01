@@ -1,15 +1,20 @@
-# Samsung public store images
+# Public store images (1.0 (12))
 
-Five final store composites, each PNG/RGB without alpha at 1320 × 2868. Original vector frames, captions and Hafa identity surround complete actual HR-049 PublicRelease screenshots at their native aspect ratio. No interface, connection result or hardware response was invented. The offline-demo image and its app labels explicitly identify simulation. Selected scenes show unpaired setup, the demo, Help or diagnostics off; no household data, credentials, device identities or entered private text are present.
+These are five store composites. Each is a PNG in RGB with no alpha channel, at 1320 × 2868. Original vector frames, captions and the Hafa identity surround a complete, actual `HafaRemotePublic` / `ReleasePublic` 1.0 (12) simulator capture at its native aspect ratio. The source captures are in [HR-057 evidence](../../../../docs/evidence/HR-057/).
 
-All five PNGs were inspected as pixels and checked for dimensions and file/source hashes before copying. `source-manifest.json` records the actual source filename, its hash, final asset hash and whether control is simulated. It contains no private absolute renderer path. The native captures and their limitations are documented in [HR-049 evidence](../../../../docs/evidence/HR-049/README.md).
+No interface, connection result or hardware response was invented. The offline-demo image and its in-app labels identify the simulation. Neither the captions nor the captured interface name a TV manufacturer, as required by App Review Guideline 5.2.1 (HR-055). The scenes contain no household data, credentials, device identities or entered private text.
 
-These images match the public interface; no build 8 version label is visible. HR-051 must verify that the final candidate interface still matches before selecting this set in App Store Connect. They are store presentation evidence, not physical Q70AA testing, measured reliability, a completed hardware video or spoken VoiceOver certification.
+`source-manifest.json` records the following for each image:
+- the source capture and its hash
+- the final asset hash
+- whether control is simulated
 
 | File | Scene |
 | --- | --- |
-| `01-welcome.png` | Same-network Samsung setup entry |
+| `01-welcome.png` | First launch with Add TV and Try Without a TV |
 | `02-offline-demo.png` | Explicitly labeled interactive offline demo |
-| `03-simple-setup.png` | Samsung approval and network guidance |
-| `04-help.png` | Reachable Help, offline preview and diagnostics |
-| `05-sharing.png` | Default-off diagnostics and preview-before-sharing controls |
+| `03-simple-setup.png` | Pairing and network guidance |
+| `04-help.png` | Help, offline preview and diagnostics |
+| `05-sharing.png` | Diagnostics off by default, with a report preview before sharing |
+
+These images are store presentation, not hardware evidence.
