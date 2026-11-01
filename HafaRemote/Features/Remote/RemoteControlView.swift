@@ -647,7 +647,7 @@ struct RemoteControlView: View {
         } else if isReconnecting {
             "You can retry now or find your TV."
         } else if canPowerOnTV {
-            "The TV is offline. Use the power button to turn it on, or retry the connection."
+            "The TV is offline. Turn it on, or retry the connection."
         } else {
             "Controls are paused. Reconnect once while the TV is on to enable power on."
         }
