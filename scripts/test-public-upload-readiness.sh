@@ -13,7 +13,7 @@ commit = IO.popen(["git", "-C", repo, "rev-parse", "HEAD"], &:read).strip
 tree = IO.popen(["git", "-C", repo, "rev-parse", "HEAD^{tree}"], &:read).strip
 now = Time.now.utc.iso8601
 receipt = {
-  "schemaVersion" => 1, "appId" => "6808899369", "bundleId" => "com.shimizutechnology.hafaremote", "version" => "1.0", "build" => "9", "audience" => "public", "sourceCommit" => commit, "sourceTree" => tree,
+  "schemaVersion" => 1, "appId" => "6808899369", "bundleId" => "com.shimizutechnology.hafaremote", "version" => "1.0", "build" => "12", "audience" => "public", "sourceCommit" => commit, "sourceTree" => tree,
   "exportSHA256" => Digest::SHA256.file(File.join(folder, "export", "Synthetic.ipa")).hexdigest,
   "archiveSHA256" => ArchiveContentDigest.sha256(File.join(folder, "archive")),
   "policy" => {"state" => "LIVE", "url" => "https://shimizu-technology.com/hafa-remote/privacy", "verifiedAt" => now, "retentionText" => "Synthetic fixture policy statement; not a real owner period."},

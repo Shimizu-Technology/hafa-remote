@@ -3,8 +3,8 @@
 ## Identity and audiences
 
 - Version: `1.0`; app and embedded control extension share the reviewed build number.
-- Source build: `9`, selected after authenticated builds/uploads at 2026-10-08T23:29:00Z showed only 1–8. This is a source candidate, not an upload/processing receipt. Existing `8` is already used and delivered as **Internal Only** TestFlight.
-- Public candidate: HR-051 selects the next number only after a fresh authenticated build **and upload** inventory check. An earlier observation that `9` was unused is not a reservation or current proof.
+- Public candidate: `12`, selected on November 1, 2026 after an authenticated build inventory showed only 1–11. It follows App Review's October 30 rejection of `9` (Guidelines 5.2.1 and 2.1). Build `9` stays in the record as the rejected submission. `10` and `11` are Internal Only.
+- Internal three-brand testing remains at `11` until a new internal delivery is requested.
 - App Store Connect Apple ID: `6808899369`; SKU: `hafa-remote-ios`.
 - App bundle ID: `com.shimizutechnology.hafaremote`; control extension: `com.shimizutechnology.hafaremote.controls`.
 - Apple team: `4T358A5S74`; minimum OS: iOS 18.4; iPhone only.

@@ -19,7 +19,7 @@ rescue JSON::ParserError, SystemCallError
 end
 require_fact(r.is_a?(Hash), "Public release evidence must be a record.")
 require_fact(r["schemaVersion"] == 1, "Unknown public release evidence schema.")
-require_fact(r.values_at("appId", "bundleId", "version", "build", "audience") == ["6808899369", "com.shimizutechnology.hafaremote", "1.0", "9", "public"], "Public release evidence does not match this app/build/audience.")
+require_fact(r.values_at("appId", "bundleId", "version", "build", "audience") == ["6808899369", "com.shimizutechnology.hafaremote", "1.0", "12", "public"], "Public release evidence does not match this app/build/audience.")
 require_fact(r["sourceCommit"] == source_commit && r["sourceTree"] == source_tree, "Public release evidence does not match the exact source commit/tree.")
 ipas = Dir.glob(File.join(export_path, "*.ipa")).select { |path| File.file?(path) }
 require_fact(ipas.length == 1, "Public release evidence requires exactly one validated IPA.")
