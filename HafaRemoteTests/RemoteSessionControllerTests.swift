@@ -398,6 +398,8 @@ struct RemoteSessionControllerTests {
         )
 
         #expect(result == selectedTV)
+        // The store projects controller state asynchronously; wait for that projection.
+        await waitUntil { @MainActor in store.connectedTV == selectedTV }
         #expect(store.connectedTV == selectedTV)
     }
 
