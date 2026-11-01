@@ -141,6 +141,77 @@ struct RemoteSessionControllerTests {
         await session.disconnect()
     }
 
+    @Test(
+        "An unreachable saved Samsung TV stays offline and keeps automatic recovery",
+        arguments: [MockConnectionFailure.samsungDeviceInfoUnavailable, .samsungDeviceInfoInvalid])
+    fileprivate func samsungDeviceInfoFailureKeepsSavedRecovery(failure: MockConnectionFailure) async throws {
+        let clock = ManualRemoteSessionClock()
+        let tv = try documentationTV(address: "192.0.2.45", reportedDeviceID: "synthetic-saved-tv")
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.failure(failure), .success(tv: tv, announcesPairing: false)])
+        let session = RemoteSessionController(driver: driver, clock: clock, configuration: .production)
+        await session.connect(to: tv.connectionTarget)
+        // Offline, not a dead-end failure: the bounded retry is already scheduled.
+        #expect(await session.state == .reconnecting(attempt: 1))
+        let firstDelay = try #require(RemoteSessionConfiguration.production.reconnectDelays.first)
+        await resume(clock: clock, duration: firstDelay)
+        await waitUntil { await session.state == .connected(tv) }
+        #expect(await driver.connectCallCount == 2)
+        await session.disconnect()
+    }
+
+    @Test("A new address that does not answer as a supported TV is reported as unsupported")
+    func unreadableNewAddressIsUnsupported() async throws {
+        let driver = MockRemoteSessionDriver(outcomes: [.failure(.samsungDeviceInfoInvalid)])
+        let session = RemoteSessionController(
+            driver: driver, configuration: testConfiguration(reconnectDelays: [.seconds(1)]))
+        await session.connect(to: "192.0.2.46")
+        #expect(await session.state == .unsupported)
+        #expect(await driver.connectCallCount == 1)
+        await session.disconnect()
+    }
+
+    @Test("Turning the TV off from the app reconnects on the next foreground return")
+    func powerOffReconnectsOnNextForeground() async throws {
+        let tv = try documentationTV(address: "192.0.2.47", reportedDeviceID: "synthetic-power-tv")
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false), .success(tv: tv, announcesPairing: false)])
+        let session = RemoteSessionController(
+            driver: driver, configuration: testConfiguration(reconnectDelays: []))
+        await session.connect(to: tv.connectionTarget)
+        #expect(await session.state == .connected(tv))
+
+        #expect(try await session.powerOffAndDisconnect(expectedDeviceKey: tv.stableDeviceKey))
+        #expect(await session.state == .idle)
+        #expect(await driver.sentCommands == [.powerOff])
+        await session.networkReachabilityChanged(isReachable: false)
+        await session.networkReachabilityChanged(isReachable: true)
+        #expect(await driver.connectCallCount == 1)
+
+        await session.applicationDidEnterBackground()
+        #expect(await session.state == .idle)
+        await session.applicationWillEnterForeground()
+        #expect(await session.state == .connected(tv))
+        #expect(await driver.connectCallCount == 2)
+        await session.disconnect()
+    }
+
+    @Test("An explicit disconnect after power-off forgets the pending foreground reconnect")
+    func disconnectClearsPoweredOffTarget() async throws {
+        let tv = try documentationTV(address: "192.0.2.48", reportedDeviceID: "synthetic-power-tv")
+        let driver = MockRemoteSessionDriver(
+            outcomes: [.success(tv: tv, announcesPairing: false), .success(tv: tv, announcesPairing: false)])
+        let session = RemoteSessionController(
+            driver: driver, configuration: testConfiguration(reconnectDelays: []))
+        await session.connect(to: tv.connectionTarget)
+        #expect(try await session.powerOffAndDisconnect(expectedDeviceKey: tv.stableDeviceKey))
+        await session.disconnect()
+        await session.applicationDidEnterBackground()
+        await session.applicationWillEnterForeground()
+        #expect(await session.state == .idle)
+        #expect(await driver.connectCallCount == 1)
+    }
+
     @Test("Automatic reconnect promotes first-pair discovery into a saved authenticated target")
     func reconnectPinsFirstPairedIdentity() async throws {
         let address = try PrivateIPv4Address(documentationAddressForTesting: "198.51.100.43")
@@ -2258,6 +2329,8 @@ private enum MockConnectionFailure: Sendable {
     case sonyRemoteHandshakeTimedOut
     case vizioIdentityChanged
     case vizioUnrecognizedDeviceInfo
+    case samsungDeviceInfoUnavailable
+    case samsungDeviceInfoInvalid
 }
 
 private enum MockConnectionOutcome: Sendable {
@@ -2381,6 +2454,10 @@ private actor MockRemoteSessionDriver: RemoteSessionDriving {
             throw VizioPairingCoordinatorError.deviceIdentityChanged
         case .failure(.vizioUnrecognizedDeviceInfo):
             throw VizioPairingCoordinatorError.unrecognizedDeviceInfo
+        case .failure(.samsungDeviceInfoUnavailable):
+            throw SamsungDeviceInfoError.unavailable
+        case .failure(.samsungDeviceInfoInvalid):
+            throw SamsungDeviceInfoError.invalidResponse
         }
     }
 
@@ -3050,6 +3127,15 @@ private func testTV(
         address: try PrivateIPv4Address(address),
         modelName: model,
         firmwareVersion: "1001.2"
+    )
+}
+
+private func documentationTV(address: String, reportedDeviceID: String) throws -> PairedSamsungTV {
+    PairedSamsungTV(
+        reportedDeviceID: reportedDeviceID,
+        address: try PrivateIPv4Address(documentationAddressForTesting: address),
+        modelName: "Synthetic Model",
+        firmwareVersion: nil
     )
 }
 

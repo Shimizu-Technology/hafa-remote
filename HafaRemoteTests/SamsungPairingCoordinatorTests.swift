@@ -41,6 +41,33 @@ struct SamsungPairingCoordinatorTests {
                 == otherCredential)
     }
 
+    @Test("A discovered Samsung TV keeps its advertised name and discovery identity after pairing")
+    func discoveredTargetKeepsAdvertisedMetadata() async throws {
+        let issuedCredential = try SamsungPairingCredential(
+            token: "synthetic-token",
+            certificateSHA256: Data(repeating: 9, count: 32)
+        )
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: InMemorySamsungCredentialStore(),
+            transport: StubSamsungTransport(issuedCredential: issuedCredential)
+        )
+        let target = TVConnectionTarget(
+            brand: .samsung,
+            reportedDeviceID: "synthetic-advertisement",
+            address: try PrivateIPv4Address("192.168.10.20"),
+            controlPort: 8002,
+            suggestedDisplayName: "Synthetic Den TV",
+            discoveryIdentifier: "synthetic-advertisement"
+        )
+
+        let tv = try await coordinator.connect(to: target) {}
+
+        #expect(tv.displayName == "Synthetic Den TV")
+        #expect(tv.discoveryIdentifier == "synthetic-advertisement")
+        #expect(tv.reportedDeviceID == "synthetic-device-id")
+    }
+
     @Test("The select convenience forwards one semantic select command")
     func selectConvenienceForwardsSemanticCommand() async throws {
         let coordinator = SetupCoordinatorStub(suspendsPairing: false)

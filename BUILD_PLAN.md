@@ -8,6 +8,36 @@
 
 ## Samsung App Store 1.0 cycle
 
+### App Review response (October 30 rejection)
+
+App Review rejected public 1.0 (9) on October 30, 2026 under Guideline 5.2.1 (Samsung content and marketing without authorization) and 2.1 (a physical-device video of pairing and the full workflow). On November 1 Leon approved removing Samsung branding from the public build and listing, fixing the reconnect defects found in the November 1 audit, and delivering the next public candidate to TestFlight for his testing before resubmission. Resubmission is a separate, later decision.
+
+### HR-054 — Keep saved-TV recovery alive after common failures
+
+- [ ] Treat a failed Samsung device-information probe as offline for a remembered TV, so bounded retry, address recovery and wake-then-reconnect continue; an unreadable reply at a new manual address stays unsupported.
+- [ ] Remember a TV turned off from the app and reconnect it on the next foreground return without reconnecting immediately; any explicit connect, disconnect or forget clears that.
+- [ ] Keep the advertised name and discovery identity when the public build pairs a discovered Samsung TV.
+- [ ] Closing setup after only browsing leaves the saved TV's own recovery running; Forget TV stops the TV's session before removing its credential.
+- [ ] Deterministic tests for each path; full gate, review and CI.
+
+**Acceptance:** [HR-054](docs/HR-054-RECONNECT-RELIABILITY.md). Physical Samsung behavior (wake timing, standby and address change) is verified by Leon on the TestFlight candidate.
+
+### HR-055 — Brand-neutral public build and listing
+
+- [ ] Public in-app copy, permission text, default names, demo and About contain no manufacturer name; the internal build keeps brand-specific testing copy.
+- [ ] Public listing (subtitle, keywords, promotional text, description, review notes) and screenshots contain no manufacturer name or logo.
+- [ ] Gate checks keep manufacturer names out of the public strings and metadata.
+
+### HR-056 — Review-facing remote clarity
+
+- [ ] Standby and offline make the working power action primary; the connected header never offers opposing power actions together.
+- [ ] Theme accent replaces the low-contrast asset accent; the offline demo is reachable from the first-launch screen.
+
+### HR-057 — Public TestFlight candidate
+
+- [ ] Verify the next unused build number, archive/export the merged public source, upload the App Store-eligible build and confirm processing and internal tester availability.
+- [ ] Prepare (do not submit) the App Review reply, video checklist and updated listing for Leon's resubmission decision.
+
 ### HR-053 — Recover discovery automatically when home Wi-Fi returns
 
 **Owner request:** Research, implement and review automatic setup/saved-TV recovery, then deliver the next internal TestFlight build for household testing.

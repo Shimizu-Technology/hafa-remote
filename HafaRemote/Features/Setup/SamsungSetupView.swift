@@ -159,7 +159,8 @@ struct TVSetupView: View {
                 repairTask?.cancel()
                 repairTask = nil
                 resetPairingCodeSubmission()
-                guard !session.canSendCommands else { return }
+                // Leave a saved TV's own recovery running when setup only browsed.
+                guard hasAttemptedSetupConnection, !session.canSendCommands else { return }
                 Task {
                     await session.disconnect(clearRememberedTV: false)
                 }

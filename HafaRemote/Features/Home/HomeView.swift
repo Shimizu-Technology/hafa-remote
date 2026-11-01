@@ -512,6 +512,11 @@ struct HomeView: View {
             throw error
         }
 
+        // Stop the TV's own session first so an in-flight reconnect cannot
+        // save its credential again after removal.
+        if affectsActiveSession {
+            await session.disconnect()
+        }
         try await session.removePairingCredential(
             for: savedTV.lastKnownAddress,
             reportedDeviceID: savedTV.reportedDeviceID,
@@ -527,9 +532,6 @@ struct HomeView: View {
         }
 
         TVConveniencePreferences.shared.forget(stableDeviceKey: removedKey)
-        if affectsActiveSession {
-            await session.disconnect()
-        }
         selection.removeSelection(
             for: removedKey,
             replacementDeviceKey: replacementDeviceKey
