@@ -214,7 +214,7 @@ struct RemoteControlView: View {
                 .disabled(
                     isPoweringOnTV || isPoweringOffTV || isAwaitingApproval
                         || (offersPowerOff && !capabilities.contains(.powerOff))
-                        || (!offersPowerOff && !canPowerOnTV)
+                        || (!offersPowerOff && !canOfferPowerOn)
                 )
                 .accessibilityLabel(
                     powerAccessibilityLabel
@@ -319,7 +319,7 @@ struct RemoteControlView: View {
                 .font(.subheadline)
                 .foregroundStyle(HafaTheme.secondaryText)
 
-            if canPowerOnTV {
+            if canOfferPowerOn {
                 Label(
                     powerOnWasVerified
                         ? "Power on worked previously for this TV and network."
@@ -688,10 +688,14 @@ struct RemoteControlView: View {
 
     /// Power on is the action most likely to help when the TV is asleep or offline.
     /// `canPowerOnTV` already reflects each brand's wake path, including a saved
-    /// wake address. Pairing failures need Find TV instead, so they offer no retry.
+    /// wake address. Pairing failures need Find TV instead, so they offer no retry
+    /// and no power-on.
+    private var canOfferPowerOn: Bool {
+        canPowerOnTV && (isConnected || recoveryActions.contains(.retryConnection))
+    }
+
     private var offersPrimaryPowerOn: Bool {
-        canPowerOnTV && !isAwaitingApproval
-            && (recoveryActions.contains(.retryConnection) || (isConnected && powerState == .standby))
+        canOfferPowerOn && !isAwaitingApproval && (!isConnected || powerState == .standby)
     }
 
     private var statusSymbol: String {
