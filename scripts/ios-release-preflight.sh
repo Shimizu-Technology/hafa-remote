@@ -163,7 +163,7 @@ if [[ "$local_network_copy" != *"supported TVs"* && "$local_network_copy" != *"T
   echo "Local-network permission copy must tell people it controls supported TVs." >&2
   exit 1
 fi
-if [[ "$distribution_audience" == public ]] && grep -Eiq '\b(samsung|tizen|sony|bravia|vizio|smartcast|lg|webos|roku|hisense|tcl)\b' <<<"$local_network_copy"; then
+if [[ "$distribution_audience" == public ]] && grep -Eiq '\b(samsung|tizen|sony|bravia|vizio|smartcast|lg|webos|roku|hisense|tcl)' <<<"$local_network_copy"; then
   echo "Public local-network permission copy must not name a TV manufacturer." >&2
   exit 1
 fi
@@ -229,7 +229,8 @@ require "uri"
 path = ENV.fetch("METADATA_PATH")
 if ENV.fetch("DISTRIBUTION_AUDIENCE") == "public"
   # App Review 5.2.1: the public listing names no TV manufacturer or platform.
-  manufacturer = /\b(samsung|tizen|sony|bravia|vizio|smartcast|lg|webos|roku|hisense|tcl)\b/i
+  # A leading boundary also catches compounds such as "SamsungTVs" or "TizenOS".
+  manufacturer = /\b(samsung|tizen|sony|bravia|vizio|smartcast|lg|webos|roku|hisense|tcl)/i
   Dir.glob(File.join(path, "*.txt")).sort.each do |file|
     abort "#{File.basename(file)} names a TV manufacturer" if File.read(file, encoding: "UTF-8").match?(manufacturer)
   end
