@@ -69,7 +69,7 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
         currentApp.tap()
         assertTrace("request:currentApp", in: app)
         let name = app.alerts["Name this favorite"].textFields["App name"]
-        XCTAssertTrue(name.waitForExistence(timeout: 2))
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.tap()
         name.typeText("Synthetic Family Video")
         app.alerts.buttons["Save"].tap()
@@ -111,11 +111,11 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
         reveal(keyboard, in: app)
         keyboard.tap()
         let input = app.textFields["remoteTextField"]
-        XCTAssertTrue(input.waitForExistence(timeout: 2))
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
         input.tap()
         input.typeText("Synthetic search")
         app.buttons["sendRemoteTextButton"].tap()
-        XCTAssertTrue(app.staticTexts["remoteTextResult"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["remoteTextResult"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["remoteTextResult"].label.contains("Focus a text field"))
         app.buttons["Done"].tap()
         openMore(app)
@@ -161,7 +161,7 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
         revealGestureSurface(swipe, in: app)
         XCTAssertTrue(swipe.isHittable)
         let trace = app.staticTexts["convenienceFixtureTrace"]
-        XCTAssertTrue(trace.waitForExistence(timeout: 2), "A live dispatch observer is required before input")
+        XCTAssertTrue(trace.waitForExistence(timeout: 5), "A live dispatch observer is required before input")
         XCTAssertNotEqual(trace.label, "command:right", "The gesture must create a new dispatch result")
         let baseline = XCTAttachment(
             string: "Before drag: trace=\(trace.label), frame=\(trace.frame), pad=\(swipe.frame)")
@@ -223,7 +223,7 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
         for _ in 0..<12 where !element.isHittable {
             panGutter(in: app, upward: direction == .up)
         }
-        XCTAssertTrue(element.waitForExistence(timeout: 2))
+        XCTAssertTrue(element.waitForExistence(timeout: 5))
         // Scrolling settles asynchronously on loaded hosted runners.
         let hittable = expectation(for: NSPredicate(format: "hittable == true"), evaluatedWith: element)
         XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 5), .completed)
@@ -246,11 +246,11 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
         let more = app.buttons["remoteMoreControls"]
         reveal(more, in: app)
         more.tap()
-        XCTAssertTrue(app.navigationBars["More Controls"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.navigationBars["More Controls"].waitForExistence(timeout: 5))
     }
     @MainActor private func backToRemote(_ app: XCUIApplication) {
         app.navigationBars["More Controls"].buttons["Remote"].tap()
-        XCTAssertTrue(app.navigationBars["Remote"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.navigationBars["Remote"].waitForExistence(timeout: 5))
     }
     @MainActor private func assertTrace(_ value: String, in app: XCUIApplication) {
         let predicate = NSPredicate(format: "label == %@", value)

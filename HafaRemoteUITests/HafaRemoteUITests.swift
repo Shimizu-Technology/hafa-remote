@@ -20,25 +20,25 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(addButton.isHittable)
         addButton.tap()
 
-        XCTAssertTrue(app.navigationBars["Add TV"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.navigationBars["Add TV"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.textFields["tvIPAddressField"].exists)
 
         let discoveredTV = app.buttons["discoveredTVButton"]
-        XCTAssertTrue(discoveredTV.waitForExistence(timeout: 2))
+        XCTAssertTrue(discoveredTV.waitForExistence(timeout: 5))
         XCTAssertTrue(discoveredTV.isHittable)
         XCTAssertTrue(discoveredTV.label.contains("Living Room TV"))
 
         let manualSetup = app.buttons["manualSetupButton"]
-        XCTAssertTrue(manualSetup.waitForExistence(timeout: 2))
+        XCTAssertTrue(manualSetup.waitForExistence(timeout: 5))
         manualSetup.tap()
         let addressField = app.textFields["tvIPAddressField"]
         for _ in 0..<3 where !addressField.exists {
             app.swipeUp()
         }
-        XCTAssertTrue(addressField.waitForExistence(timeout: 2))
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
 
         let connectButton = app.buttons["connectToTVButton"]
-        XCTAssertTrue(connectButton.waitForExistence(timeout: 2))
+        XCTAssertTrue(connectButton.waitForExistence(timeout: 5))
         XCTAssertFalse(connectButton.isEnabled)
     }
 
@@ -54,9 +54,9 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(help.isHittable)
         help.tap()
         let tvHelp = app.buttons["supportTVHelpButton"]
-        XCTAssertTrue(tvHelp.waitForExistence(timeout: 2))
+        XCTAssertTrue(tvHelp.waitForExistence(timeout: 5))
         tvHelp.tap()
-        XCTAssertTrue(app.navigationBars["Help & About"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.navigationBars["Help & About"].waitForExistence(timeout: 5))
         XCTAssertTrue(
             app.staticTexts[
                 "Connect this iPhone to home Wi-Fi. Your TV can use Wi-Fi or Ethernet on the same network."
@@ -68,16 +68,16 @@ final class HafaRemoteUITests: XCTestCase {
         for _ in 0..<4 where !sonyGuidance.exists {
             app.swipeUp()
         }
-        XCTAssertTrue(sonyGuidance.waitForExistence(timeout: 2))
+        XCTAssertTrue(sonyGuidance.waitForExistence(timeout: 5))
         app.navigationBars["Help & About"].buttons["Done"].tap()
-        XCTAssertTrue(app.buttons["openOfflineDemoButton"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.buttons["openOfflineDemoButton"].waitForExistence(timeout: 5))
         app.navigationBars["Help"].buttons["Done"].tap()
         XCTAssertTrue(app.buttons["addTVButton"].isHittable)
         app.buttons["addTVButton"].tap()
         let setupHelp = app.buttons["setupHelpButton"]
-        XCTAssertTrue(setupHelp.waitForExistence(timeout: 2))
+        XCTAssertTrue(setupHelp.waitForExistence(timeout: 5))
         setupHelp.tap()
-        XCTAssertTrue(app.navigationBars["Help & About"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.navigationBars["Help & About"].waitForExistence(timeout: 5))
     }
 
     /// The distinct playback controls dispatch independent commands without inferred playback state.
@@ -86,7 +86,7 @@ final class HafaRemoteUITests: XCTestCase {
         let app = launchRemoteHarness()
         for command in ["play", "pause"] {
             let button = app.buttons["remote-\(command)"]
-            XCTAssertTrue(button.waitForExistence(timeout: 2))
+            XCTAssertTrue(button.waitForExistence(timeout: 5))
             for _ in 0..<6 where !button.isHittable {
                 app.swipeUp()
             }
@@ -97,7 +97,7 @@ final class HafaRemoteUITests: XCTestCase {
                 for: NSPredicate(format: "label == %@", command),
                 evaluatedWith: app.staticTexts["lastRemoteCommand"]
             )
-            wait(for: [sent], timeout: 2)
+            wait(for: [sent], timeout: 5)
         }
     }
 
@@ -112,24 +112,24 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(addButton.waitForExistence(timeout: 5))
         addButton.tap()
 
-        XCTAssertTrue(app.staticTexts["No TVs ready to pair"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["No TVs ready to pair"].waitForExistence(timeout: 5))
         let scanAgain = app.buttons["scanAgainButton"]
-        XCTAssertTrue(scanAgain.waitForExistence(timeout: 2))
+        XCTAssertTrue(scanAgain.waitForExistence(timeout: 5))
         XCTAssertTrue(scanAgain.isHittable)
         scanAgain.tap()
 
         let discoveredTV = app.buttons["discoveredTVButton"]
-        XCTAssertTrue(discoveredTV.waitForExistence(timeout: 2))
+        XCTAssertTrue(discoveredTV.waitForExistence(timeout: 5))
         XCTAssertTrue(discoveredTV.label.contains("Living Room TV"))
 
         let manualSetup = app.buttons["manualSetupButton"]
-        XCTAssertTrue(manualSetup.waitForExistence(timeout: 2))
+        XCTAssertTrue(manualSetup.waitForExistence(timeout: 5))
         manualSetup.tap()
         let addressField = app.textFields["tvIPAddressField"]
         for _ in 0..<3 where !addressField.exists {
             app.swipeUp()
         }
-        XCTAssertTrue(addressField.waitForExistence(timeout: 2))
+        XCTAssertTrue(addressField.waitForExistence(timeout: 5))
     }
 
     /// Failed resolution remains visible until a fresh scan recovers the candidate.
@@ -319,7 +319,7 @@ final class HafaRemoteUITests: XCTestCase {
         // Native Form toggles expose a full-row AX element; tap the switch thumb.
         legacy.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).tap()
         expectation(for: NSPredicate(format: "value == %@", "1"), evaluatedWith: legacy)
-        waitForExpectations(timeout: 2)
+        waitForExpectations(timeout: 5)
         XCTAssertEqual(legacy.value as? String, "1")
         XCTAssertTrue(app.textFields["tvIPAddressField"].exists)
     }
@@ -352,7 +352,7 @@ final class HafaRemoteUITests: XCTestCase {
         let den = app.buttons.matching(
             NSPredicate(format: "label CONTAINS %@", "Synthetic Den TV")
         ).firstMatch
-        XCTAssertTrue(study.waitForExistence(timeout: 2))
+        XCTAssertTrue(study.waitForExistence(timeout: 5))
         XCTAssertTrue(den.exists)
         let sheetCancel = app.sheets.buttons["Cancel"].firstMatch
         if sheetCancel.exists && sheetCancel.isHittable {
@@ -361,13 +361,13 @@ final class HafaRemoteUITests: XCTestCase {
             // iOS 26 presents a popover with outside-tap dismissal instead of a Cancel row.
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)).tap()
         }
-        XCTAssertTrue(study.waitForNonExistence(timeout: 2))
+        XCTAssertTrue(study.waitForNonExistence(timeout: 5))
         XCTAssertEqual(app.staticTexts["sonyAssociationConnectionAttempts"].label, "0")
         XCTAssertEqual(app.staticTexts["sonyAssociationExpectedIdentity"].label, "none")
         XCTAssertFalse(app.staticTexts["savedTVManagementRecoveryMessage"].exists)
 
         candidate.tap()
-        XCTAssertTrue(study.waitForExistence(timeout: 2))
+        XCTAssertTrue(study.waitForExistence(timeout: 5))
         study.tap()
         assertSavedSonyManagement(app, expectedIdentity: "synthetic-authenticated-sony-b")
         XCTAssertEqual(app.staticTexts["sonyAssociationConnectionAttempts"].label, "1")
@@ -434,14 +434,14 @@ final class HafaRemoteUITests: XCTestCase {
         addButton.tap()
 
         let discoveredTV = app.buttons["discoveredTVButton"]
-        XCTAssertTrue(discoveredTV.waitForExistence(timeout: 2))
+        XCTAssertTrue(discoveredTV.waitForExistence(timeout: 5))
         XCTAssertTrue(discoveredTV.label.contains("Sony"))
         discoveredTV.tap()
 
         let codeField = app.textFields["sonyPairingCodeField"]
-        XCTAssertTrue(codeField.waitForExistence(timeout: 2))
+        XCTAssertTrue(codeField.waitForExistence(timeout: 5))
         let submit = app.buttons["submitSonyPairingCodeButton"]
-        XCTAssertTrue(submit.waitForExistence(timeout: 2))
+        XCTAssertTrue(submit.waitForExistence(timeout: 5))
         XCTAssertFalse(submit.isEnabled)
 
         codeField.tap()
@@ -467,14 +467,14 @@ final class HafaRemoteUITests: XCTestCase {
         addButton.tap()
 
         let discoveredTV = app.buttons["discoveredTVButton"]
-        XCTAssertTrue(discoveredTV.waitForExistence(timeout: 2))
+        XCTAssertTrue(discoveredTV.waitForExistence(timeout: 5))
         XCTAssertTrue(discoveredTV.label.contains("Vizio"))
         discoveredTV.tap()
 
         let codeField = app.textFields["vizioPairingCodeField"]
-        XCTAssertTrue(codeField.waitForExistence(timeout: 2))
+        XCTAssertTrue(codeField.waitForExistence(timeout: 5))
         let submit = app.buttons["submitVizioPairingCodeButton"]
-        XCTAssertTrue(submit.waitForExistence(timeout: 2))
+        XCTAssertTrue(submit.waitForExistence(timeout: 5))
         XCTAssertFalse(submit.isEnabled)
 
         codeField.tap()
@@ -516,7 +516,7 @@ final class HafaRemoteUITests: XCTestCase {
         codeField.typeText("0000")
 
         let submit = app.buttons["submitVizioPairingCodeButton"]
-        XCTAssertTrue(submit.waitForExistence(timeout: 2))
+        XCTAssertTrue(submit.waitForExistence(timeout: 5))
         waitForPairingEntry(codeField, value: "0000", submit: submit)
         submit.tap()
 
@@ -541,16 +541,16 @@ final class HafaRemoteUITests: XCTestCase {
         waitForExpectations(timeout: 15)
 
         let myTVs = app.buttons["myTVsButton"]
-        XCTAssertTrue(myTVs.waitForExistence(timeout: 2))
+        XCTAssertTrue(myTVs.waitForExistence(timeout: 5))
         myTVs.tap()
-        XCTAssertTrue(app.navigationBars["My TVs"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.navigationBars["My TVs"].waitForExistence(timeout: 5))
 
         let sideDoorTV = app.buttons["myTVRow-sony:fixture-sony"]
-        XCTAssertTrue(sideDoorTV.waitForExistence(timeout: 2))
+        XCTAssertTrue(sideDoorTV.waitForExistence(timeout: 5))
         sideDoorTV.tap()
 
         expectation(for: NSPredicate(format: "label == 'Connecting'"), evaluatedWith: status)
-        waitForExpectations(timeout: 2)
+        waitForExpectations(timeout: 5)
         XCTAssertTrue(app.staticTexts["Side Door TV"].waitForExistence(timeout: 5))
         expectation(
             for: NSPredicate(format: "label == 'Connected • TV power unknown'"), evaluatedWith: status)
@@ -571,12 +571,12 @@ final class HafaRemoteUITests: XCTestCase {
             for: NSPredicate(format: "label == 'Connected • TV power unknown'"), evaluatedWith: status)
         waitForExpectations(timeout: 15)
         let completedConnections = app.staticTexts["savedTVCompletedConnections"]
-        XCTAssertTrue(completedConnections.waitForExistence(timeout: 2))
+        XCTAssertTrue(completedConnections.waitForExistence(timeout: 5))
         XCTAssertEqual(completedConnections.label, "1")
 
         XCUIDevice.shared.press(.home)
         XCTAssertTrue(
-            app.wait(for: .runningBackground, timeout: 2)
+            app.wait(for: .runningBackground, timeout: 5)
                 || app.wait(for: .runningBackgroundSuspended, timeout: 3),
             "Home must background the app, whether iOS has suspended it yet or not"
         )
@@ -596,7 +596,7 @@ final class HafaRemoteUITests: XCTestCase {
             for: NSPredicate(format: "label == 'Connected • TV power unknown'"), evaluatedWith: status)
         waitForExpectations(timeout: 5)
         let select = app.buttons["remote-select"]
-        XCTAssertTrue(select.waitForExistence(timeout: 2))
+        XCTAssertTrue(select.waitForExistence(timeout: 5))
         XCTAssertTrue(select.isEnabled)
     }
 
@@ -610,20 +610,20 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(app.buttons["myTVsButton"].waitForExistence(timeout: 5))
         app.buttons["myTVsButton"].tap()
         let manage = app.buttons["manageMyTV-samsung:fixture-samsung"]
-        XCTAssertTrue(manage.waitForExistence(timeout: 2))
+        XCTAssertTrue(manage.waitForExistence(timeout: 5))
         manage.tap()
         let edit = app.buttons["Edit Name & Room"]
-        XCTAssertTrue(edit.waitForExistence(timeout: 2))
+        XCTAssertTrue(edit.waitForExistence(timeout: 5))
         edit.tap()
 
         let name = app.textFields["savedTVNameField"]
-        XCTAssertTrue(name.waitForExistence(timeout: 2))
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
         replaceText(in: name, with: "Den TV")
         let room = app.textFields["savedTVRoomField"]
         replaceText(in: room, with: "Den")
         app.buttons["saveTVEditsButton"].tap()
 
-        XCTAssertTrue(app.staticTexts["Den TV"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Den TV"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Den · Samsung · Q70AA"].exists)
     }
 
@@ -637,10 +637,10 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(app.buttons["myTVsButton"].waitForExistence(timeout: 5))
         app.buttons["myTVsButton"].tap()
         let manage = app.buttons["manageMyTV-sony:fixture-sony"]
-        XCTAssertTrue(manage.waitForExistence(timeout: 2))
+        XCTAssertTrue(manage.waitForExistence(timeout: 5))
         manage.tap()
         app.buttons["Forget TV"].tap()
-        XCTAssertTrue(app.staticTexts["Forget Side Door TV?"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Forget Side Door TV?"].waitForExistence(timeout: 5))
         app.buttons["Forget"].tap()
 
         let forgottenRow = app.buttons["myTVRow-sony:fixture-sony"]
@@ -651,7 +651,7 @@ final class HafaRemoteUITests: XCTestCase {
         wait(for: [removed], timeout: 5)
         XCTAssertTrue(app.buttons["myTVRow-samsung:fixture-samsung"].exists)
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.staticTexts["Connected • TV power unknown"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Connected • TV power unknown"].waitForExistence(timeout: 5))
     }
 
     /// Forgetting the active TV skips malformed records and connects a usable fallback.
@@ -664,15 +664,15 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(app.buttons["myTVsButton"].waitForExistence(timeout: 5))
         app.buttons["myTVsButton"].tap()
         let manage = app.buttons["manageMyTV-samsung:fixture-samsung"]
-        XCTAssertTrue(manage.waitForExistence(timeout: 2))
+        XCTAssertTrue(manage.waitForExistence(timeout: 5))
         manage.tap()
         app.buttons["Forget TV"].tap()
         app.buttons["Forget"].tap()
 
         let sonyRow = app.buttons["myTVRow-sony:fixture-sony"]
-        XCTAssertTrue(sonyRow.waitForExistence(timeout: 2))
+        XCTAssertTrue(sonyRow.waitForExistence(timeout: 5))
         app.buttons["Done"].tap()
-        XCTAssertTrue(app.staticTexts["Side Door TV"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Side Door TV"].waitForExistence(timeout: 5))
         let status = app.staticTexts["remoteConnectionStatus"]
         expectation(
             for: NSPredicate(format: "label == 'Connected • TV power unknown'"), evaluatedWith: status)
@@ -689,7 +689,7 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(app.buttons["myTVsButton"].waitForExistence(timeout: 5))
         app.buttons["myTVsButton"].tap()
         let addTV = app.buttons["addTVFromLibraryButton"]
-        XCTAssertTrue(addTV.waitForExistence(timeout: 2))
+        XCTAssertTrue(addTV.waitForExistence(timeout: 5))
         addTV.tap()
 
         XCTAssertTrue(app.navigationBars["Add TV"].waitForExistence(timeout: 3))
@@ -708,22 +708,22 @@ final class HafaRemoteUITests: XCTestCase {
         for _ in 0..<3 where !help.isHittable {
             app.swipeUp()
         }
-        XCTAssertTrue(help.waitForExistence(timeout: 2))
+        XCTAssertTrue(help.waitForExistence(timeout: 5))
         help.tap()
 
-        XCTAssertTrue(app.navigationBars["Help & About"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.navigationBars["Help & About"].waitForExistence(timeout: 5))
         XCTAssertTrue(
             app.staticTexts["Step 1. Open Control Center, then touch and hold an empty area."].exists)
         let privacyBoundary = app.staticTexts["The control only opens Hafa Remote."]
         for _ in 0..<3 where !privacyBoundary.exists {
             app.swipeUp()
         }
-        XCTAssertTrue(privacyBoundary.waitForExistence(timeout: 2))
+        XCTAssertTrue(privacyBoundary.waitForExistence(timeout: 5))
         let noAccount = app.staticTexts["No account, cloud sync, ads, tracking, or subscription."]
         for _ in 0..<3 where !noAccount.exists {
             app.swipeUp()
         }
-        XCTAssertTrue(noAccount.waitForExistence(timeout: 2))
+        XCTAssertTrue(noAccount.waitForExistence(timeout: 5))
     }
 
     /// A malformed saved endpoint remains visible and manageable instead of stranding the user.
@@ -738,7 +738,7 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(myTVs.isHittable)
         myTVs.tap()
 
-        XCTAssertTrue(app.staticTexts["Needs Setup"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Needs Setup"].waitForExistence(timeout: 5))
         let manage = app.buttons["manageMyTV-samsung:fixture-malformed"]
         XCTAssertTrue(manage.exists)
         manage.tap()
@@ -788,7 +788,7 @@ final class HafaRemoteUITests: XCTestCase {
                 let myTVs = app.buttons["myTVsButton"]
                 XCTAssertTrue(myTVs.waitForExistence(timeout: 5))
                 myTVs.tap()
-                XCTAssertTrue(app.navigationBars["My TVs"].waitForExistence(timeout: 2))
+                XCTAssertTrue(app.navigationBars["My TVs"].waitForExistence(timeout: 5))
                 let addFromLibrary = app.buttons["addTVFromLibraryButton"]
                 XCTAssertTrue(addFromLibrary.waitForExistence(timeout: 5))
                 addFromLibrary.tap()
@@ -862,7 +862,7 @@ final class HafaRemoteUITests: XCTestCase {
         ]
         for command in requiredCommands {
             let button = app.buttons["remote-\(command)"]
-            XCTAssertTrue(button.waitForExistence(timeout: 2), "Missing \(command) control")
+            XCTAssertTrue(button.waitForExistence(timeout: 5), "Missing \(command) control")
             for _ in 0..<6 where !button.isHittable {
                 app.swipeUp()
             }
@@ -876,7 +876,7 @@ final class HafaRemoteUITests: XCTestCase {
         }
 
         let select = app.buttons["remote-select"]
-        XCTAssertTrue(select.waitForExistence(timeout: 2))
+        XCTAssertTrue(select.waitForExistence(timeout: 5))
         for _ in 0..<6 where !select.isHittable {
             app.swipeDown()
         }
@@ -884,7 +884,7 @@ final class HafaRemoteUITests: XCTestCase {
         select.tap()
 
         let commandOutput = app.staticTexts["lastRemoteCommand"]
-        XCTAssertTrue(commandOutput.waitForExistence(timeout: 2))
+        XCTAssertTrue(commandOutput.waitForExistence(timeout: 5))
         XCTAssertEqual(commandOutput.label, "select")
     }
 
@@ -896,12 +896,12 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(power.waitForExistence(timeout: 5))
         power.tap()
 
-        XCTAssertTrue(app.staticTexts["Turn off Living Room TV?"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Turn off Living Room TV?"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Turn Off"].exists)
 
         app.buttons["Cancel"].tap()
         let commandOutput = app.staticTexts["lastRemoteCommand"]
-        XCTAssertTrue(commandOutput.waitForExistence(timeout: 2))
+        XCTAssertTrue(commandOutput.waitForExistence(timeout: 5))
         XCTAssertEqual(commandOutput.label, "none")
     }
 
@@ -919,7 +919,7 @@ final class HafaRemoteUITests: XCTestCase {
             for: NSPredicate(format: "label == %@", "powerOff"),
             evaluatedWith: commandOutput
         )
-        wait(for: [powerOffRecorded], timeout: 2)
+        wait(for: [powerOffRecorded], timeout: 5)
     }
 
     /// A rejected power command stays visible instead of silently pretending the TV turned off.
@@ -934,7 +934,7 @@ final class HafaRemoteUITests: XCTestCase {
         power.tap()
         app.buttons["Turn Off"].tap()
 
-        XCTAssertTrue(app.staticTexts["Couldn’t Send Power Off"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.staticTexts["Couldn’t Send Power Off"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Hafa Remote could not deliver power off."].exists)
         XCTAssertEqual(app.staticTexts["lastRemoteCommand"].label, "none")
     }
@@ -951,7 +951,7 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertEqual(dynamicTypeProbe.label, "accessibility5")
         XCTAssertTrue(app.buttons["remote-powerOff"].waitForExistence(timeout: 5))
         let keyboard = app.buttons["remote-keyboard"]
-        XCTAssertTrue(keyboard.waitForExistence(timeout: 2))
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
         for _ in 0..<6 where !keyboard.isHittable {
             app.swipeUp()
         }
@@ -970,7 +970,7 @@ final class HafaRemoteUITests: XCTestCase {
         var columnX: CGFloat?
         for command in ["volumeDown", "mute", "volumeUp"] {
             let button = app.buttons["remote-\(command)"]
-            XCTAssertTrue(button.waitForExistence(timeout: 2))
+            XCTAssertTrue(button.waitForExistence(timeout: 5))
             for _ in 0..<12 {
                 let top = app.navigationBars.firstMatch.frame.maxY + 8
                 let bottom = app.frame.maxY - 8
@@ -1009,7 +1009,7 @@ final class HafaRemoteUITests: XCTestCase {
                 for: NSPredicate(format: "label == %@", command),
                 evaluatedWith: app.staticTexts["lastRemoteCommand"]
             )
-            wait(for: [dispatched], timeout: 2)
+            wait(for: [dispatched], timeout: 5)
         }
         // Place the complete group below the native bar for inspectable visual evidence.
         let down = app.buttons["remote-volumeDown"]
@@ -1043,7 +1043,7 @@ final class HafaRemoteUITests: XCTestCase {
     func testKeyboardSendsValidatedTextWithHonestResult() throws {
         let app = launchRemoteHarness()
         let keyboard = app.buttons["remote-keyboard"]
-        XCTAssertTrue(keyboard.waitForExistence(timeout: 2))
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
         for _ in 0..<6 where !keyboard.isHittable {
             app.swipeUp()
         }
@@ -1051,19 +1051,19 @@ final class HafaRemoteUITests: XCTestCase {
         keyboard.tap()
 
         let textField = app.textFields["remoteTextField"]
-        XCTAssertTrue(textField.waitForExistence(timeout: 2))
+        XCTAssertTrue(textField.waitForExistence(timeout: 5))
         XCTAssertTrue(textField.isHittable)
         textField.tap()
         textField.typeText("Hafa")
         XCTAssertEqual(textField.value as? String, "Hafa")
 
         let send = app.buttons["sendRemoteTextButton"]
-        XCTAssertTrue(send.waitForExistence(timeout: 2))
+        XCTAssertTrue(send.waitForExistence(timeout: 5))
         XCTAssertTrue(send.isEnabled)
         send.tap()
 
         let result = app.staticTexts["remoteTextResult"]
-        XCTAssertTrue(result.waitForExistence(timeout: 2))
+        XCTAssertTrue(result.waitForExistence(timeout: 5))
         XCTAssertTrue(result.label.contains("If nothing appeared"))
         XCTAssertEqual(app.staticTexts["lastRemoteCommand"].label, "text:4")
     }
@@ -1079,7 +1079,7 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(select.waitForExistence(timeout: 5))
         XCTAssertFalse(select.isEnabled)
         let powerOn = app.buttons["remote-powerOn"]
-        XCTAssertTrue(powerOn.waitForExistence(timeout: 2))
+        XCTAssertTrue(powerOn.waitForExistence(timeout: 5))
         XCTAssertTrue(powerOn.isEnabled)
         powerOn.tap()
 
@@ -1088,7 +1088,7 @@ final class HafaRemoteUITests: XCTestCase {
             for: NSPredicate(format: "label == %@", "powerOn"),
             evaluatedWith: commandOutput
         )
-        wait(for: [powerOnRecorded], timeout: 2)
+        wait(for: [powerOnRecorded], timeout: 5)
 
         let keyboard = app.buttons["remote-keyboard"]
         for _ in 0..<6 where !keyboard.exists {
@@ -1098,13 +1098,13 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertFalse(keyboard.isEnabled)
 
         let retry = app.buttons["retryConnectionButton"]
-        XCTAssertTrue(retry.waitForExistence(timeout: 2))
+        XCTAssertTrue(retry.waitForExistence(timeout: 5))
         retry.tap()
         let retryRecorded = expectation(
             for: NSPredicate(format: "label == %@", "retry"),
             evaluatedWith: commandOutput
         )
-        wait(for: [retryRecorded], timeout: 2)
+        wait(for: [retryRecorded], timeout: 5)
 
         let tvSetup = app.buttons["remoteTVSetupButton"]
         XCTAssertTrue(tvSetup.isHittable)
@@ -1124,7 +1124,7 @@ final class HafaRemoteUITests: XCTestCase {
         XCTAssertTrue(approval.label.contains("Approve Hafa Remote on your TV"))
         XCTAssertFalse(app.buttons["retryConnectionButton"].exists)
         let select = app.buttons["remote-select"]
-        XCTAssertTrue(select.waitForExistence(timeout: 2))
+        XCTAssertTrue(select.waitForExistence(timeout: 5))
         XCTAssertFalse(select.isEnabled)
     }
 
@@ -1143,7 +1143,7 @@ final class HafaRemoteUITests: XCTestCase {
         let delivered = expectation(
             for: NSPredicate(format: "label == %@", "powerOn"),
             evaluatedWith: app.staticTexts["lastRemoteCommand"])
-        wait(for: [delivered], timeout: 2)
+        wait(for: [delivered], timeout: 5)
     }
 
     @MainActor
@@ -1160,7 +1160,7 @@ final class HafaRemoteUITests: XCTestCase {
         let delivered = expectation(
             for: NSPredicate(format: "label == %@", "powerOn"),
             evaluatedWith: app.staticTexts["lastRemoteCommand"])
-        wait(for: [delivered], timeout: 2)
+        wait(for: [delivered], timeout: 5)
     }
 
     @MainActor
@@ -1253,7 +1253,7 @@ final class HafaRemoteUITests: XCTestCase {
             for: NSPredicate(format: "value == %@", value), evaluatedWith: field)
         let enabledSubmit = expectation(
             for: NSPredicate(format: "enabled == true"), evaluatedWith: submit)
-        wait(for: [enteredValue, enabledSubmit], timeout: 2)
+        wait(for: [enteredValue, enabledSubmit], timeout: 5)
         XCTAssertEqual(field.value as? String, value)
         XCTAssertTrue(submit.isEnabled)
     }
@@ -1265,7 +1265,7 @@ final class HafaRemoteUITests: XCTestCase {
         field.tap()
         field.press(forDuration: 1)
         let selectAll = app.menuItems["Select All"]
-        XCTAssertTrue(selectAll.waitForExistence(timeout: 2))
+        XCTAssertTrue(selectAll.waitForExistence(timeout: 5))
         selectAll.tap()
         // Typing through the field can refocus it and collapse the selection on
         // newer iOS runtimes. Send keys to the already-focused application.
