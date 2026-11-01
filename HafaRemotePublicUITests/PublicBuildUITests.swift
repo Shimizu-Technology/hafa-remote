@@ -9,7 +9,10 @@ final class PublicBuildUITests: XCTestCase {
         app.buttons["homeHelpButton"].tap()
         XCTAssertTrue(app.buttons["supportTVHelpButton"].waitForExistence(timeout: 5))
         app.buttons["supportTVHelpButton"].tap()
-        XCTAssertTrue(app.staticTexts["Samsung"].waitForExistence(timeout: 5))
+        XCTAssertTrue(
+            app.staticTexts["Choose Allow when the TV asks to approve Hafa Remote."].waitForExistence(
+                timeout: 5))
+        XCTAssertFalse(app.staticTexts["Samsung"].exists)
         XCTAssertFalse(app.staticTexts["Sony"].exists)
         XCTAssertFalse(app.staticTexts["Vizio"].exists)
         let aboutDone = app.buttons["tvHelpDoneButton"]
@@ -29,22 +32,31 @@ final class PublicBuildUITests: XCTestCase {
     }
 
     @MainActor
-    func testManualSetupOffersOnlySamsung() throws {
+    func testFirstLaunchOffersTheOfflineDemo() throws {
+        let app = launch("-ui-testing-discovery-empty")
+        let demo = app.buttons["emptyStateDemoButton"]
+        XCTAssertTrue(demo.waitForExistence(timeout: 5))
+        demo.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["offlineDemoLabel"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    func testManualSetupNamesNoManufacturer() throws {
         let app = launch("-ui-testing-discovery-empty")
         app.buttons["addTVButton"].tap()
         XCTAssertTrue(app.staticTexts["tvBuildSupportDescription"].waitForExistence(timeout: 5))
         XCTAssertTrue(
-            app.staticTexts["tvBuildSupportDescription"].label.contains("Other TV brands are not enabled"))
+            app.staticTexts["tvBuildSupportDescription"].label.contains("approve Hafa Remote on screen"))
         let manual = app.buttons["manualSetupButton"]
         if !manual.waitForExistence(timeout: 5) { app.swipeUp() }
         XCTAssertTrue(manual.waitForExistence(timeout: 5))
         manual.tap()
-        let picker = app.buttons["manualTVBrandPicker"]
-        XCTAssertTrue(picker.waitForExistence(timeout: 5))
-        picker.tap()
-        XCTAssertTrue(app.buttons["Samsung"].exists)
-        XCTAssertFalse(app.buttons["Sony"].exists)
-        XCTAssertFalse(app.buttons["Vizio"].exists)
+        XCTAssertTrue(
+            app.staticTexts[
+                "Enter your TV's private address from its network settings. Choose Allow when the TV asks to approve Hafa Remote."
+            ].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["manualTVBrandPicker"].exists)
+        XCTAssertFalse(app.staticTexts["Samsung"].exists)
         XCTAssertFalse(app.switches["manualVizioLegacyConnection"].exists)
     }
 
@@ -60,7 +72,7 @@ final class PublicBuildUITests: XCTestCase {
         app.buttons["myTVsButton"].tap()
         XCTAssertFalse(app.staticTexts["Synthetic Sony Study TV"].exists)
         XCTAssertFalse(app.staticTexts["Synthetic Vizio Test TV"].exists)
-        XCTAssertTrue(app.staticTexts["Synthetic Samsung Living TV"].exists)
+        XCTAssertTrue(app.staticTexts["Synthetic Living TV"].exists)
     }
 
     @MainActor

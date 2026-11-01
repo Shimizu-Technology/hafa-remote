@@ -43,7 +43,7 @@ struct HomeView: View {
                 let savedTV = savedTV(for: tv)
                 RemoteControlView(
                     tvName: displayName(for: tv),
-                    modelName: tv.modelName,
+                    modelName: tv.brand.presentedDeviceText(tv.modelName),
                     statusLabel: statusLabel,
                     isConnected: isPresentedTVConnected,
                     powerState: session.observedPowerState,
@@ -275,6 +275,19 @@ struct HomeView: View {
                         .foregroundStyle(HafaTheme.onAccent)
                         .accessibilityIdentifier("addTVButton")
                         .disabled(restoration.isRestoring)
+
+                        NavigationLink {
+                            DemoRemoteView()
+                        } label: {
+                            Label("Try Without a TV", systemImage: "play.rectangle")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .frame(minHeight: 48)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(HafaTheme.accent)
+                        .accessibilityHint("Opens a clearly labeled simulated remote that contacts no TV.")
+                        .accessibilityIdentifier("emptyStateDemoButton")
 
                         Label("Same home network. Just you and your TV.", systemImage: "wifi")
                             .font(.footnote)
@@ -567,7 +580,7 @@ struct HomeView: View {
     private func powerOnHelpText(for brand: TVBrand) -> String {
         switch brand {
         case .samsung:
-            "Requires Power On With Mobile in the Samsung TV's Network settings."
+            "Requires Power On With Mobile in the TV's Network settings."
         case .sony:
             "Requires Remote Start or network standby in the Sony TV's settings."
         case .vizio:
@@ -576,12 +589,12 @@ struct HomeView: View {
     }
 
     private func powerOnFailureText(for brand: TVBrand) -> String {
-        "The \(brand.displayName) TV did not respond. Confirm the iPhone and TV use the same Wi-Fi, enable \(powerOnSettingName(for: brand)), then try again."
+        "\(brand.tvSubject) did not respond. Confirm the iPhone and TV use the same Wi-Fi, enable \(powerOnSettingName(for: brand)), then try again."
     }
 
     /// Describes an undelivered power-off action without guessing which layer rejected it.
     private func powerOffFailureText(for brand: TVBrand) -> String {
-        "Hafa Remote could not deliver power off to the \(brand.displayName) TV. Confirm it is still connected, then try again."
+        "Hafa Remote could not deliver power off to \(brand.tvPhrase). Confirm it is still connected, then try again."
     }
 
     private func powerOnSettingName(for brand: TVBrand) -> String {
@@ -698,7 +711,8 @@ struct HomeView: View {
                 SavedTV(
                     brand: tv.brand,
                     reportedDeviceID: tv.reportedDeviceID,
-                    displayName: tv.displayName ?? tv.brand.defaultDeviceName,
+                    displayName: tv.displayName.map(tv.brand.presentedDeviceText)
+                        ?? tv.brand.defaultDeviceName,
                     modelName: tv.modelName,
                     firmwareVersion: tv.firmwareVersion,
                     lastKnownAddress: tv.address.rawValue,
@@ -987,7 +1001,7 @@ private struct MyTVsView: View {
 
     /// Combines optional room context with stable brand and model details.
     private func savedTVDetail(_ savedTV: SavedTV) -> String {
-        let device = "\(savedTV.brand.displayName) · \(savedTV.modelName)"
+        let device = savedTV.brand.detail(model: savedTV.modelName)
         let detail: String
         if let roomName = savedTV.roomName, !roomName.isEmpty {
             detail = "\(roomName) · \(device)"
@@ -1109,11 +1123,16 @@ struct HafaRemoteHelpView: View {
                 )
                 .foregroundStyle(HafaTheme.secondaryText)
             }
-            Section("Pairing by brand") {
-                LabeledContent("Samsung") {
+            Section(TVBuildFlavor.compiled == .samsungPublic ? "Pairing" : "Pairing by brand") {
+                #if HAFA_PUBLIC_BUILD
                     Text("Choose Allow when the TV asks to approve Hafa Remote.")
                         .foregroundStyle(HafaTheme.secondaryText)
-                }
+                #else
+                    LabeledContent("Samsung") {
+                        Text("Choose Allow when the TV asks to approve Hafa Remote.")
+                            .foregroundStyle(HafaTheme.secondaryText)
+                    }
+                #endif
                 #if !HAFA_PUBLIC_BUILD
                     LabeledContent("Sony") {
                         Text("Enter the six-character code shown on the TV.")
@@ -1253,8 +1272,10 @@ private struct SavedTVEditor: View {
                 }
 
                 Section("Device") {
-                    LabeledContent("Brand", value: savedTV.brand.displayName)
-                    LabeledContent("Model", value: savedTV.modelName)
+                    if let brandName = savedTV.brand.presentedName {
+                        LabeledContent("Brand", value: brandName)
+                    }
+                    LabeledContent("Model", value: savedTV.brand.presentedDeviceText(savedTV.modelName))
                 }
             }
             .navigationTitle("Edit TV")

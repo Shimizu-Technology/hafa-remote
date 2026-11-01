@@ -140,7 +140,7 @@ struct RemoteConveniencesView: View {
                         Text(
                             context.brand == .sony
                                 ? "These links are not an installed-app inventory. Test each on your TV before saving it as a favorite."
-                                : "Some Samsung TVs do not provide an app list. Ordinary remote controls remain available."
+                                : "Some TVs do not provide an app list. Ordinary remote controls remain available."
                         )
                         .foregroundStyle(HafaTheme.secondaryText)
                     }

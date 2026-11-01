@@ -216,7 +216,9 @@ struct TVSetupView: View {
         Section("Search details") {
             ForEach(TVDistributionPolicy.current.permittedBrands, id: \.self) { brand in
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(brand.displayName).font(.subheadline.weight(.semibold))
+                    if let brandName = brand.presentedName {
+                        Text(brandName).font(.subheadline.weight(.semibold))
+                    }
                     Text(discovery.searchDetail(for: brand))
                         .font(.subheadline)
                         .foregroundStyle(HafaTheme.secondaryText)
@@ -299,10 +301,10 @@ struct TVSetupView: View {
                                 .accessibilityHidden(true)
 
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(television.displayName)
+                                Text(television.brand.presentedDeviceText(television.displayName))
                                     .font(.body.weight(.semibold))
                                     .foregroundStyle(.primary)
-                                Text("\(television.brand.displayName) · \(television.modelName)")
+                                Text(television.brand.detail(model: television.modelName))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -320,7 +322,13 @@ struct TVSetupView: View {
                     .buttonStyle(.plain)
                     .disabled(isBusy)
                     .accessibilityLabel(
-                        "\(television.displayName), \(television.brand.displayName), \(television.modelName)"
+                        [
+                            television.brand.presentedDeviceText(television.displayName),
+                            television.brand.presentedName,
+                            television.brand.presentedDeviceText(television.modelName),
+                        ]
+                        .compactMap { $0 }
+                        .joined(separator: ", ")
                     )
                     .accessibilityHint("Connects Hafa Remote to this TV")
                     .accessibilityIdentifier("discoveredTVButton")
@@ -416,7 +424,9 @@ struct TVSetupView: View {
             EmptyView()
         case .connecting:
             Section {
-                Label("Connecting to \(selectedTV?.displayName ?? "TV")…", systemImage: "wifi")
+                Label(
+                    "Connecting to \(selectedTV.map { $0.brand.presentedDeviceText($0.displayName) } ?? "TV")…",
+                    systemImage: "wifi")
             }
         case .pairing:
             Section {
@@ -484,20 +494,22 @@ struct TVSetupView: View {
                 Group {
                     Text(
                         TVBuildFlavor.compiled == .samsungPublic
-                            ? "Enter your Samsung TV's private address from its network settings. Choose Allow when the TV asks to approve Hafa Remote."
+                            ? "Enter your TV's private address from its network settings. Choose Allow when the TV asks to approve Hafa Remote."
                             : "Choose the TV brand, then enter its private address from the TV network settings. Samsung asks for approval, Sony shows a pairing code, and Vizio shows a PIN."
                     )
                     .font(.footnote)
                     .foregroundStyle(HafaTheme.secondaryText)
 
-                    Picker("TV Brand", selection: $manualBrand) {
-                        ForEach(TVDistributionPolicy.current.permittedBrands, id: \.self) { brand in
-                            Text(brand.displayName).tag(brand)
+                    if TVDistributionPolicy.current.permittedBrands.count > 1 {
+                        Picker("TV Brand", selection: $manualBrand) {
+                            ForEach(TVDistributionPolicy.current.permittedBrands, id: \.self) { brand in
+                                Text(brand.displayName).tag(brand)
+                            }
                         }
+                        .disabled(isBusy)
+                        .frame(minHeight: 44)
+                        .accessibilityIdentifier("manualTVBrandPicker")
                     }
-                    .disabled(isBusy)
-                    .frame(minHeight: 44)
-                    .accessibilityIdentifier("manualTVBrandPicker")
                     #if !HAFA_PUBLIC_BUILD
                         if manualBrand == .vizio {
                             Toggle("Try older Vizio connection", isOn: $usesLegacyVizioConnection)
@@ -667,7 +679,9 @@ struct TVSetupView: View {
     }
 
     private func savedTVChoiceLabel(_ saved: SavedTV) -> String {
-        [saved.displayName, saved.roomName, saved.modelName].compactMap { $0 }.joined(separator: " • ")
+        [saved.displayName, saved.roomName, saved.brand.presentedDeviceText(saved.modelName)].compactMap {
+            $0
+        }.joined(separator: " • ")
     }
 
     private func beginConnection(to television: DiscoveredTV, target: TVConnectionTarget) {
@@ -924,7 +938,7 @@ struct TVSetupView: View {
                 "Choose Allow if your TV asks to approve Hafa Remote."
             }
         case .connected(let tv):
-            "Connected to \(tv.modelName)."
+            "Connected to \(tv.brand.presentedDeviceText(tv.modelName))."
         case .denied:
             pairingDeniedMessage
         case .savedPairingRejected:

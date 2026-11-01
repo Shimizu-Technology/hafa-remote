@@ -16,8 +16,54 @@ enum TVBrand: String, Codable, CaseIterable, Hashable, Sendable {
         }
     }
 
+    /// The manufacturer name shown in the interface. The public build names no
+    /// manufacturer; brand identity remains internal for routing and credentials.
+    var presentedName: String? {
+        #if HAFA_PUBLIC_BUILD
+            nil
+        #else
+            displayName
+        #endif
+    }
+
     var defaultDeviceName: String {
-        "\(displayName) TV"
+        presentedName.map { "\($0) TV" } ?? "My TV"
+    }
+
+    /// "the Sony TV" in testing builds, "the TV" in the public build.
+    var tvPhrase: String {
+        presentedName.map { "the \($0) TV" } ?? "the TV"
+    }
+
+    /// Sentence-initial form of `tvPhrase`.
+    var tvSubject: String {
+        presentedName.map { "The \($0) TV" } ?? "The TV"
+    }
+
+    /// Joins the presented brand, when any, with a model for compact detail text.
+    func detail(model: String) -> String {
+        let model = presentedDeviceText(model)
+        return presentedName.map { "\($0) · \(model)" } ?? model
+    }
+
+    /// Presents a name or model the TV reports about itself. The public build drops
+    /// the manufacturer name and the "[TV]" tag some TVs advertise; stored values stay
+    /// unchanged for identity and diagnostics.
+    func presentedDeviceText(_ value: String) -> String {
+        #if HAFA_PUBLIC_BUILD
+            let cleaned =
+                value
+                .replacingOccurrences(
+                    of: #"^\s*\[TV\]\s*"#, with: "", options: [.regularExpression, .caseInsensitive]
+                )
+                .replacingOccurrences(of: displayName, with: "", options: .caseInsensitive)
+                .split(whereSeparator: \.isWhitespace)
+                .joined(separator: " ")
+                .trimmingCharacters(in: CharacterSet(charactersIn: " -·:,"))
+            return cleaned.isEmpty ? "TV" : cleaned
+        #else
+            value
+        #endif
     }
 }
 

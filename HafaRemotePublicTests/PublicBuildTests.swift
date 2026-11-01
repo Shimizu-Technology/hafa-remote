@@ -81,14 +81,40 @@ struct PublicBuildTests {
         store.stop()
     }
 
-    @Test("Public support reports describe only the active Samsung scope")
+    @Test("Public support reports describe the App Store scope without naming a manufacturer")
     func supportScopeIsExplicit() {
         let report = DiagnosticReport(
             metadata: DiagnosticMetadata(appVersion: "1", appBuild: "9", iOSVersion: "26"), events: [])
-        #expect(report.text.contains("Samsung public"))
-        #expect(report.text.contains("Other TV brands are not enabled"))
-        #expect(!report.text.contains("Sony"))
-        #expect(!report.text.contains("Vizio"))
+        #expect(report.text.contains("App Store"))
+        #expect(report.text.contains("approve Hafa Remote on screen"))
+        for manufacturer in ["Samsung", "Sony", "Vizio"] {
+            #expect(!report.text.contains(manufacturer))
+        }
+    }
+
+    @Test(
+        "Public presentation removes the manufacturer from TV-reported names and models",
+        arguments: [
+            ("[TV] Samsung Q70 Series (55)", "Q70 Series (55)"),
+            ("Samsung Q70A", "Q70A"),
+            ("SAMSUNG", "TV"),
+            ("QN55Q70AAFXZA", "QN55Q70AAFXZA"),
+            ("Living Room", "Living Room"),
+        ])
+    func publicDeviceTextIsBrandNeutral(reported: String, presented: String) {
+        #expect(TVBrand.samsung.presentedDeviceText(reported) == presented)
+        #expect(TVBrand.samsung.detail(model: reported) == presented)
+    }
+
+    @Test("Public presentation names no manufacturer")
+    func publicPresentationIsBrandNeutral() {
+        #expect(TVBrand.samsung.presentedName == nil)
+        #expect(TVBrand.samsung.defaultDeviceName == "My TV")
+        #expect(TVBrand.samsung.detail(model: "Q70A") == "Q70A")
+        #expect(TVBrand.samsung.tvSubject == "The TV")
+        let copy = Bundle.main.object(forInfoDictionaryKey: "NSLocalNetworkUsageDescription") as? String
+        #expect(copy?.contains("TVs you choose") == true)
+        #expect(copy?.contains("Samsung") == false)
     }
 
     @Test("Most-recent experimental records do not displace the eligible Samsung restoration")

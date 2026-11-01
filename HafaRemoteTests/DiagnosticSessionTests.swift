@@ -358,7 +358,7 @@ struct CancelledRequestProbe {
         await store.disconnect()
     }
     private func settle(_ predicate: @MainActor () -> Bool) async {
-        for _ in 0..<5000 {
+        for _ in SettleWindow() {
             if predicate() { return }
             await Task.yield()
         }
@@ -417,7 +417,7 @@ struct ClearFailedConnectionProbe {
             expectedSavedDeviceID: "synthetic-a")
         let connection = Task { @MainActor in await store.connect(to: target) }
         await gate.waitUntilStarted()
-        for _ in 0..<5000 {
+        for _ in SettleWindow() {
             if store.state == .connecting { break }
             await Task.yield()
         }
@@ -430,7 +430,7 @@ struct ClearFailedConnectionProbe {
         #expect(recorder.events.isEmpty)
         await gate.release()
         await connection.value
-        for _ in 0..<5000 {
+        for _ in SettleWindow() {
             if store.state == .savedPairingRejected { break }
             await Task.yield()
         }
@@ -770,7 +770,7 @@ struct DiagnosticAdmissionAndActivityTests {
             + "enabled: \(recorder.isEnabled); semantic events: \(recorder.events.map(\.kind.rawValue))."
     }
     private func advance(_ clock: DiagnosticActivityClock, duration: Duration) async {
-        for _ in 0..<5000 {
+        for _ in SettleWindow() {
             if await clock.fire(duration) { return }
             await Task.yield()
         }
@@ -1027,14 +1027,14 @@ private struct DiagnosticPendingRetryTests {
         }
     }
     private func settle(_ predicate: @MainActor () -> Bool) async {
-        for _ in 0..<5000 {
+        for _ in SettleWindow() {
             if predicate() { return }
             await Task.yield()
         }
         Issue.record("Retry projection did not settle")
     }
     private func advance(_ clock: DiagnosticActivityClock, _ duration: Duration) async {
-        for _ in 0..<5000 {
+        for _ in SettleWindow() {
             if await clock.fire(duration) { return }
             await Task.yield()
         }
@@ -1110,7 +1110,7 @@ private struct DiagnosticConvenienceCollectionTests {
             address: try PrivateIPv4Address(documentationAddressForTesting: "192.0.2.46"),
             controlPort: 8002, expectedSavedDeviceID: "synthetic-convenience")
         await store.connect(to: target)
-        for _ in 0..<5000 {
+        for _ in SettleWindow() {
             if store.connectedTV != nil { break }
             await Task.yield()
         }
@@ -1160,4 +1160,11 @@ private actor DiagnosticSuccessfulConvenienceDriver: RemoteSessionDriving {
     func send(_ command: RemoteCommand) {}
     func forget(addressText: String) {}
     func disconnect() {}
+}
+
+/// Yields until a wall-clock deadline rather than a fixed number of yields, so a
+/// loaded test runner gets the same real time for asynchronous projections to settle.
+private struct SettleWindow: Sequence, IteratorProtocol {
+    private let deadline = ContinuousClock.now + .seconds(10)
+    mutating func next() -> Void? { ContinuousClock.now < deadline ? () : nil }
 }

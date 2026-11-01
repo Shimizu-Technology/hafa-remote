@@ -17,7 +17,7 @@
 | Public Samsung | `HafaRemotePublic` / `ReleasePublic` | `public/en-US/` | `PublicExportOptions.plist`, Internal Only **false** |
 | Internal three-brand testing | `HafaRemote` / `Release` | `en-US/` | `ExportOptions.plist`, Internal Only **true** |
 
-The public source excludes Sony/Vizio protocols, accepts Samsung only and retains experimental saved records/credentials without using or deleting them. Manufacturer names describe compatibility; artwork and identity are original. Hafa Remote is independent and unaffiliated.
+The public source excludes Sony/Vizio protocols, accepts Samsung only and retains experimental saved records/credentials without using or deleting them. Since HR-055 the public interface, permission text and listing name no TV manufacturer (App Review 5.2.1, October 30, 2026); artwork and identity are original. Hafa Remote is independent and unaffiliated.
 
 ## Current scoped decision
 

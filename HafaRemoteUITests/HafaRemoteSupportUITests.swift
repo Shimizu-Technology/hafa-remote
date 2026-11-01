@@ -64,16 +64,16 @@ final class HafaRemoteSupportUITests: XCTestCase {
         openDemo(app)
         tap(app.buttons["demo-right"], in: app)
         tap(app.buttons["demo-select"], in: app)
-        XCTAssertTrue(app.staticTexts["demoActivity"].label.contains("Listen"))
+        assertLabel(app.staticTexts["demoActivity"], contains: "Listen")
         tap(app.buttons["demo-home"], in: app)
         tap(app.buttons["demo-volumeUp"], in: app)
-        XCTAssertTrue(app.staticTexts["demoVolumeState"].label.contains("21"))
+        assertLabel(app.staticTexts["demoVolumeState"], contains: "21")
         tap(app.buttons["demo-mute"], in: app)
-        XCTAssertTrue(app.staticTexts["demoVolumeState"].label.contains("muted"))
+        assertLabel(app.staticTexts["demoVolumeState"], contains: "muted")
         tap(app.buttons["demo-play"], in: app)
-        XCTAssertTrue(app.buttons["demo-pause"].exists)
+        XCTAssertTrue(app.buttons["demo-pause"].waitForExistence(timeout: 3))
         tap(app.buttons["demo-pause"], in: app)
-        XCTAssertTrue(app.buttons["demo-play"].exists)
+        XCTAssertTrue(app.buttons["demo-play"].waitForExistence(timeout: 3))
         tap(app.buttons["demo-powerOff"], in: app, upward: false)
         XCTAssertFalse(app.buttons["demo-up"].isEnabled)
         XCTAssertFalse(app.buttons["demo-select"].isEnabled)
@@ -85,7 +85,7 @@ final class HafaRemoteSupportUITests: XCTestCase {
         tap(app.buttons["demoSendTextButton"], in: app)
         XCTAssertFalse((field.value as? String ?? "").contains("Synthetic demo"))
         XCTAssertFalse(app.buttons["demoSendTextButton"].isEnabled)
-        XCTAssertTrue(app.staticTexts["demoActivity"].label.contains("No text was sent to a TV"))
+        assertLabel(app.staticTexts["demoActivity"], contains: "No text was sent to a TV")
         app.navigationBars["Try the Remote"].buttons["Help"].tap()
         let returnedToHelp = expectation(
             for: NSPredicate(format: "exists == false"),
@@ -100,7 +100,7 @@ final class HafaRemoteSupportUITests: XCTestCase {
             .joined(separator: "; ")
         let visibleVolume = volumeNodes.first(where: { $0.isHittable }) ?? restoredVolume
         XCTAssertTrue(visibleVolume.label.contains("20"), "Visible reentry volume: \(evidence)")
-        XCTAssertTrue(app.buttons["demo-play"].exists)
+        XCTAssertTrue(app.buttons["demo-play"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["demo-powerOff"].exists)
         XCTAssertFalse(app.alerts.firstMatch.exists)
     }
@@ -224,6 +224,12 @@ final class HafaRemoteSupportUITests: XCTestCase {
     @MainActor private func waitEnabled(_ element: XCUIElement) {
         let enabled = expectation(for: NSPredicate(format: "enabled == true"), evaluatedWith: element)
         wait(for: [enabled], timeout: 3)
+    }
+    /// Demo state updates after the tap returns; hosted runners can lag behind it.
+    @MainActor private func assertLabel(_ element: XCUIElement, contains text: String) {
+        let predicate = NSPredicate(format: "label CONTAINS %@", text)
+        let result = XCTWaiter.wait(for: [expectation(for: predicate, evaluatedWith: element)], timeout: 5)
+        XCTAssertEqual(result, .completed, "Expected \(element.identifier) to contain \(text)")
     }
     @MainActor private func tap(_ element: XCUIElement, in app: XCUIApplication, upward: Bool = true) {
         reveal(element, in: app, upward: upward)

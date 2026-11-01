@@ -1,1 +1,1 @@
-tv,remote,control,samsung,tizen,wifi,keyboard,volume,playback
+tv,remote,control,smart tv,tv remote,wifi,keyboard,volume,playback,home network

@@ -47,6 +47,9 @@ struct RemoteControlView: View {
             ScrollView {
                 VStack(spacing: dynamicTypeSize.isAccessibilitySize ? 24 : 18) {
                     remoteHeader
+                    if isConnected, powerState == .standby {
+                        standbyStatus
+                    }
                     if !isConnected {
                         if isReconnecting {
                             recoveryStatus
@@ -211,7 +214,7 @@ struct RemoteControlView: View {
                 .disabled(
                     isPoweringOnTV || isPoweringOffTV || isAwaitingApproval
                         || (offersPowerOff && !capabilities.contains(.powerOff))
-                        || (!offersPowerOff && (!canPowerOnTV || !capabilities.contains(.powerOn)))
+                        || (!offersPowerOff && !canOfferPowerOn)
                 )
                 .accessibilityLabel(
                     powerAccessibilityLabel
@@ -220,23 +223,20 @@ struct RemoteControlView: View {
                 .accessibilityIdentifier(offersPowerOff ? "remote-powerOff" : "remote-powerOn")
             }
 
-            if isConnected, powerState == .unknown, canPowerOnTV, capabilities.contains(.powerOn) {
-                Button("Send Power On", systemImage: "power") { powerOnTV() }
+            if isConnected, powerState == .unknown, canPowerOnTV {
+                Button("Screen dark? Turn On TV", systemImage: "power") { powerOnTV() }
+                    .font(.subheadline)
                     .frame(minHeight: 44)
                     .disabled(isPoweringOnTV || isPoweringOffTV)
                     .accessibilityHint("TV power is unknown. Sends an explicit power-on action.")
                     .accessibilityIdentifier("remote-explicitPowerOn")
             }
 
-            Label(
-                powerStatusLabel,
-                systemImage: isConnected
-                    ? "checkmark.circle.fill" : "arrow.trianglehead.2.clockwise.rotate.90"
-            )
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(isConnected ? HafaTheme.accent : HafaTheme.warning)
-            .labelStyle(.titleAndIcon)
-            .accessibilityIdentifier("remoteConnectionStatus")
+            Label(powerStatusLabel, systemImage: statusSymbol)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(isConnected && powerState != .standby ? HafaTheme.accent : HafaTheme.warning)
+                .labelStyle(.titleAndIcon)
+                .accessibilityIdentifier("remoteConnectionStatus")
         }
         .padding(16)
         .background(HafaTheme.surface, in: RoundedRectangle(cornerRadius: 24))
@@ -319,7 +319,7 @@ struct RemoteControlView: View {
                 .font(.subheadline)
                 .foregroundStyle(HafaTheme.secondaryText)
 
-            if canPowerOnTV {
+            if canOfferPowerOn {
                 Label(
                     powerOnWasVerified
                         ? "Power on worked previously for this TV and network."
@@ -331,23 +331,18 @@ struct RemoteControlView: View {
                 .accessibilityIdentifier("wakeCapabilityMessage")
             }
 
-            if recoveryActions.contains(.retryConnection) {
-                Button {
-                    Task { @MainActor in
-                        await retry()
-                    }
-                } label: {
-                    Label("Retry Connection", systemImage: "arrow.clockwise")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .frame(minHeight: 46)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(HafaTheme.accent)
-                .foregroundStyle(HafaTheme.onAccent)
-                .disabled(isPoweringOnTV)
-                .accessibilityIdentifier("retryConnectionButton")
+            if offersPrimaryPowerOn {
+                turnOnTVButton
+            }
 
+            if recoveryActions.contains(.retryConnection) {
+                if offersPrimaryPowerOn {
+                    retryButton.buttonStyle(.bordered)
+                } else {
+                    retryButton
+                        .buttonStyle(.borderedProminent)
+                        .foregroundStyle(HafaTheme.onAccent)
+                }
             }
 
             HStack {
@@ -649,8 +644,10 @@ struct RemoteControlView: View {
     private var recoveryMessage: String {
         if isPoweringOnTV {
             "Connecting to the TV and completing power on."
+        } else if isReconnecting {
+            "You can retry now or find your TV."
         } else if canPowerOnTV {
-            "The TV is offline. Use the power button to turn it on, or retry the connection."
+            "The TV is offline. Turn it on, or retry the connection."
         } else {
             "Controls are paused. Reconnect once while the TV is on to enable power on."
         }
@@ -688,6 +685,79 @@ struct RemoteControlView: View {
     }
 
     private var canControlTV: Bool { isConnected && powerState != .standby }
+
+    /// Power on is the action most likely to help when the TV is asleep or offline.
+    /// `canPowerOnTV` already reflects each brand's wake path, including a saved
+    /// wake address. Pairing failures need Find TV instead, so they offer no retry
+    /// and no power-on.
+    private var canOfferPowerOn: Bool {
+        canPowerOnTV && (isConnected || recoveryActions.contains(.retryConnection))
+    }
+
+    private var offersPrimaryPowerOn: Bool {
+        canOfferPowerOn && !isAwaitingApproval && (!isConnected || powerState == .standby)
+    }
+
+    private var statusSymbol: String {
+        if isConnected {
+            return powerState == .standby ? "moon.zzz.fill" : "checkmark.circle.fill"
+        }
+        if isReconnecting || isAwaitingApproval { return "arrow.trianglehead.2.clockwise.rotate.90" }
+        return "exclamationmark.circle.fill"
+    }
+
+    private var turnOnTVButton: some View {
+        Button {
+            powerOnTV()
+        } label: {
+            Label(isPoweringOnTV ? "Turning On TV…" : "Turn On TV", systemImage: "power")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 46)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(HafaTheme.accent)
+        .foregroundStyle(HafaTheme.onAccent)
+        .disabled(isPoweringOnTV || isPoweringOffTV)
+        .accessibilityHint(powerAccessibilityHint)
+        .accessibilityIdentifier("recoveryTurnOnTVButton")
+    }
+
+    private var retryButton: some View {
+        Button {
+            Task { @MainActor in
+                await retry()
+            }
+        } label: {
+            Label("Retry Connection", systemImage: "arrow.clockwise")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 46)
+        }
+        .tint(HafaTheme.accent)
+        .disabled(isPoweringOnTV)
+        .accessibilityIdentifier("retryConnectionButton")
+    }
+
+    /// Explains why connected controls are paused while the TV reports standby.
+    private var standbyStatus: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Your TV is in standby", systemImage: "moon.zzz.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(HafaTheme.primaryText)
+            Text("Turn it on to use the remote.")
+                .font(.subheadline)
+                .foregroundStyle(HafaTheme.secondaryText)
+            if offersPrimaryPowerOn {
+                turnOnTVButton
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(HafaTheme.surface, in: RoundedRectangle(cornerRadius: 24))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("standbyStatus")
+    }
 
     private var offersPowerOff: Bool { isConnected && powerState != .standby }
 

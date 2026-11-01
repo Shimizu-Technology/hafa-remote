@@ -41,7 +41,7 @@ struct DemoRemoteView: View {
                 }
                 Text(
                     TVBuildFlavor.compiled == .samsungPublic
-                        ? "Samsung remote preview. Demo capabilities are simulated; actual controls depend on the TV model, pairing, and verified protocol support."
+                        ? "Remote preview. Demo capabilities are simulated; actual controls depend on the TV model, pairing, and verified protocol support."
                         : "Demo capabilities are simulated. Actual TV controls depend on the model, pairing, and verified protocol support."
                 )
                 .font(.footnote)
