@@ -254,7 +254,8 @@ final class HafaRemoteConvenienceUITests: XCTestCase {
         let predicate = NSPredicate(format: "label == %@", value)
         let trace = app.staticTexts["convenienceFixtureTrace"]
         let condition = expectation(for: predicate, evaluatedWith: trace)
-        let result = XCTWaiter.wait(for: [condition], timeout: 3)
+        // Hosted runners can take several seconds to project a dispatch under load.
+        let result = XCTWaiter.wait(for: [condition], timeout: 10)
         if result != .completed {
             let state = trace.exists ? "label=\(trace.label), frame=\(trace.frame)" : "observer missing"
             let diagnostic = XCTAttachment(string: "Expected \(value); \(state)\n\(app.debugDescription)")
