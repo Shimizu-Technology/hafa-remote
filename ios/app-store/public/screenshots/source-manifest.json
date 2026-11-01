@@ -1,67 +1,47 @@
 [
   {
     "stem": "01-welcome",
-    "source": "public-release-first-launch.png",
-    "sourceSHA256": "72ae0b5cf78fe33eae9c94ffbcce802bb9e24466f339e47ff8e5200d07122824",
-    "sourceType": "Actual HR049 PublicRelease simulator capture",
+    "source": "public-release-12-first-launch.png",
+    "sourceSHA256": "36a2a1f75bbdbe3eef58657cdf77099cc52310df26b20c5dbf9d44f77b78ee9e",
+    "sourceType": "Actual HR057 PublicRelease 1.0 (12) simulator capture",
     "simulatedControl": false,
     "physicalTVEvidence": false,
-    "file": "01-welcome.png",
-    "width": 1320,
-    "height": 2868,
-    "mode": "RGB",
-    "SHA256": "18db51cdfe7898e14a8bb90efb727888d37a423dff5945e392631b395238308b"
+    "assetSHA256": "2df2214fcab790ce0b95db7c6b83d906cf8931a094dd79ae1f485bd1da722ea9"
   },
   {
     "stem": "02-offline-demo",
-    "source": "public-release-offline-demo.png",
-    "sourceSHA256": "a1a1bdcce4cf0688d24bf91213ee6dbfedbb97010dcab85fb753f77edf0d27aa",
-    "sourceType": "Actual HR049 PublicRelease simulator capture",
+    "source": "public-release-12-offline-demo.png",
+    "sourceSHA256": "31ba3fd69fe7875d8c9c5be2ab1c533d8e2c60059edfc1c3bd205df8c64e197c",
+    "sourceType": "Actual HR057 PublicRelease 1.0 (12) simulator capture",
     "simulatedControl": true,
     "physicalTVEvidence": false,
-    "file": "02-offline-demo.png",
-    "width": 1320,
-    "height": 2868,
-    "mode": "RGB",
-    "SHA256": "a7ae123afc98c464a9d470915193b4b4104fcdc62ade1d86628139561b396d28"
+    "assetSHA256": "531a58838946fb83711017d51267375331aabfb52c9a98c4f27c58f3c75b9769"
   },
   {
     "stem": "03-simple-setup",
-    "source": "public-release-samsung-help.png",
-    "sourceSHA256": "479e84a5579efe9ed60436eede3291f9f888af46d060d54d86fc601026c57f08",
-    "sourceType": "Actual HR049 PublicRelease simulator capture",
+    "source": "public-release-12-pairing-help.png",
+    "sourceSHA256": "331affaa1b624ce8b32961087e735ec53f72d7c34c3ad3aef004c696b9214cb4",
+    "sourceType": "Actual HR057 PublicRelease 1.0 (12) simulator capture",
     "simulatedControl": false,
     "physicalTVEvidence": false,
-    "file": "03-simple-setup.png",
-    "width": 1320,
-    "height": 2868,
-    "mode": "RGB",
-    "SHA256": "b3512bd43b62c0a16e87cbac2e9a534689bdb1b7aba9add715b8ae953a7e0f73"
+    "assetSHA256": "871ca244df5b63d735ca30b29c0b1b10c802f8bb611f2c120a3e9b7de14eee79"
   },
   {
     "stem": "04-help",
-    "source": "public-release-help.png",
-    "sourceSHA256": "9f746dd4243e86cc31fd4ab99801562353c60116c4e4fe399b2d264e7ab2f45b",
-    "sourceType": "Actual HR049 PublicRelease simulator capture",
+    "source": "public-release-12-help.png",
+    "sourceSHA256": "ea4d82e9f8902a172e91ef160641ee2d6d9526a4441271d3416d8f3548bca0b6",
+    "sourceType": "Actual HR057 PublicRelease 1.0 (12) simulator capture",
     "simulatedControl": false,
     "physicalTVEvidence": false,
-    "file": "04-help.png",
-    "width": 1320,
-    "height": 2868,
-    "mode": "RGB",
-    "SHA256": "ef6b6b146e2bee1e285a9a1b641aa745cffab8c9d733febc147d7316a5a25d04"
+    "assetSHA256": "05859379741c3598d71908abef404c4fa02a99a6ca2f9655e41c5c03ca005c63"
   },
   {
     "stem": "05-sharing",
-    "source": "public-release-diagnostics-off.png",
-    "sourceSHA256": "a1621ee2990f95b0d5aa3440c00cacf828658bb9798b42ffa9cf98384b8a22fb",
-    "sourceType": "Actual HR049 PublicRelease simulator capture",
+    "source": "public-release-12-diagnostics-off.png",
+    "sourceSHA256": "503b1f1a3adce66d241ab2e0ee359c47eef8443216e594c9f97afdc37dc80caa",
+    "sourceType": "Actual HR057 PublicRelease 1.0 (12) simulator capture",
     "simulatedControl": false,
     "physicalTVEvidence": false,
-    "file": "05-sharing.png",
-    "width": 1320,
-    "height": 2868,
-    "mode": "RGB",
-    "SHA256": "5155358c5bff43609b265ec0fd8a796327e1f265c3c5178e01ef9a97d3e8c008"
+    "assetSHA256": "a7e9e0658b9135c706f840fe9c0c6877b996155ccc35bdd939c0b52aaf79e062"
   }
 ]
