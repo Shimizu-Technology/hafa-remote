@@ -83,10 +83,12 @@ extension SamsungPairingCoordinator: RemoteSessionDriving {
         else {
             throw SamsungPairingCoordinatorError.unsupportedTokenAuthentication
         }
+        // Keep the advertised name and discovery identity so the saved TV is
+        // recognizable and can be rediscovered after its address changes.
         return try await pair(
             target: target,
             onWaitingForApproval: onWaitingForApproval
-        )
+        ).applyingDiscoveryMetadata(from: target)
     }
 
     /// The public composition uses this concrete witness; never discard the saved stable identity.
@@ -185,6 +187,9 @@ actor RemoteSessionController {
     private var lastNetworkReachability: Bool?
     private var targetAddressText: String?
     private var connectionTarget: TVConnectionTarget?
+    /// A TV turned off from this app stays remembered without reconnecting now;
+    /// the next foreground return tries it again so the remote is ready.
+    private var poweredOffTarget: (addressText: String, target: TVConnectionTarget?)?
     private var generation = UUID()
     private var reconnectAttempt = 0
 
@@ -283,6 +288,7 @@ actor RemoteSessionController {
         guard TVDistributionPolicy.current.permits(target.brand), driver.supports(target.brand) else {
             stateRequestID = requestID
             generation = UUID()
+            poweredOffTarget = nil
             targetAddressText = nil
             connectionTarget = nil
             reconnectAttempt = 0
@@ -317,6 +323,7 @@ actor RemoteSessionController {
         generation = UUID()
         stateRequestID = requestID
         let requestedGeneration = generation
+        poweredOffTarget = nil
         targetAddressText = addressText
         connectionTarget = target
         reconnectAttempt = 0
@@ -592,6 +599,7 @@ actor RemoteSessionController {
         else { throw CancellationError() }
         generation = UUID()
         let teardownGeneration = generation
+        poweredOffTarget = targetAddressText.map { ($0, connectionTarget) }
         targetAddressText = nil
         connectionTarget = nil
         reconnectAttempt = 0
@@ -605,6 +613,7 @@ actor RemoteSessionController {
     func disconnect() async {
         let activityStartedAt = ContinuousClock.now
         generation = UUID()
+        poweredOffTarget = nil
         targetAddressText = nil
         connectionTarget = nil
         reconnectAttempt = 0
@@ -629,6 +638,7 @@ actor RemoteSessionController {
 
         generation = UUID()
         let removalGeneration = generation
+        poweredOffTarget = nil
         targetAddressText = nil
         connectionTarget = nil
         reconnectAttempt = 0
@@ -820,6 +830,11 @@ actor RemoteSessionController {
     func applicationWillEnterForeground(activityStartedAt: ContinuousClock.Instant = .now) async {
         guard !isForeground else { return }
         isForeground = true
+        if targetAddressText == nil, let poweredOffTarget {
+            self.poweredOffTarget = nil
+            targetAddressText = poweredOffTarget.addressText
+            connectionTarget = poweredOffTarget.target
+        }
         guard targetAddressText != nil else { return }
         generation = UUID()
         let requestedGeneration = generation
@@ -1061,6 +1076,15 @@ actor RemoteSessionController {
                 return
             }
         #endif
+        // Samsung's device-information probe is the first contact on every connect.
+        // An unreadable reply from a remembered TV's cached address usually means
+        // the TV is booting or the address moved, so keep saved-TV recovery alive.
+        if error as? SamsungDeviceInfoError == .invalidResponse,
+            connectionTarget?.expectedSavedDeviceID == nil
+        {
+            transition(to: .unsupported, activityStartedAt: activityStartedAt)
+            return
+        }
         if Self.isUnsupportedError(error) {
             transition(to: .unsupported, activityStartedAt: activityStartedAt)
             return
@@ -1500,6 +1524,9 @@ actor RemoteSessionController {
     private static func isOfflineError(_ error: Error) -> Bool {
         if let error = error as? SamsungConnectionError {
             return error == .unavailable || error == .notConnected
+        }
+        if let error = error as? SamsungDeviceInfoError {
+            return error == .unavailable || error == .invalidResponse
         }
         #if !HAFA_PUBLIC_BUILD
             if let error = error as? SonyTLSChannelError {

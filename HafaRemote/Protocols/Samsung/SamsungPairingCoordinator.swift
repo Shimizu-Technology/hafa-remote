@@ -65,6 +65,11 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
     private var activeTV: ConnectedTV?
     private var activeAttemptID: SamsungConnectionAttemptID?
     private var mostRecentIdentityByAddress: [PrivateIPv4Address: SamsungPairingCredentialIdentity] = [:]
+    /// Removal counters let an attempt that outlives its cancellation detect that
+    /// the user removed this TV's stable pairing, so it never saves or restores it
+    /// again. Address-only removal targets only the legacy credential, as before.
+    private var credentialRemovalCount = 0
+    private var lastRemovalByIdentity: [SamsungPairingCredentialIdentity: Int] = [:]
 
     init(
         deviceInfoProvider: any SamsungDeviceInfoProviding,
@@ -117,6 +122,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
         }
 
         let transport = transport
+        let removalCountAtStart = credentialRemovalCount
         var attemptedAddress: PrivateIPv4Address?
         var attemptedIdentity: SamsungPairingCredentialIdentity?
         var previousCredential: SamsungPairingCredential?
@@ -165,9 +171,16 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                     throw SamsungPairingCoordinatorError.certificateChanged
                 }
                 try Task.checkCancellation()
+                guard
+                    !credentialWasRemoved(since: removalCountAtStart, identity: identity)
+                else { throw CancellationError() }
                 credentialSaveStarted = true
                 try await credentialStore.save(credential, for: identity)
                 try Task.checkCancellation()
+                if credentialWasRemoved(since: removalCountAtStart, identity: identity) {
+                    // The pairing was removed while this save was in flight.
+                    throw CancellationError()
+                }
 
                 let baseTelevision = ConnectedTV(
                     brand: .samsung,
@@ -197,8 +210,20 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
                 // was created in that interval before pair exits.
                 await transport.disconnect(attemptID: attemptID)
                 if credentialSaveStarted, let attemptedAddress, let attemptedIdentity {
-                    if let previousCredential {
+                    if credentialWasRemoved(since: removalCountAtStart, identity: attemptedIdentity) {
+                        try? await credentialStore.removeCredential(
+                            for: attemptedIdentity,
+                            legacyAddress: attemptedAddress
+                        )
+                    } else if let previousCredential {
                         try? await credentialStore.save(previousCredential, for: attemptedIdentity)
+                        // A removal can run while the restore awaits the store.
+                        if credentialWasRemoved(since: removalCountAtStart, identity: attemptedIdentity) {
+                            try? await credentialStore.removeCredential(
+                                for: attemptedIdentity,
+                                legacyAddress: attemptedAddress
+                            )
+                        }
                     } else {
                         try? await credentialStore.removeCredential(
                             for: attemptedIdentity,
@@ -258,6 +283,7 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
         let persistedIdentity = try reportedDeviceID.map {
             try SamsungPairingCredentialIdentity(reportedDeviceID: $0)
         }
+        if let persistedIdentity { recordCredentialRemoval(identity: persistedIdentity) }
         if let identity = persistedIdentity {
             let legacyAddress = try? PrivateIPv4Address(trimmedAddress)
             try await credentialStore.removeCredential(for: identity, legacyAddress: legacyAddress)
@@ -272,6 +298,16 @@ actor SamsungPairingCoordinator: SamsungPairingCoordinating {
             try await credentialStore.removeLegacyCredential(for: address)
             mostRecentIdentityByAddress[address] = nil
         }
+    }
+
+    /// Recorded before the store is touched, so a save that completes later still sees it.
+    private func recordCredentialRemoval(identity: SamsungPairingCredentialIdentity) {
+        credentialRemovalCount += 1
+        lastRemovalByIdentity[identity] = credentialRemovalCount
+    }
+
+    private func credentialWasRemoved(since count: Int, identity: SamsungPairingCredentialIdentity) -> Bool {
+        (lastRemovalByIdentity[identity] ?? 0) > count
     }
 
     func sessionObservation() async throws -> TVSessionObservation? {

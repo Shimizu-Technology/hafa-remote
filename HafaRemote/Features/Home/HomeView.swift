@@ -197,6 +197,9 @@ struct HomeView: View {
         .onChange(of: isShowingSetup) { _, isShowing in
             if isShowing {
                 addressRecovery.cancel()
+            } else if session.state == .offline {
+                // Setup cancelled recovery; resume it when the saved TV is still offline.
+                recoverSelectedTVAddressIfNeeded()
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -525,6 +528,13 @@ struct HomeView: View {
             throw error
         }
 
+        // Stop the TV's own recovery and session first so neither an address
+        // search nor an in-flight reconnect can pair it again after removal.
+        if affectsActiveSession {
+            selection.invalidatePendingWork()
+            addressRecovery.cancel()
+            await session.disconnect()
+        }
         try await session.removePairingCredential(
             for: savedTV.lastKnownAddress,
             reportedDeviceID: savedTV.reportedDeviceID,
@@ -540,9 +550,6 @@ struct HomeView: View {
         }
 
         TVConveniencePreferences.shared.forget(stableDeviceKey: removedKey)
-        if affectsActiveSession {
-            await session.disconnect()
-        }
         selection.removeSelection(
             for: removedKey,
             replacementDeviceKey: replacementDeviceKey
@@ -1350,6 +1357,15 @@ final class SavedTVSelectionCoordinator {
         isSwitching = false
         operationID = nil
         taskHolder.cancel()
+    }
+
+    /// Invalidates in-flight selection, wake and power work for the current selection
+    /// without changing which TV is selected.
+    func invalidatePendingWork() {
+        revision &+= 1
+        taskHolder.cancel()
+        isSwitching = false
+        operationID = nil
     }
 
     /// Clears a removed selection and optionally promotes a remaining saved TV.

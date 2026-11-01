@@ -41,6 +41,33 @@ struct SamsungPairingCoordinatorTests {
                 == otherCredential)
     }
 
+    @Test("A discovered Samsung TV keeps its advertised name and discovery identity after pairing")
+    func discoveredTargetKeepsAdvertisedMetadata() async throws {
+        let issuedCredential = try SamsungPairingCredential(
+            token: "synthetic-token",
+            certificateSHA256: Data(repeating: 9, count: 32)
+        )
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: InMemorySamsungCredentialStore(),
+            transport: StubSamsungTransport(issuedCredential: issuedCredential)
+        )
+        let target = TVConnectionTarget(
+            brand: .samsung,
+            reportedDeviceID: "synthetic-advertisement",
+            address: try PrivateIPv4Address("192.168.10.20"),
+            controlPort: 8002,
+            suggestedDisplayName: "Synthetic Den TV",
+            discoveryIdentifier: "synthetic-advertisement"
+        )
+
+        let tv = try await coordinator.connect(to: target) {}
+
+        #expect(tv.displayName == "Synthetic Den TV")
+        #expect(tv.discoveryIdentifier == "synthetic-advertisement")
+        #expect(tv.reportedDeviceID == "synthetic-device-id")
+    }
+
     @Test("The select convenience forwards one semantic select command")
     func selectConvenienceForwardsSemanticCommand() async throws {
         let coordinator = SetupCoordinatorStub(suspendsPairing: false)
@@ -435,6 +462,110 @@ struct SamsungPairingCoordinatorTests {
         #expect(await transport.hasActiveConnection)
 
         await coordinator.disconnect()
+    }
+
+    @Test(
+        "Removing a pairing while its save is in flight keeps it removed",
+        arguments: [true, false])
+    func removalDuringSaveWins(cancelsAttempt: Bool) async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let previousCredential = try SamsungPairingCredential(
+            token: "synthetic-previous-token",
+            certificateSHA256: Data(repeating: 12, count: 32)
+        )
+        let refreshedCredential = try SamsungPairingCredential(
+            token: "synthetic-refreshed-token",
+            certificateSHA256: Data(repeating: 13, count: 32)
+        )
+        let store = SuspendedSaveCredentialStore()
+        await store.seed(previousCredential, for: address)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: AttemptAwareSamsungTransport(issuedCredential: refreshedCredential)
+        )
+
+        let pairing = Task { try await coordinator.pair(addressText: address.rawValue) }
+        var saveStarts = store.firstSaveStarted.makeAsyncIterator()
+        _ = await saveStarts.next()
+        try await coordinator.removeCredential(
+            addressText: address.rawValue, reportedDeviceID: "synthetic-device-id")
+        if cancelsAttempt { pairing.cancel() }
+        await store.releaseFirstSave()
+
+        await #expect(throws: CancellationError.self) { try await pairing.value }
+        #expect(await store.credential(for: address) == nil)
+    }
+
+    @Test(
+        "Address-only removal during an in-flight save keeps the stable credential",
+        arguments: [true, false])
+    func addressOnlyRemovalDuringSaveKeepsStableCredential(cancelsAttempt: Bool) async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let previousCredential = try SamsungPairingCredential(
+            token: "synthetic-previous-token",
+            certificateSHA256: Data(repeating: 14, count: 32)
+        )
+        let refreshedCredential = try SamsungPairingCredential(
+            token: "synthetic-refreshed-token",
+            certificateSHA256: Data(repeating: 15, count: 32)
+        )
+        let store = SuspendedSaveCredentialStore()
+        await store.seed(previousCredential, for: address)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: AttemptAwareSamsungTransport(issuedCredential: refreshedCredential)
+        )
+
+        let pairing = Task { try await coordinator.pair(addressText: address.rawValue) }
+        var saveStarts = store.firstSaveStarted.makeAsyncIterator()
+        _ = await saveStarts.next()
+        try await coordinator.removeCredential(addressText: address.rawValue, reportedDeviceID: nil)
+        if cancelsAttempt { pairing.cancel() }
+        await store.releaseFirstSave()
+
+        if cancelsAttempt {
+            await #expect(throws: CancellationError.self) { try await pairing.value }
+            #expect(await store.credential(for: address) == previousCredential)
+        } else {
+            _ = try await pairing.value
+            #expect(await store.credential(for: address) == refreshedCredential)
+            await coordinator.disconnect()
+        }
+    }
+
+    @Test("Removing a pairing while its rollback restore is in flight keeps it removed")
+    func removalDuringRollbackRestoreWins() async throws {
+        let address = try PrivateIPv4Address("192.168.10.20")
+        let previousCredential = try SamsungPairingCredential(
+            token: "synthetic-previous-token",
+            certificateSHA256: Data(repeating: 16, count: 32)
+        )
+        let refreshedCredential = try SamsungPairingCredential(
+            token: "synthetic-refreshed-token",
+            certificateSHA256: Data(repeating: 17, count: 32)
+        )
+        let store = TwoStepSuspendedSaveCredentialStore()
+        await store.seed(previousCredential, for: address)
+        let coordinator = SamsungPairingCoordinator(
+            deviceInfoProvider: StubSamsungDeviceInfoProvider(),
+            credentialStore: store,
+            transport: AttemptAwareSamsungTransport(issuedCredential: refreshedCredential)
+        )
+
+        let pairing = Task { try await coordinator.pair(addressText: address.rawValue) }
+        var saveStarts = store.saveStarted.makeAsyncIterator()
+        _ = await saveStarts.next()
+        pairing.cancel()
+        await store.releaseSave()
+        _ = await saveStarts.next()
+        try await coordinator.removeCredential(
+            addressText: address.rawValue, reportedDeviceID: "synthetic-device-id")
+        await store.releaseSave()
+
+        await #expect(throws: CancellationError.self) { try await pairing.value }
+        #expect(await store.credential(for: address) == nil)
     }
 
     @Test("A failed credential save disconnects before an immediate retry")
@@ -1093,5 +1224,64 @@ private final class ApprovalRecorder {
 
     func record() {
         count += 1
+    }
+}
+
+/// Suspends each of the first two saves (the refreshed save and its rollback restore).
+private actor TwoStepSuspendedSaveCredentialStore: SamsungPairingCredentialStoring {
+    nonisolated let saveStarted: AsyncStream<Void>
+    private let saveStartedContinuation: AsyncStream<Void>.Continuation
+    private var pendingSave: CheckedContinuation<Void, Never>?
+    private var values: [SamsungPairingCredentialIdentity: SamsungPairingCredential] = [:]
+    private var saveCallCount = 0
+
+    init() {
+        (saveStarted, saveStartedContinuation) = AsyncStream.makeStream()
+    }
+
+    func credential(for address: PrivateIPv4Address) -> SamsungPairingCredential? {
+        values[Self.syntheticIdentity]
+    }
+
+    func credential(
+        for identity: SamsungPairingCredentialIdentity,
+        discardingLegacyCredentialFor address: PrivateIPv4Address
+    ) -> SamsungPairingCredential? {
+        values[identity]
+    }
+
+    func save(_ credential: SamsungPairingCredential, for identity: SamsungPairingCredentialIdentity) async {
+        saveCallCount += 1
+        guard saveCallCount <= 2 else {
+            values[identity] = credential
+            return
+        }
+        saveStartedContinuation.yield()
+        await withCheckedContinuation { continuation in pendingSave = continuation }
+        values[identity] = credential
+    }
+
+    func removeCredential(for identity: SamsungPairingCredentialIdentity, legacyAddress: PrivateIPv4Address?)
+    {
+        values[identity] = nil
+    }
+
+    func removeLegacyCredential(for address: PrivateIPv4Address) {}
+
+    func seed(_ credential: SamsungPairingCredential, for address: PrivateIPv4Address) {
+        values[Self.syntheticIdentity] = credential
+    }
+
+    func releaseSave() {
+        pendingSave?.resume()
+        pendingSave = nil
+    }
+
+    private static var syntheticIdentity: SamsungPairingCredentialIdentity {
+        do {
+            return try SamsungPairingCredentialIdentity(reportedDeviceID: "synthetic-device-id")
+        } catch {
+            preconditionFailure("The synthetic Samsung identity fixture must be valid.")
+        }
     }
 }
