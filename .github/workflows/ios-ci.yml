@@ -15,15 +15,12 @@ permissions:
   contents: read
 
 # Both jobs run at the same time. Together they run the full ./scripts/gate.sh.
-# A change to only docs/ or top-level Markdown skips the gate after a
-# credential scan.
+# A pull request that changes only docs/ or top-level Markdown skips the gate
+# after a credential scan.
 env:
   EVENT_NAME: '${{ github.event_name }}'
   PR_BASE: '${{ github.event.pull_request.base.sha }}'
   PR_HEAD: '${{ github.event.pull_request.head.sha }}'
-  PUSH_BEFORE: '${{ github.event.before }}'
-  PUSH_FORCED: '${{ github.event.forced }}'
-  PUSH_AFTER: '${{ github.sha }}'
 
 jobs:
   test:
@@ -42,15 +39,15 @@ jobs:
         run: ./scripts/ci-change-scope.sh >>"$GITHUB_OUTPUT"
 
       - name: Scan documentation-only changes for credentials
-        if: steps.scope.outputs.app != 'true'
+        if: steps.scope.outputs.app == 'false'
         run: ./scripts/scan-secrets.sh
 
       - name: Select release-eligible Xcode
-        if: steps.scope.outputs.app == 'true'
+        if: steps.scope.outputs.app != 'false'
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
       - name: Run release, security, test, install, and launch gate
-        if: steps.scope.outputs.app == 'true'
+        if: steps.scope.outputs.app != 'false'
         run: ./scripts/gate.sh
         env:
           HAFA_GATE_PHASES: 'checks internal'
@@ -82,11 +79,11 @@ jobs:
         run: ./scripts/ci-change-scope.sh >>"$GITHUB_OUTPUT"
 
       - name: Select release-eligible Xcode
-        if: steps.scope.outputs.app == 'true'
+        if: steps.scope.outputs.app != 'false'
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
       - name: Build, validate, and test the public flavor
-        if: steps.scope.outputs.app == 'true'
+        if: steps.scope.outputs.app != 'false'
         run: ./scripts/gate.sh
         env:
           HAFA_GATE_PHASES: 'public'

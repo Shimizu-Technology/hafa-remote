@@ -7,8 +7,8 @@ cd "$repo_root"
 
 # The full gate runs every phase. CI runs "checks internal" and "public" as two
 # concurrent jobs; together they cover exactly the same work.
-phases=" ${HAFA_GATE_PHASES:-checks internal public} "
-for phase in $phases; do
+phases=" "
+for phase in ${HAFA_GATE_PHASES:-checks internal public}; do
   case "$phase" in
     checks | internal | public) ;;
     *)
@@ -16,6 +16,7 @@ for phase in $phases; do
       exit 1
       ;;
   esac
+  phases+="$phase "
 done
 if [[ -z "${phases// /}" ]]; then
   echo "HAFA_GATE_PHASES must name at least one phase." >&2
@@ -108,6 +109,7 @@ wait_for_simulators() {
     if ! wait "${boot_pids[index]}"; then
       echo "Simulator ${simulator_ids[index]} failed to boot." >&2
       tail -n 20 "$work_dir/simulator-boot-$((index + 1)).log" >&2
+      boot_pids=()
       exit 1
     fi
   done
