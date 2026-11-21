@@ -17,6 +17,10 @@ for phase in $phases; do
       ;;
   esac
 done
+if [[ -z "${phases// /}" ]]; then
+  echo "HAFA_GATE_PHASES must name at least one phase." >&2
+  exit 1
+fi
 runs_phase() { [[ "$phases" == *" $1 "* ]]; }
 
 # Internal UI tests are split by test method across this many simulators.
@@ -33,6 +37,7 @@ fi
 
 created_simulator_ids=()
 boot_pids=()
+shard_pids=()
 created_work_dir=0
 work_dir="${HAFA_GATE_WORK_DIR:-}"
 if [[ -z "$work_dir" ]]; then
@@ -43,7 +48,8 @@ else
 fi
 cleanup() {
   local pid simulator
-  for pid in ${boot_pids[@]+"${boot_pids[@]}"}; do
+  for pid in ${boot_pids[@]+"${boot_pids[@]}"} ${shard_pids[@]+"${shard_pids[@]}"}; do
+    pkill -P "$pid" >/dev/null 2>&1 || true
     kill "$pid" >/dev/null 2>&1 || true
   done
   for simulator in ${created_simulator_ids[@]+"${created_simulator_ids[@]}"}; do
@@ -108,6 +114,12 @@ wait_for_simulators() {
   boot_pids=()
 }
 
+install_and_launch() {
+  xcrun simctl install "$simulator_id" "$1"
+  xcrun simctl launch --terminate-running-process "$simulator_id" "$2"
+  xcrun simctl terminate "$simulator_id" "$2"
+}
+
 report_test_counts() {
   local label="$1"
   shift
@@ -123,6 +135,7 @@ report_test_counts() {
       output = IO.popen(["xcrun", "xcresulttool", "get", "test-results", "summary", "--path", path], &:read)
       abort "Could not read test results from #{path}" unless $?.success?
       summary = JSON.parse(output)
+      abort "No tests ran in #{File.basename(path)}" if summary.fetch("totalTestCount", 0).to_i.zero?
       keys.each { |key| totals[key] += summary.fetch(key, 0).to_i }
       describe.("  #{File.basename(path)}", summary) if ARGV.size > 1
     end
@@ -192,7 +205,6 @@ if runs_phase internal; then
     ui_workers=1
   fi
 
-  shard_pids=()
   result_bundles=()
   last_shard=$((ui_workers - 1))
   echo "Running Hafa Remote tests on $ui_workers simulator(s)"
@@ -200,7 +212,8 @@ if runs_phase internal; then
   for ((shard = 0; shard < ui_workers; shard++)); do
     selection=()
     if [[ "$shard" == "$last_shard" ]]; then
-      [[ "$ui_workers" == "1" ]] || selection+=("-only-testing:HafaRemoteUITests")
+      # Shard 1 runs HafaRemoteTests; any other test target lands here.
+      [[ "$ui_workers" == "1" ]] || selection+=("-skip-testing:HafaRemoteTests")
       for ((index = 0; index < ${#ui_tests[@]}; index++)); do
         if ((index % ui_workers != shard)); then
           selection+=("-skip-testing:${ui_tests[index]}")
@@ -242,6 +255,7 @@ if runs_phase internal; then
       cat "$work_dir/test-shard$((shard + 1)).log" >&2
     fi
   done
+  shard_pids=()
   if [[ "$failed_shards" != "0" ]]; then
     exit 1
   fi
@@ -266,12 +280,22 @@ if runs_phase internal; then
   fi
 
   echo "Installing and launching the built app"
-  xcrun simctl install "$simulator_id" "$app_path"
-  xcrun simctl launch --terminate-running-process "$simulator_id" "$bundle_id"
-  xcrun simctl terminate "$simulator_id" "$bundle_id"
+  install_and_launch "$app_path" "$bundle_id"
 fi
 
 if runs_phase public; then
+  if ! runs_phase internal; then
+    # The public app is tested over an installed internal app, as in the full
+    # gate, so a public-only run installs and launches the internal app first.
+    echo "Building and installing the internal app the public flavor replaces"
+    internal_data="$work_dir/InternalDerivedData"
+    xcodebuild -project HafaRemote.xcodeproj -scheme HafaRemote \
+      -destination "platform=iOS Simulator,id=$simulator_id" -derivedDataPath "$internal_data" -quiet build \
+      CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- "CC=$repo_root/scripts/xcode-clang-probe.sh"
+    wait_for_simulators
+    install_and_launch "$internal_data/Build/Products/Debug-iphonesimulator/Hafa Remote.app" "com.shimizutechnology.hafaremote"
+  fi
+
   echo "Building the public Release flavor and validating executable exclusion"
   public_release_data="$work_dir/PublicReleaseDerivedData"
   xcodebuild -project HafaRemote.xcodeproj -scheme HafaRemotePublic -configuration ReleasePublic \
@@ -297,8 +321,6 @@ if runs_phase public; then
     echo "Unexpected public app bundle identifier: $public_bundle_id" >&2
     exit 1
   fi
-  xcrun simctl install "$simulator_id" "$public_app"
-  xcrun simctl launch --terminate-running-process "$simulator_id" "$public_bundle_id"
-  xcrun simctl terminate "$simulator_id" "$public_bundle_id"
+  install_and_launch "$public_app" "$public_bundle_id"
 fi
 echo "Gate passed"

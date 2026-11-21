@@ -14,55 +14,19 @@ concurrency:
 permissions:
   contents: read
 
+# Both jobs run at the same time. Together they run the full ./scripts/gate.sh.
+# A change to only docs/ or top-level Markdown skips the gate after a
+# credential scan.
+env:
+  EVENT_NAME: '${{ github.event_name }}'
+  PR_BASE: '${{ github.event.pull_request.base.sha }}'
+  PR_HEAD: '${{ github.event.pull_request.head.sha }}'
+  PUSH_BEFORE: '${{ github.event.before }}'
+  PUSH_AFTER: '${{ github.sha }}'
+
 jobs:
-  changes:
-    name: Change scope
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      app: '${{ steps.scope.outputs.app }}'
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      # Only documentation (docs/ and top-level Markdown) may skip the macOS
-      # gate. Anything else, or any doubt about the comparison, runs it.
-      - name: Detect app changes
-        id: scope
-        env:
-          EVENT_NAME: '${{ github.event_name }}'
-          PR_BASE: '${{ github.event.pull_request.base.sha }}'
-          PR_HEAD: '${{ github.event.pull_request.head.sha }}'
-          PUSH_BEFORE: '${{ github.event.before }}'
-          PUSH_AFTER: '${{ github.sha }}'
-        run: |
-          app=true
-          range=""
-          case "$EVENT_NAME" in
-            pull_request) range="$PR_BASE...$PR_HEAD" ;;
-            push) [[ "$PUSH_BEFORE" =~ ^0+$ ]] || range="$PUSH_BEFORE..$PUSH_AFTER" ;;
-          esac
-          if [[ -n "$range" ]] && changed="$(git diff --name-only "$range")" && [[ -n "$changed" ]]; then
-            echo "Changed files:"
-            echo "$changed"
-            if ! grep -Ev '^(docs/.*|[^/]+\.md)$' <<<"$changed" >/dev/null; then
-              app=false
-            fi
-          fi
-          echo "Run the macOS gate: $app"
-          echo "app=$app" >>"$GITHUB_OUTPUT"
-
-      - name: Scan documentation-only changes for credentials
-        if: steps.scope.outputs.app != 'true'
-        run: ./scripts/scan-secrets.sh
-
   test:
     name: SwiftUI build and tests
-    needs: changes
-    if: needs.changes.outputs.app == 'true'
     runs-on: macos-26
     timeout-minutes: 30
 
@@ -72,10 +36,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Detect app changes
+        id: scope
+        run: ./scripts/ci-change-scope.sh >>"$GITHUB_OUTPUT"
+
+      - name: Scan documentation-only changes for credentials
+        if: steps.scope.outputs.app != 'true'
+        run: ./scripts/scan-secrets.sh
+
       - name: Select release-eligible Xcode
+        if: steps.scope.outputs.app == 'true'
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
       - name: Run release, security, test, install, and launch gate
+        if: steps.scope.outputs.app == 'true'
         run: ./scripts/gate.sh
         env:
           HAFA_GATE_PHASES: 'checks internal'
@@ -93,20 +67,25 @@ jobs:
 
   public:
     name: Public flavor build and tests
-    needs: changes
-    if: needs.changes.outputs.app == 'true'
     runs-on: macos-26
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
+      - name: Detect app changes
+        id: scope
+        run: ./scripts/ci-change-scope.sh >>"$GITHUB_OUTPUT"
+
       - name: Select release-eligible Xcode
+        if: steps.scope.outputs.app == 'true'
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
       - name: Build, validate, and test the public flavor
+        if: steps.scope.outputs.app == 'true'
         run: ./scripts/gate.sh
         env:
           HAFA_GATE_PHASES: 'public'
