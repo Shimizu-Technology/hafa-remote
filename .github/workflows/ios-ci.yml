@@ -14,7 +14,9 @@ concurrency:
 permissions:
   contents: read
 
-# Both jobs run at the same time. Together they run the full ./scripts/gate.sh.
+# Both jobs run at the same time. Together they run the full ./scripts/gate.sh:
+# the main job runs both flavors' tests on one simulator, in the gate's order,
+# and the other job builds and validates the public Release app.
 # A pull request that changes only docs/ or top-level Markdown skips the gate
 # after a credential scan.
 env:
@@ -26,8 +28,8 @@ jobs:
   test:
     name: SwiftUI build and tests
     runs-on: macos-26
-    # Expected about 27 min.
-    timeout-minutes: 55
+    # Expected about 30 min.
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,7 +53,7 @@ jobs:
         if: steps.scope.outputs.app != 'false'
         run: ./scripts/gate.sh
         env:
-          HAFA_GATE_PHASES: 'checks internal'
+          HAFA_GATE_PHASES: 'checks internal public'
           # One simulator: parallel simulators are slower and flakier on
           # this 3-CPU runner.
           HAFA_GATE_UI_WORKERS: '1'
@@ -66,11 +68,11 @@ jobs:
           path: '${{ runner.temp }}/HafaRemoteGate/*.xcresult'
           retention-days: 7
 
-  public:
-    name: Public flavor build and tests
+  release:
+    name: Public Release build and validation
     runs-on: macos-26
-    # Expected about 7 min.
-    timeout-minutes: 15
+    # Expected about 4 min.
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -86,18 +88,8 @@ jobs:
         if: steps.scope.outputs.app != 'false'
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
-      - name: Build, validate, and test the public flavor
+      - name: Build the public Release flavor and validate executable exclusion
         if: steps.scope.outputs.app != 'false'
         run: ./scripts/gate.sh
         env:
-          HAFA_GATE_PHASES: 'public'
-          HAFA_GATE_WORK_DIR: '${{ runner.temp }}/HafaRemoteGate'
-          HAFA_PRESERVE_GATE_ARTIFACTS: '1'
-
-      - name: Upload test result on failure
-        if: failure()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        with:
-          name: HafaRemotePublicTests-xcresult
-          path: '${{ runner.temp }}/HafaRemoteGate/*.xcresult'
-          retention-days: 7
+          HAFA_GATE_PHASES: 'release'

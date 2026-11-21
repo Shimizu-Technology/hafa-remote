@@ -5,12 +5,15 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-# The full gate runs every phase. CI runs "checks internal" and "public" as two
-# concurrent jobs; together they cover exactly the same work.
+# The full gate runs every phase. CI runs "checks internal public" and
+# "release" as two concurrent jobs; together they cover exactly the same work.
+# The public UI tests stay after the internal suite on the same simulator, as
+# they always ran: on a freshly booted CI simulator XCUITest timed out
+# terminating the app between public tests.
 phases=" "
-for phase in ${HAFA_GATE_PHASES:-checks internal public}; do
+for phase in ${HAFA_GATE_PHASES:-checks internal release public}; do
   case "$phase" in
-    checks | internal | public) ;;
+    checks | internal | release | public) ;;
     *)
       echo "Unknown gate phase: $phase" >&2
       exit 1
@@ -294,6 +297,16 @@ if runs_phase internal; then
   install_and_launch "$app_path" "$bundle_id"
 fi
 
+if runs_phase release; then
+  echo "Building the public Release flavor and validating executable exclusion"
+  public_release_data="$work_dir/PublicReleaseDerivedData"
+  xcodebuild -project HafaRemote.xcodeproj -scheme HafaRemotePublic -configuration ReleasePublic \
+    -destination 'generic/platform=iOS Simulator' -derivedDataPath "$public_release_data" -quiet build \
+    CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- "CC=$repo_root/scripts/xcode-clang-probe.sh"
+  ./scripts/validate-public-build.sh "$public_release_data/Build/Products/ReleasePublic-iphonesimulator/Hafa Remote.app" "$public_release_data"
+  ./scripts/test-public-build-validation.sh "$public_release_data/Build/Products/ReleasePublic-iphonesimulator/Hafa Remote.app" "$public_release_data"
+fi
+
 if runs_phase public; then
   if ! runs_phase internal; then
     # The public app is tested over an installed internal app, as in the full
@@ -304,14 +317,6 @@ if runs_phase public; then
       -destination "$(simulator_destination "$simulator_id")" -derivedDataPath "$internal_data" -quiet build \
       CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- "CC=$repo_root/scripts/xcode-clang-probe.sh"
   fi
-
-  echo "Building the public Release flavor and validating executable exclusion"
-  public_release_data="$work_dir/PublicReleaseDerivedData"
-  xcodebuild -project HafaRemote.xcodeproj -scheme HafaRemotePublic -configuration ReleasePublic \
-    -destination 'generic/platform=iOS Simulator' -derivedDataPath "$public_release_data" -quiet build \
-    CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- "CC=$repo_root/scripts/xcode-clang-probe.sh"
-  ./scripts/validate-public-build.sh "$public_release_data/Build/Products/ReleasePublic-iphonesimulator/Hafa Remote.app" "$public_release_data"
-  ./scripts/test-public-build-validation.sh "$public_release_data/Build/Products/ReleasePublic-iphonesimulator/Hafa Remote.app" "$public_release_data"
 
   echo "Building the Samsung public product for testing"
   public_data="$work_dir/PublicDebugDerivedData"
