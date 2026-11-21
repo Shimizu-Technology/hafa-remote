@@ -24,8 +24,10 @@ if [[ -z "${phases// /}" ]]; then
 fi
 runs_phase() { [[ "$phases" == *" $1 "* ]]; }
 
-# Internal UI tests are split by test method across this many simulators.
-ui_workers="${HAFA_GATE_UI_WORKERS:-2}"
+# Internal UI tests can be split by test method across this many simulators.
+# Keep one on GitHub's 3-CPU macOS runners, where parallel simulators were
+# slower and timing-sensitive UI tests failed; larger Macs can use more.
+ui_workers="${HAFA_GATE_UI_WORKERS:-1}"
 if [[ ! "$ui_workers" =~ ^[1-4]$ ]]; then
   echo "HAFA_GATE_UI_WORKERS must be between 1 and 4." >&2
   exit 1
