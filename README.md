@@ -29,6 +29,8 @@ The canonical verification command is:
 ./scripts/gate.sh
 ```
 
+It runs four phases, which `HAFA_GATE_PHASES` can select (`checks`, `internal`, `release`, `public`; all by default). CI runs `checks internal public` and `release` (the public Release build and its validation, which needs no simulator) as two concurrent jobs. The simulator boots only after the internal build, and the public tests run after the internal suite on that same simulator. On a Mac with spare cores, `HAFA_GATE_UI_WORKERS=2` (up to 4) splits the internal UI tests by method across that many simulators; the last one runs every test not assigned elsewhere, so none is dropped. CI keeps the default of one simulator: on GitHub's 3-CPU macOS runners, two simulators took 10 minutes to boot, ran the UI tests more slowly than one, and failed timing-sensitive tests.
+
 Simulator checks prove interface and deterministic state behavior. Pairing, TV certificate trust, command delivery, and standby power behavior require a signed build on a physical iPhone and the target TV.
 
 The gate uses `xcodebuild -collect-test-diagnostics never` to avoid automatic verbose simulator diagnostics, which can stall result finalization and gather unrelated host logs. Assertions, test execution, failure results, ordinary activity logs, and explicitly retained screenshots remain in the result bundle. This adds no test skip; physical-TV discovery remains a separately run hardware test.
