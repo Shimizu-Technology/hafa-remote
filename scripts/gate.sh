@@ -63,8 +63,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Simulators boot in the background while the checks and builds run; a first
-# boot spends minutes on data migration.
+# Simulators are created now but boot only after the phase's builds finish:
+# on a 3-CPU CI runner a first boot's data migration starves concurrent builds.
 simulator_ids=()
 if runs_phase internal || runs_phase public; then
   simulator_count=1
@@ -93,6 +93,17 @@ if runs_phase internal || runs_phase public; then
     created_simulator_ids+=("$simulator")
     simulator_ids+=("$simulator")
   done
+fi
+simulator_id="${simulator_ids[0]:-}"
+# Pin the architecture too: an id alone matches both arm64 and x86_64.
+simulator_arch="$(uname -m)"
+simulator_destination() { echo "platform=iOS Simulator,id=$1,arch=$simulator_arch"; }
+
+simulators_booted=0
+boot_simulators() {
+  local index
+  [[ "$simulators_booted" == "0" ]] || return 0
+  echo "Booting ${#simulator_ids[@]} simulator(s)"
   for ((index = 0; index < ${#simulator_ids[@]}; index++)); do
     (
       xcrun simctl boot "${simulator_ids[index]}" >/dev/null 2>&1 || true
@@ -100,11 +111,6 @@ if runs_phase internal || runs_phase public; then
     ) >"$work_dir/simulator-boot-$((index + 1)).log" 2>&1 &
     boot_pids+=("$!")
   done
-fi
-simulator_id="${simulator_ids[0]:-}"
-
-wait_for_simulators() {
-  local index
   for ((index = 0; index < ${#boot_pids[@]}; index++)); do
     if ! wait "${boot_pids[index]}"; then
       echo "Simulator ${simulator_ids[index]} failed to boot." >&2
@@ -114,6 +120,7 @@ wait_for_simulators() {
     fi
   done
   boot_pids=()
+  simulators_booted=1
 }
 
 install_and_launch() {
@@ -170,7 +177,7 @@ if runs_phase internal; then
   xcodebuild \
     -project HafaRemote.xcodeproj \
     -scheme HafaRemote \
-    -destination "platform=iOS Simulator,id=$simulator_id" \
+    -destination "$(simulator_destination "$simulator_id")" \
     -derivedDataPath "$derived_data" \
     -quiet \
     build-for-testing \
@@ -209,8 +216,8 @@ if runs_phase internal; then
 
   result_bundles=()
   last_shard=$((ui_workers - 1))
+  boot_simulators
   echo "Running Hafa Remote tests on $ui_workers simulator(s)"
-  wait_for_simulators
   for ((shard = 0; shard < ui_workers; shard++)); do
     selection=()
     if [[ "$shard" == "$last_shard" ]]; then
@@ -239,7 +246,7 @@ if runs_phase internal; then
     result_bundles+=("$result_bundle")
     xcodebuild \
       -xctestrun "$xctestrun" \
-      -destination "platform=iOS Simulator,id=${simulator_ids[shard]}" \
+      -destination "$(simulator_destination "${simulator_ids[shard]}")" \
       -resultBundlePath "$result_bundle" \
       -parallel-testing-enabled NO \
       -collect-test-diagnostics never \
@@ -288,14 +295,12 @@ fi
 if runs_phase public; then
   if ! runs_phase internal; then
     # The public app is tested over an installed internal app, as in the full
-    # gate, so a public-only run installs and launches the internal app first.
-    echo "Building and installing the internal app the public flavor replaces"
+    # gate, so a public-only run builds the internal app to install first.
+    echo "Building the internal app the public flavor replaces"
     internal_data="$work_dir/InternalDerivedData"
     xcodebuild -project HafaRemote.xcodeproj -scheme HafaRemote \
-      -destination "platform=iOS Simulator,id=$simulator_id" -derivedDataPath "$internal_data" -quiet build \
+      -destination "$(simulator_destination "$simulator_id")" -derivedDataPath "$internal_data" -quiet build \
       CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- "CC=$repo_root/scripts/xcode-clang-probe.sh"
-    wait_for_simulators
-    install_and_launch "$internal_data/Build/Products/Debug-iphonesimulator/Hafa Remote.app" "com.shimizutechnology.hafaremote"
   fi
 
   echo "Building the public Release flavor and validating executable exclusion"
@@ -306,14 +311,26 @@ if runs_phase public; then
   ./scripts/validate-public-build.sh "$public_release_data/Build/Products/ReleasePublic-iphonesimulator/Hafa Remote.app" "$public_release_data"
   ./scripts/test-public-build-validation.sh "$public_release_data/Build/Products/ReleasePublic-iphonesimulator/Hafa Remote.app" "$public_release_data"
 
-  echo "Testing the Samsung public product and preserved internal data"
+  echo "Building the Samsung public product for testing"
   public_data="$work_dir/PublicDebugDerivedData"
-  wait_for_simulators
   xcodebuild -project HafaRemote.xcodeproj -scheme HafaRemotePublic -configuration DebugPublic \
-    -destination "platform=iOS Simulator,id=$simulator_id" -derivedDataPath "$public_data" \
+    -destination "$(simulator_destination "$simulator_id")" -derivedDataPath "$public_data" -quiet build-for-testing \
+    CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- "CC=$repo_root/scripts/xcode-clang-probe.sh"
+  public_xctestrun_files=("$public_data"/Build/Products/HafaRemotePublic_*.xctestrun)
+  if [[ "${#public_xctestrun_files[@]}" != "1" || ! -f "${public_xctestrun_files[0]}" ]]; then
+    echo "Expected exactly one public test run file." >&2
+    exit 1
+  fi
+
+  boot_simulators
+  if ! runs_phase internal; then
+    echo "Installing and launching the internal app"
+    install_and_launch "$internal_data/Build/Products/Debug-iphonesimulator/Hafa Remote.app" "com.shimizutechnology.hafaremote"
+  fi
+  echo "Testing the Samsung public product and preserved internal data"
+  xcodebuild -xctestrun "${public_xctestrun_files[0]}" -destination "$(simulator_destination "$simulator_id")" \
     -resultBundlePath "$work_dir/HafaRemotePublicTests.xcresult" -parallel-testing-enabled NO \
-    -collect-test-diagnostics never -quiet test CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- \
-    "CC=$repo_root/scripts/xcode-clang-probe.sh"
+    -collect-test-diagnostics never -quiet test-without-building
   report_test_counts "Public flavor tests" "$work_dir/HafaRemotePublicTests.xcresult"
   public_app="$public_data/Build/Products/DebugPublic-iphonesimulator/Hafa Remote.app"
   codesign --verify --deep --strict "$public_app"

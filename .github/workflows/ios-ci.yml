@@ -26,7 +26,8 @@ jobs:
   test:
     name: SwiftUI build and tests
     runs-on: macos-26
-    timeout-minutes: 30
+    # Expected about 22 min.
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,7 +52,7 @@ jobs:
         run: ./scripts/gate.sh
         env:
           HAFA_GATE_PHASES: 'checks internal'
-          HAFA_GATE_UI_WORKERS: '3'
+          HAFA_GATE_UI_WORKERS: '2'
           HAFA_GATE_WORK_DIR: '${{ runner.temp }}/HafaRemoteGate'
           HAFA_PRESERVE_GATE_ARTIFACTS: '1'
 
@@ -66,7 +67,8 @@ jobs:
   public:
     name: Public flavor build and tests
     runs-on: macos-26
-    timeout-minutes: 25
+    # Expected about 14 min.
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
