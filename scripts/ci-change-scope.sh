@@ -9,7 +9,11 @@ app=true
 range=""
 case "${EVENT_NAME:-}" in
   pull_request) range="${PR_BASE:-}...${PR_HEAD:-}" ;;
-  push) [[ "${PUSH_BEFORE:-}" =~ ^0*$ ]] || range="$PUSH_BEFORE..${PUSH_AFTER:-}" ;;
+  push)
+    if [[ "${PUSH_FORCED:-}" != "true" && ! "${PUSH_BEFORE:-}" =~ ^0*$ ]]; then
+      range="$PUSH_BEFORE..${PUSH_AFTER:-}"
+    fi
+    ;;
 esac
 if [[ -n "$range" ]] && changed="$(git diff --name-only --no-renames "$range")" && [[ -n "$changed" ]]; then
   echo "Changed files:" >&2
